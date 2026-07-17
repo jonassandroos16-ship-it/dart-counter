@@ -1,0 +1,143 @@
+import type { Game, GamePlayer, GameRecord, Player, Settings, Visit } from './types';
+import { MODES, CHECKOUTS, ATC_TARGETS, atcLabel } from './constants';
+import { uid, todayKey } from './store';
+
+export function createGame(modeKey: string, playerIds: string[], players: Player[], doubleOut: boolean, legsBestOf: number): Game {
+  const mode = MODES[modeKey];
+  const meta = (id: string) => players.find(p => p.id === id)!;
+  return {
+    id: uid(), mode: modeKey, date: new Date().toISOString(),
+    doubleOut: (mode.practice || mode.atc) ? false : doubleOut,
+    practice: !!mode.practice, atc: !!mode.atc,
+    legsBestOf: (mode.practice || mode.atc) ? 1 : legsBestOf,
+    players: playerIds.map(id => ({ id, name: meta(id).name, color: meta(id).color, score: mode.start, legsWon: 0, visits: [], idx: 0, dartsThrown: 0, done: false })),
+    turn: 0, leg: 1, finished: false, winner: null, checkedOutThisRound: [], roundStartTurn: 0, darts: [], mult: 1,
+  };
+}
+
+export function recordFromGame(game: Game): GameRecord {
+  return {
+    id: game.id, date: game.date, mode: game.mode, practice: game.practice, atc: game.atc,
+    doubleOut: game.doubleOut, legsBestOf: game.legsBestOf, winner: game.winner,
+    tied: !!game.tied, tiedPlayers: game.tiedPlayers ?? null,
+    players: game.players.map(pl => ({ id: pl.id, name: pl.name, color: pl.color, legsWon: pl.legsWon, dartsThrown: pl.dartsThrown || 0, visits: pl.visits })),
+  };
+}
+
+export function checkoutHint(remaining: number | null, doubleOut: boolean, practice?: boolean): string {
+  if (remaining == null || practice) return '';
+  if (remaining < 0) return 'Bust!';
+  if (remaining === 0) return 'Checked out!';
+  if (remaining === 1) return doubleOut ? 'No checkout — bust risk' : 'Checkout: 1';
+  if (remaining > 170) return 'No 3-dart checkout — score to get ≤ 170';
+  const co = CHECKOUTS[remaining];
+  if (co) return 'Checkout: ' + co.join('  ');
+  if (!doubleOut) return 'Checkout: ' + remaining;
+  return 'No checkout from ' + remaining;
+}
+
+export function leadTrailBadge(pl: GamePlayer, game: Game): string {
+  if (game.practice || game.players.length < 2) return '';
+  const scores = game.players.map(p => p.score);
+  const leaderScore = Math.min(...scores);
+  if (pl.score === leaderScore) {
+    const next = scores.filter(s => s !== leaderScore).sort((a, b) => a - b)[0];
+    const ahead = next != null ? next - leaderScore : 0;
+    return ahead > 0 ? `+${ahead}` : '';
+  }
+  const behind = pl.score - leaderScore;
+  return behind > 0 ? `-${behind}` : '';
+}
+
+export function visitAvg(pl: GamePlayer): number {
+  if (!pl.visits.length) return 0;
+  const total = pl.visits.reduce((a, v) => a + v.scored, 0);
+  const darts = pl.visits.reduce((a, v) => a + v.darts.length, 0);
+  return darts ? total / darts * 3 : 0;
+}
+
+export function visitAvgStatic(pl: { visits: Visit[] }): number {
+  const s = (pl.visits || []).filter(v => !v.bust);
+  const t = s.reduce((a, v) => a + v.scored, 0);
+  const d = s.reduce((a, v) => a + v.darts.length, 0);
+  return d ? t / d * 3 : 0;
+}
+
+export function levelFromXP(totalXP: number, settings: Settings) {
+  const xpForLevel = (level: number) => Math.round(settings.xpConfig.baseLevelXp * Math.pow(settings.xpConfig.levelMult, level - 1));
+  let level = 1, remaining = totalXP;
+  while (remaining >= xpForLevel(level)) { remaining -= xpForLevel(level); level++; }
+  return { level, xpIntoLevel: remaining, xpNeeded: xpForLevel(level) };
+}
+
+export function getPlayerXP(player: Player | undefined) {
+  if (!player) return { xp: 0, level: 1, unlockedTitles: [] as string[], selectedTitle: null as string | null };
+  return { xp: player.xp ?? 0, level: player.level ?? 1, unlockedTitles: player.unlockedTitles ?? [], selectedTitle: player.selectedTitle ?? null };
+}
+
+export function getPlayerXPById(playerId: string, players: Player[]) {
+  return getPlayerXP(players.find(p => p.id === playerId));
+}
+
+export function allVisitsFor(playerId: string, games: GameRecord[]): any[] {
+  const out: any[] = [];
+  games.forEach(g => {
+    const pl = g.players.find(p => p.id === playerId);
+    if (!pl) return;
+    pl.visits.forEach(v => out.push({ ...v, mode: g.mode, gameId: g.id, gameDate: g.date, practice: g.practice }));
+  });
+  return out;
+}
+
+export function playerStats(playerId: string, games: GameRecord[]) {
+  const visits = allVisitsFor(playerId, games);
+  const scoring = visits.filter((v: any) => !v.bust && !v.atc);
+  const totalScore = scoring.reduce((a: number, v: any) => a + v.scored, 0);
+  const totalDarts = scoring.reduce((a: number, v: any) => a + v.darts.length, 0);
+  const playerGames = games.filter(g => g.players.some(p => p.id === playerId));
+  const legsWon = playerGames.reduce((a, g) => a + (g.players.find(p => p.id === playerId)?.legsWon || 0), 0);
+  const gamesWon = playerGames.filter(g => g.winner === playerId).length;
+  const gamesTied = playerGames.filter(g => g.tied && g.tiedPlayers && g.tiedPlayers.includes(playerId)).length;
+  const checkouts = scoring.filter((v: any) => v.remaining === 0);
+  const highCheckout = Math.max(0, ...checkouts.map((v: any) => v.scored));
+  const highScore = Math.max(0, ...scoring.map((v: any) => v.scored));
+  const n180 = scoring.filter((v: any) => v.scored === 180).length;
+  const n140 = scoring.filter((v: any) => v.scored >= 140 && v.scored < 180).length;
+  const tons = scoring.filter((v: any) => v.scored >= 100 && v.scored < 140).length;
+  const first9 = (() => {
+    let s = 0, c = 0;
+    playerGames.forEach(g => {
+      const pl = g.players.find(p => p.id === playerId); if (!pl) return;
+      const byLeg: Record<number, any[]> = {};
+      pl.visits.forEach(v => { if (v.bust || v.atc) return; (byLeg[v.leg || 1] = byLeg[v.leg || 1] || []).push(v); });
+      Object.values(byLeg).forEach(arr => { arr.slice(0, 3).forEach(v => { s += v.scored; c += v.darts.length; }); });
+    });
+    return c ? s / c * 3 : 0;
+  })();
+  const winRate = playerGames.length ? (gamesWon + gamesTied * 0.5) / playerGames.length * 100 : 0;
+  return { games: playerGames.length, gamesWon, gamesTied, legsWon, winRate, avg: totalDarts ? totalScore / totalDarts * 3 : 0, first9, highScore, highCheckout, n180, n140, tons, visits };
+}
+
+export function bucketAverages(visits: any[], period: string) {
+  if (!visits.length) return { labels: [], values: [] };
+  const key = (d: string) => {
+    const dt = new Date(d);
+    if (period === 'Daily') return todayKey(dt);
+    if (period === 'Weekly') { const t = new Date(dt); const day = (t.getDay() + 6) % 7; t.setDate(t.getDate() - day); return todayKey(t); }
+    if (period === 'Monthly') return dt.toISOString().slice(0, 7);
+    if (period === 'Yearly') return String(dt.getFullYear());
+    return todayKey(dt);
+  };
+  const map: Record<string, { s: number; d: number }> = {};
+  visits.forEach(v => { const k = key(v.date || v.gameDate); (map[k] = map[k] || { s: 0, d: 0 }); map[k].s += v.scored; map[k].d += v.darts.length; });
+  const keys = Object.keys(map).sort();
+  const trimmed = period === 'Overall' ? keys.slice(-30) : keys.slice(-14);
+  const shortLabel = (k: string) => {
+    if (period === 'Monthly') { const [, m] = k.split('-'); return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][+m - 1]; }
+    if (period === 'Yearly') return k;
+    const d = new Date(k); return (d.getMonth() + 1) + '/' + d.getDate();
+  };
+  return { labels: trimmed.map(shortLabel), values: trimmed.map(k => map[k].d ? map[k].s / map[k].d * 3 : 0) };
+}
+
+export { ATC_TARGETS, atcLabel };
