@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Target, Users, BarChart3, History, Settings as SettingsIcon } from 'lucide-react';
 import { useDB, applyTheme, useToast } from './store';
+import { retroUnlockAll } from './logic';
 import { MusicEngine } from './music';
 import { Sound } from './sound';
 import { PlayView } from './PlayView';
@@ -26,8 +27,19 @@ export default function App() {
   const popups = usePopupState();
   const [view, setView] = useState<View>('play');
   const musicRef = useRef<MusicEngine>(new MusicEngine());
+  const backfilledRef = useRef(false);
 
   useEffect(() => { applyTheme(db.settings); }, [db.settings]);
+
+  // One-shot retroactive title backfill so new lifetime titles unlock from
+  // existing match history for players who already earned them.
+  useEffect(() => {
+    if (backfilledRef.current) return;
+    if (!db.players.length) return;
+    backfilledRef.current = true;
+    const { players: next, changed } = retroUnlockAll(db.players, db.games, db.settings.customTitles || []);
+    if (changed) db.setPlayers(next);
+  }, [db.players, db.games, db.settings.customTitles]);
 
   useEffect(() => {
     const unlock = () => {
@@ -54,7 +66,7 @@ export default function App() {
       </header>
 
       {view === 'play' && (
-        <PlayView players={db.players} settings={db.settings} setGames={db.setGames} setPlayers={db.setPlayers} toast={show} music={musicRef.current}
+        <PlayView players={db.players} games={db.games} settings={db.settings} setGames={db.setGames} setPlayers={db.setPlayers} toast={show} music={musicRef.current}
           onQuit={() => { musicRef.current.startContext('setup', db.settings); }}
           onGameOver={() => {}}
           popups={popups} />

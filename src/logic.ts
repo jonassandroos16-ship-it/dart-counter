@@ -142,3 +142,81 @@ export function bucketAverages(visits: any[], period: string) {
 }
 
 export { ATC_TARGETS, atcLabel };
+
+// ============ Title backfill (backwards-compatible retro unlock) ============
+// Scans full match history for a player and returns any built-in title ids
+// they've already earned but haven't been credited for yet.
+import { BUILTIN_TITLES, buildTitleCheck, type TitleCtx } from './constants';
+import type { CustomTitle } from './types';
+
+export function computeUnlockedTitlesForPlayer(
+  playerId: string,
+  games: GameRecord[],
+  customTitles: CustomTitle[] = [],
+): string[] {
+  const playerGames = games.filter(g => g.players.some(p => p.id === playerId));
+  const gamesWon = playerGames.filter(g => g.winner === playerId).length;
+  const gamesPlayed = playerGames.length;
+  const lifetimeVisits: any[] = [];
+  playerGames.forEach(g => {
+    const pl = g.players.find(p => p.id === playerId);
+    if (!pl) return;
+    pl.visits.forEach(v => lifetimeVisits.push({ ...v, gameId: g.id, gameDate: g.date, practice: g.practice }));
+  });
+
+  const titles = [
+    ...BUILTIN_TITLES,
+    ...customTitles.map(t => ({ ...t, custom: true, check: buildTitleCheck(t) as any })),
+  ];
+  const unlocked = new Set<string>();
+
+  const ctx: TitleCtx = { playerId, games: playerGames, gamesPlayed, gamesWon, lifetimeVisits };
+
+  // Lifetime titles: single pass with the full ctx.
+  titles.forEach(t => {
+    try { if (t.check(lifetimeVisits, [], null, ctx)) unlocked.add(t.id); } catch { /* ignore */ }
+  });
+
+  // Per-game titles: replay each historical game with its own gameVisits.
+  playerGames.forEach(g => {
+    const pl = g.players.find(p => p.id === playerId);
+    if (!pl) return;
+    const gameVisits = pl.visits;
+    const gameLike = { ...g, winner: g.winner, players: g.players, legsBestOf: g.legsBestOf };
+    titles.forEach(t => {
+      if (unlocked.has(t.id)) return;
+      try { if (t.check(lifetimeVisits, gameVisits, gameLike, ctx)) unlocked.add(t.id); } catch { /* ignore */ }
+    });
+  });
+
+  return Array.from(unlocked);
+}
+
+// Merges retro-unlocked ids into a Player's existing unlockedTitles (idempotent).
+export function retroUnlockPlayerTitles(
+  player: Player,
+  games: GameRecord[],
+  customTitles: CustomTitle[] = [],
+): Player {
+  const existing = new Set(player.unlockedTitles || []);
+  const found = computeUnlockedTitlesForPlayer(player.id, games, customTitles);
+  let changed = false;
+  found.forEach(id => { if (!existing.has(id)) { existing.add(id); changed = true; } });
+  return changed ? { ...player, unlockedTitles: Array.from(existing) } : player;
+}
+
+// Backfills all players. Idempotent — safe to run on every app load.
+export function retroUnlockAll(
+  players: Player[],
+  games: GameRecord[],
+  customTitles: CustomTitle[] = [],
+): { players: Player[]; changed: boolean } {
+  let changed = false;
+  const next = players.map(p => {
+    const updated = retroUnlockPlayerTitles(p, games, customTitles);
+    if (updated !== p) changed = true;
+    return updated;
+  });
+  return { players: next, changed };
+}
+

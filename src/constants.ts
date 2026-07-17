@@ -54,37 +54,159 @@ export const MILESTONES = [
   { threshold: 100, emoji: '⚡', title: 'Below 100!', sub: 'Closing in' },
 ];
 
+export interface TitleCtx {
+  playerId?: string;
+  games?: any[];        // lifetime game records for the player (excluding current in-progress game)
+  gamesPlayed?: number;
+  gamesWon?: number;
+  lifetimeVisits?: any[]; // pre-computed lifetime scoring visits (history + current game visits)
+}
+
 export interface TitleDef {
   id: string;
   name: string;
   desc?: string;
   icon?: string;
   custom?: boolean;
-  check: (allVisits: any[], gameVisits: any[], game: any) => boolean;
+  check: (allVisits: any[], gameVisits: any[], game: any, ctx?: TitleCtx) => boolean;
 }
 
+// ---------- helpers for title checks ----------
+const dartsFromVisits = (visits: any[]) => visits.flatMap((v: any) => v.darts || []);
+const countHits = (visits: any[], base: number, mult: number) =>
+  dartsFromVisits(visits).filter((d: any) => d.base === base && d.mult === mult).length;
+const countBulls = (visits: any[]) => dartsFromVisits(visits).filter((d: any) => d.value === 50).length;
+const countOuterBulls = (visits: any[]) => dartsFromVisits(visits).filter((d: any) => d.value === 25).length;
+const countAnyBulls = (visits: any[]) => dartsFromVisits(visits).filter((d: any) => d.value === 25 || d.value === 50).length;
+const countTriples = (visits: any[]) => dartsFromVisits(visits).filter((d: any) => d.mult === 3).length;
+const countDoubles = (visits: any[]) => dartsFromVisits(visits).filter((d: any) => d.mult === 2 && d.value !== 50).length;
+const scoringVisits = (visits: any[]) => visits.filter((v: any) => !v.bust && !v.atc);
+const lifetimeScoreSum = (visits: any[]) => scoringVisits(visits).reduce((a: number, v: any) => a + (v.scored || 0), 0);
+const count180s = (visits: any[]) => scoringVisits(visits).filter((v: any) => v.scored === 180).length;
+const count140plus = (visits: any[]) => scoringVisits(visits).filter((v: any) => v.scored >= 140 && v.scored < 180).length;
+const countTons = (visits: any[]) => scoringVisits(visits).filter((v: any) => v.scored >= 100).length;
+const countCheckouts = (visits: any[]) => scoringVisits(visits).filter((v: any) => v.remaining === 0).length;
+
 export const BUILTIN_TITLES: TitleDef[] = [
+  // ============ In-game (per match) ============
   { id: 't20king', name: 'Triple 20 King', desc: 'Hit T20 five times in one game', icon: '👑',
-    check: (_v, gv) => gv.flatMap((v:any) => v.darts||[]).filter((d:any) => d.base===20 && d.mult===3).length >= 5 },
+    check: (_v, gv) => countHits(gv, 20, 3) >= 5 },
+  { id: 't20trio', name: 'T20 Trio', desc: 'Hit T20 three times in one game', icon: '🎯',
+    check: (_v, gv) => countHits(gv, 20, 3) >= 3 },
+  { id: 't20marathon', name: 'T20 Marathon', desc: 'Hit T20 ten times in one game', icon: '🏃',
+    check: (_v, gv) => countHits(gv, 20, 3) >= 10 },
   { id: 't1master', name: 'Triple 1 Master', desc: 'Hit T1 three times in one game', icon: '🎪',
-    check: (_v, gv) => gv.flatMap((v:any) => v.darts||[]).filter((d:any) => d.base===1 && d.mult===3).length >= 3 },
-  { id: 'bullseye', name: 'Bullseye Hunter', desc: 'Hit 3 bulls in one game', icon: '🐂',
-    check: (_v, gv) => gv.flatMap((v:any) => v.darts||[]).filter((d:any) => d.value===50).length >= 3 },
+    check: (_v, gv) => countHits(gv, 1, 3) >= 3 },
+  // Bull family (easier → harder). Cow variants only need outer/single bull hits.
+  { id: 'cow_tipper', name: 'Cow Tipper', desc: 'Hit a single bull (25) in one game', icon: '🐄',
+    check: (_v, gv) => countOuterBulls(gv) >= 1 },
+  { id: 'milkman', name: 'The Milkman', desc: 'Hit 3 single bulls (25) in one game', icon: '🥛',
+    check: (_v, gv) => countOuterBulls(gv) >= 3 },
+  { id: 'cattle_rustler', name: 'Cattle Rustler', desc: 'Hit 5 bulls-or-outer in one game', icon: '🐮',
+    check: (_v, gv) => countAnyBulls(gv) >= 5 },
+  { id: 'first_bull', name: 'First Blood', desc: 'Hit your first bullseye (50) in a game', icon: '🎯',
+    check: (_v, gv) => countBulls(gv) >= 1 },
+  { id: 'bullseye', name: 'Bullseye Hunter', desc: 'Hit 3 bullseyes (50) in one game', icon: '🐂',
+    check: (_v, gv) => countBulls(gv) >= 3 },
+  { id: 'bullseye_pro', name: 'Bullseye Pro', desc: 'Hit 5 bullseyes (50) in one game', icon: '🎖️',
+    check: (_v, gv) => countBulls(gv) >= 5 },
   { id: 'ton80', name: 'Ton 80 Hero', desc: 'Score a 180', icon: '💥',
-    check: (_v, gv) => gv.some((v:any) => v.scored===180) },
+    check: (_v, gv) => count180s(gv) >= 1 },
+  { id: 'double_vision', name: 'Double Vision', desc: 'Score two 180s in one game', icon: '👀',
+    check: (_v, gv) => count180s(gv) >= 2 },
+  { id: 'ton_machine', name: 'Ton Machine', desc: 'Hit 3+ tons (100+) in one game', icon: '💯',
+    check: (_v, gv) => countTons(gv) >= 3 },
+  { id: 'ton_factory', name: 'Ton Factory', desc: 'Hit 6+ tons (100+) in one game', icon: '🏭',
+    check: (_v, gv) => countTons(gv) >= 6 },
+  { id: 'big_hitter', name: 'Big Hitter', desc: 'Score 140+ three times in one game', icon: '🔥',
+    check: (_v, gv) => count140plus(gv) + count180s(gv) >= 3 },
   { id: 'consistent', name: 'The Consistent', desc: 'Score 60+ in 5 consecutive visits', icon: '📊',
     check: (visits) => { const s = visits.filter((v:any) => !v.bust && !v.atc); for (let i=0; i<=s.length-5; i++) if (s.slice(i,i+5).every((v:any) => v.scored>=60)) return true; return false; } },
   { id: 'checkout_king', name: 'Checkout King', desc: 'Checkout with 100+', icon: '🎯',
     check: (visits) => visits.some((v:any) => v.remaining===0 && v.checkout>=100) },
+  { id: 'big_finish', name: 'Big Finish', desc: 'Checkout with 120+', icon: '🎆',
+    check: (visits) => visits.some((v:any) => v.remaining===0 && v.checkout>=120) },
+  { id: 'high_ton_out', name: 'High Ton Out', desc: 'Checkout with 150+', icon: '🏆',
+    check: (visits) => visits.some((v:any) => v.remaining===0 && v.checkout>=150) },
   { id: 'sharpshooter', name: 'Sharpshooter', desc: 'Hit 10+ triples in one game', icon: '🔫',
-    check: (_v, gv) => gv.flatMap((v:any) => v.darts||[]).filter((d:any) => d.mult===3).length >= 10 },
+    check: (_v, gv) => countTriples(gv) >= 10 },
+  { id: 'triple_stack', name: 'Triple Stack', desc: 'Hit 3 triples in one visit', icon: '🥞',
+    check: (_v, gv) => gv.some((v:any) => (v.darts||[]).filter((d:any) => d.mult===3).length === 3) },
+  { id: 'double_dip', name: 'Double Dip', desc: 'Hit 3 doubles in one visit', icon: '💠',
+    check: (_v, gv) => gv.some((v:any) => (v.darts||[]).filter((d:any) => d.mult===2 && d.value !== 50).length === 3) },
   { id: 'double_trouble', name: 'Double Trouble', desc: 'Bust 3 times in one game', icon: '😵',
     check: (_v, gv) => gv.filter((v:any) => v.bust).length >= 3 },
-  { id: 'comeback_kid', name: 'Comeback Kid', desc: 'Win after being 2 legs behind', icon: '🔄',
+  { id: 'comeback_kid', name: 'Comeback Kid', desc: 'Win a best-of match', icon: '🔄',
     check: (_v, _gv, game) => game && game.players.length > 1 && game.winner && game.legsBestOf > 1 },
   { id: 'first9_flyer', name: 'First 9 Flyer', desc: 'Average 40+ in first 9 darts', icon: '🚀',
     check: (visits) => { const byLeg: Record<number, any[]> = {}; visits.filter((v:any) => !v.bust && !v.atc).forEach((v:any) => { (byLeg[v.leg] = byLeg[v.leg]||[]).push(v); }); return Object.values(byLeg).some((arr:any[]) => arr.slice(0,3).reduce((a,v) => a+v.scored,0) >= 120); } },
+
+  // ============ Lifetime / global (match history) ============
+  { id: 'life_score_1k', name: 'Rookie Scorer', desc: 'Score 1,000 points across all games', icon: '🥉',
+    check: (_v, _gv, _g, ctx) => lifetimeScoreSum(ctx?.lifetimeVisits || []) >= 1000 },
+  { id: 'life_score_5k', name: 'Regular Scorer', desc: 'Score 5,000 points across all games', icon: '🥈',
+    check: (_v, _gv, _g, ctx) => lifetimeScoreSum(ctx?.lifetimeVisits || []) >= 5000 },
+  { id: 'life_score_10k', name: 'Serious Scorer', desc: 'Score 10,000 points across all games', icon: '🥇',
+    check: (_v, _gv, _g, ctx) => lifetimeScoreSum(ctx?.lifetimeVisits || []) >= 10000 },
+  { id: 'life_score_25k', name: 'Score Grinder', desc: 'Score 25,000 points across all games', icon: '⚔️',
+    check: (_v, _gv, _g, ctx) => lifetimeScoreSum(ctx?.lifetimeVisits || []) >= 25000 },
+  { id: 'life_score_50k', name: 'Score Legend', desc: 'Score 50,000 points across all games', icon: '🌟',
+    check: (_v, _gv, _g, ctx) => lifetimeScoreSum(ctx?.lifetimeVisits || []) >= 50000 },
+  { id: 'life_score_100k', name: 'Score Titan', desc: 'Score 100,000 points across all games', icon: '💎',
+    check: (_v, _gv, _g, ctx) => lifetimeScoreSum(ctx?.lifetimeVisits || []) >= 100000 },
+
+  { id: 'life_t20_25', name: 'T20 Hunter', desc: 'Hit 25 triple 20s in a lifetime', icon: '🎯',
+    check: (_v, _gv, _g, ctx) => countHits(ctx?.lifetimeVisits || [], 20, 3) >= 25 },
+  { id: 'life_t20_100', name: 'T20 Sniper', desc: 'Hit 100 triple 20s in a lifetime', icon: '🏹',
+    check: (_v, _gv, _g, ctx) => countHits(ctx?.lifetimeVisits || [], 20, 3) >= 100 },
+  { id: 'life_t20_500', name: 'T20 Machine', desc: 'Hit 500 triple 20s in a lifetime', icon: '🤖',
+    check: (_v, _gv, _g, ctx) => countHits(ctx?.lifetimeVisits || [], 20, 3) >= 500 },
+
+  { id: 'life_180_1', name: 'First 180', desc: 'Score your first 180', icon: '💥',
+    check: (_v, _gv, _g, ctx) => count180s(ctx?.lifetimeVisits || []) >= 1 },
+  { id: 'life_180_10', name: '180 Collector', desc: 'Score ten 180s in a lifetime', icon: '🧨',
+    check: (_v, _gv, _g, ctx) => count180s(ctx?.lifetimeVisits || []) >= 10 },
+  { id: 'life_180_50', name: '180 Maestro', desc: 'Score fifty 180s in a lifetime', icon: '🎼',
+    check: (_v, _gv, _g, ctx) => count180s(ctx?.lifetimeVisits || []) >= 50 },
+
+  { id: 'life_bulls_10', name: 'Bull Wrangler', desc: 'Hit 10 bullseyes (50) in a lifetime', icon: '🐃',
+    check: (_v, _gv, _g, ctx) => countBulls(ctx?.lifetimeVisits || []) >= 10 },
+  { id: 'life_bulls_50', name: 'Bull Master', desc: 'Hit 50 bullseyes (50) in a lifetime', icon: '👑',
+    check: (_v, _gv, _g, ctx) => countBulls(ctx?.lifetimeVisits || []) >= 50 },
+  { id: 'life_bulls_100', name: 'Bull Legend', desc: 'Hit 100 bullseyes (50) in a lifetime', icon: '🏅',
+    check: (_v, _gv, _g, ctx) => countBulls(ctx?.lifetimeVisits || []) >= 100 },
+
+  { id: 'life_triples_50', name: 'Triple Threat', desc: 'Hit 50 triples in a lifetime', icon: '3️⃣',
+    check: (_v, _gv, _g, ctx) => countTriples(ctx?.lifetimeVisits || []) >= 50 },
+  { id: 'life_triples_500', name: 'Triple Titan', desc: 'Hit 500 triples in a lifetime', icon: '🔱',
+    check: (_v, _gv, _g, ctx) => countTriples(ctx?.lifetimeVisits || []) >= 500 },
+  { id: 'life_doubles_50', name: 'Double Down', desc: 'Hit 50 doubles in a lifetime', icon: '2️⃣',
+    check: (_v, _gv, _g, ctx) => countDoubles(ctx?.lifetimeVisits || []) >= 50 },
+  { id: 'life_doubles_500', name: 'Double Dynasty', desc: 'Hit 500 doubles in a lifetime', icon: '♊',
+    check: (_v, _gv, _g, ctx) => countDoubles(ctx?.lifetimeVisits || []) >= 500 },
+
+  { id: 'life_checkouts_10', name: 'Finisher', desc: 'Complete 10 checkouts in a lifetime', icon: '✅',
+    check: (_v, _gv, _g, ctx) => countCheckouts(ctx?.lifetimeVisits || []) >= 10 },
+  { id: 'life_checkouts_100', name: 'Closer', desc: 'Complete 100 checkouts in a lifetime', icon: '🚪',
+    check: (_v, _gv, _g, ctx) => countCheckouts(ctx?.lifetimeVisits || []) >= 100 },
+
+  { id: 'life_games_10', name: 'Getting Started', desc: 'Play 10 games', icon: '🎮',
+    check: (_v, _gv, _g, ctx) => (ctx?.gamesPlayed || 0) >= 10 },
+  { id: 'life_games_50', name: 'Regular Player', desc: 'Play 50 games', icon: '📅',
+    check: (_v, _gv, _g, ctx) => (ctx?.gamesPlayed || 0) >= 50 },
+  { id: 'life_games_250', name: 'Veteran', desc: 'Play 250 games', icon: '🎖️',
+    check: (_v, _gv, _g, ctx) => (ctx?.gamesPlayed || 0) >= 250 },
+
+  { id: 'life_wins_1', name: 'First Win', desc: 'Win your first game', icon: '🏆',
+    check: (_v, _gv, _g, ctx) => (ctx?.gamesWon || 0) >= 1 },
+  { id: 'life_wins_5', name: 'Winner', desc: 'Win 5 games', icon: '🏆',
+    check: (_v, _gv, _g, ctx) => (ctx?.gamesWon || 0) >= 5 },
+  { id: 'life_wins_25', name: 'Champion', desc: 'Win 25 games', icon: '🏆',
+    check: (_v, _gv, _g, ctx) => (ctx?.gamesWon || 0) >= 25 },
+  { id: 'life_wins_100', name: 'Dart Legend', desc: 'Win 100 games', icon: '🌠',
+    check: (_v, _gv, _g, ctx) => (ctx?.gamesWon || 0) >= 100 },
 ];
+
 
 export function buildTitleCheck(t: CustomTitle): (allVisits: any[], gameVisits: any[]) => boolean {
   const c = t.condition || { type: 'combo' as const, base: t.base || 20, mult: t.mult || 1, count: t.count || 1 };

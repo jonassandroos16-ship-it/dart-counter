@@ -9,6 +9,7 @@ import type { PopupControls } from './Popups';
 
 interface Props {
   players: Player[];
+  games: GameRecord[];
   settings: Settings;
   setGames: (updater: any) => void;
   setPlayers: (updater: any) => void;
@@ -19,11 +20,11 @@ interface Props {
   popups: PopupControls;
 }
 
-export function PlayView({ players, settings, setGames, setPlayers, toast, music, onQuit, onGameOver, popups }: Props) {
+export function PlayView({ players, games, settings, setGames, setPlayers, toast, music, onQuit, onGameOver, popups }: Props) {
   const [game, setGame] = useState<Game | null>(null);
 
   if (game) {
-    return <GameBoard game={game} setGame={setGame} settings={settings} players={players} setGames={setGames} setPlayers={setPlayers} toast={toast} music={music}
+    return <GameBoard game={game} setGame={setGame} settings={settings} players={players} games={games} setGames={setGames} setPlayers={setPlayers} toast={toast} music={music}
       onQuit={() => { setGame(null); onQuit(); }} onGameOver={onGameOver} popups={popups} />;
   }
   return <SetupView players={players} onStart={(mode, ids, dbl, legs) => {
@@ -85,8 +86,8 @@ function SetupView({ players, onStart }: { players: Player[]; onStart: (mode: st
   );
 }
 
-function GameBoard({ game, setGame, settings, players, setGames, setPlayers, toast, music, onQuit, onGameOver, popups }: {
-  game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[];
+function GameBoard({ game, setGame, settings, players, games, setGames, setPlayers, toast, music, onQuit, onGameOver, popups }: {
+  game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[];
   setGames: (updater: any) => void; setPlayers: (updater: any) => void; toast: (m: string) => void;
   music: MusicEngine; onQuit: () => void; onGameOver: () => void; popups: PopupControls;
 }) {
@@ -201,7 +202,7 @@ function GameBoard({ game, setGame, settings, players, setGames, setPlayers, toa
       if (winner) awardXP(winner.id, settings.xpConfig.win, 'Winning the game', settings, setPlayers, popups);
       if (isTie && tiedIds) tiedIds.forEach(pid => awardXP(pid, Math.round(settings.xpConfig.win / 2), 'Tied the game', settings, setPlayers, popups));
     }
-    finished.players.forEach(pl => checkTitleUnlocks(pl, settings, popups, setPlayers, finished, players));
+    finished.players.forEach(pl => checkTitleUnlocks(pl, settings, popups, setPlayers, finished, players, games));
     setGame(finished);
   };
 
@@ -421,7 +422,7 @@ function checkMilestones(p: GamePlayer, remaining: number, visitScore: number, s
   const prevVisits = allVisitsFor(pid, []).filter(v => !v.bust && !v.atc);
   void prevVisits;
   awardVisitXP(p, visitScore, settings, setPlayers, popups);
-  checkTitleUnlocks(p, settings, popups, setPlayers, game, players);
+  checkTitleUnlocks(p, settings, popups, setPlayers, game, players, games);
 }
 
 function awardVisitXP(p: GamePlayer, visitScore: number, settings: Settings, setPlayers: (updater: any) => void, popups: PopupControls) {
@@ -448,18 +449,26 @@ function awardXP(playerId: string, amount: number, reason: string, settings: Set
   }));
 }
 
-function checkTitleUnlocks(pl: GamePlayer, settings: Settings, popups: PopupControls, setPlayers: (updater: any) => void, game: Game, _players: Player[]) {
+function checkTitleUnlocks(pl: GamePlayer, settings: Settings, popups: PopupControls, setPlayers: (updater: any) => void, game: Game, _players: Player[], games: GameRecord[] = []) {
   if (!settings.popups.titles) return;
   const titles = [...BUILTIN_TITLES, ...settings.customTitles.map(t => ({ ...t, custom: true, check: buildTitleCheck(t) as any }))];
   setPlayers((prev: Player[]) => {
     const player = prev.find(p => p.id === pl.id);
     if (!player) return prev;
     const unlocked = [...(player.unlockedTitles || [])];
-    const allVisits = allVisitsFor(pl.id, []);
+
+    // Historical stats from prior completed games (excluding the current in-progress game).
+    const historyGames = games.filter(g => g.id !== game.id && g.players.some(p => p.id === pl.id));
+    const historyVisits = allVisitsFor(pl.id, historyGames);
+    const lifetimeVisits = [...historyVisits, ...(pl.visits || [])];
+    const gamesPlayed = historyGames.length + (game.finished ? 1 : 0);
+    const gamesWon = historyGames.filter(g => g.winner === pl.id).length + (game.finished && game.winner === pl.id ? 1 : 0);
+    const ctx = { playerId: pl.id, games: historyGames, gamesPlayed, gamesWon, lifetimeVisits };
+
     titles.forEach(t => {
       if (unlocked.includes(t.id)) return;
       let met = false;
-      try { met = t.check(allVisits, pl.visits || [], game); } catch { met = false; }
+      try { met = t.check(lifetimeVisits, pl.visits || [], game, ctx); } catch { met = false; }
       if (met) {
         unlocked.push(t.id);
         popups.setTitleUnlock({ icon: t.icon || '🏅', name: t.name, player: pl.name, desc: t.desc || '' });
