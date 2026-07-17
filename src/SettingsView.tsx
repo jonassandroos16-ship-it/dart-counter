@@ -106,11 +106,18 @@ function EditCustomTitleModal({ onClose, onSave }: { onClose: () => void; onSave
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
   const [icon, setIcon] = useState('');
-  const [condType, setCondType] = useState<'combo' | 'sum'>('combo');
+  const [condType, setCondType] = useState<'combo' | 'sum' | 'sequence'>('combo');
   const [base, setBase] = useState(20);
   const [mult, setMult] = useState(3);
   const [count, setCount] = useState(3);
   const [sumValue, setSumValue] = useState(26);
+  const [seqDarts, setSeqDarts] = useState<{ base: number; mult: number }[]>([
+    { base: 1, mult: 1 },
+    { base: 20, mult: 1 },
+    { base: 6, mult: 1 },
+  ]);
+
+  const numOptions = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,25,50];
 
   return (
     <Modal onClose={onClose}>
@@ -121,17 +128,30 @@ function EditCustomTitleModal({ onClose, onSave }: { onClose: () => void; onSave
       <div className="muted small" style={{ marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Unlock Condition</div>
       <div className="tabbar" style={{ marginBottom: 14 }}>
         <button className={condType === 'combo' ? 'on' : ''} onClick={() => setCondType('combo')}>Dart combo</button>
+        <button className={condType === 'sequence' ? 'on' : ''} onClick={() => setCondType('sequence')}>Dart sequence</button>
         <button className={condType === 'sum' ? 'on' : ''} onClick={() => setCondType('sum')}>Turn total</button>
       </div>
       {condType === 'combo' ? (
         <div className="grid grid-2">
           <label className="field"><span>Target number</span>
-            <select value={base} onChange={e => setBase(+e.target.value)}>{[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,25,50].map(n => <option key={n} value={n}>{n === 50 ? 'Bull' : n === 25 ? '25' : n}</option>)}</select>
+            <select value={base} onChange={e => setBase(+e.target.value)}>{numOptions.map(n => <option key={n} value={n}>{n === 50 ? 'Bull' : n === 25 ? '25' : n}</option>)}</select>
           </label>
           <label className="field"><span>Multiplier</span>
             <select value={mult} onChange={e => setMult(+e.target.value)}><option value={1}>Single</option><option value={2}>Double</option><option value={3}>Triple</option></select>
           </label>
           <label className="field"><span>Times needed (in one game)</span><input type="number" value={count} min={1} max={50} onChange={e => setCount(+e.target.value || 1)} /></label>
+        </div>
+      ) : condType === 'sequence' ? (
+        <div>
+          <div className="muted small" style={{ marginBottom: 8 }}>Awarded when a visit contains all these darts (any order):</div>
+          {seqDarts.map((d, i) => (
+            <div key={i} className="row" style={{ gap: 6, marginBottom: 6 }}>
+              <select style={{ flex: 1 }} value={d.base} onChange={e => { const n = [...seqDarts]; n[i] = { ...n[i], base: +e.target.value }; setSeqDarts(n); }}>{numOptions.map(n => <option key={n} value={n}>{n === 50 ? 'Bull' : n === 25 ? '25' : n}</option>)}</select>
+              <select style={{ flex: 1 }} value={d.mult} onChange={e => { const n = [...seqDarts]; n[i] = { ...n[i], mult: +e.target.value }; setSeqDarts(n); }}><option value={1}>Single</option><option value={2}>Double</option><option value={3}>Triple</option></select>
+              <button className="btn danger sm" onClick={() => setSeqDarts(seqDarts.length > 1 ? seqDarts.filter((_, j) => j !== i) : seqDarts)} disabled={seqDarts.length <= 1}>✕</button>
+            </div>
+          ))}
+          <button className="btn ghost sm" style={{ marginTop: 4 }} onClick={() => setSeqDarts([...seqDarts, { base: 20, mult: 1 }])}>+ Add dart</button>
         </div>
       ) : (
         <label className="field"><span>Awarded when a turn (3 darts) totals</span><input type="number" value={sumValue} min={0} max={180} onChange={e => setSumValue(+e.target.value)} /></label>
@@ -140,7 +160,9 @@ function EditCustomTitleModal({ onClose, onSave }: { onClose: () => void; onSave
         <button className="btn block ghost" onClick={onClose}>Cancel</button>
         <button className="btn block primary" onClick={() => {
           if (!name.trim()) return;
-          const condition = condType === 'sum' ? { type: 'sum' as const, value: sumValue } : { type: 'combo' as const, base, mult, count };
+          const condition = condType === 'sum' ? { type: 'sum' as const, value: sumValue }
+            : condType === 'sequence' ? { type: 'sequence' as const, darts: seqDarts }
+            : { type: 'combo' as const, base, mult, count };
           onSave({ id: 'custom_' + uid(), name: name.trim(), desc: desc.trim() || undefined, icon: icon.trim() || '🏅', condition, custom: true });
         }}>Save Title</button>
       </div>

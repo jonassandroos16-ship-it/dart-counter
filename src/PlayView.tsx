@@ -97,6 +97,7 @@ function GameBoard({ game, setGame, settings, players, setGames, setPlayers, toa
   const buffScored = game.darts.reduce((a, d) => a + d.value, 0);
   const projected = game.practice ? p.score + buffScored : p.score - buffScored;
   const others = [...game.players.slice(game.turn + 1), ...game.players.slice(0, game.turn)];
+  const throwOrder = (idx: number) => (idx - game.roundStartTurn + game.players.length) % game.players.length;
 
   const addDart = (base: number, mult: number, labelOverride?: string, isBull?: boolean) => {
     if (game.darts.length >= 3) { toast('3 darts already'); return; }
@@ -137,9 +138,9 @@ function GameBoard({ game, setGame, settings, players, setGames, setPlayers, toa
       const legsToWin = Math.ceil(game.legsBestOf / 2);
       const reachedThreshold = cur.legsWon >= (game.legsBestOf === 1 ? 1 : legsToWin);
       if (reachedThreshold) {
-        const playersLeft = newPlayers.filter(pl => pl.id !== cur.id && !checkedOut.includes(pl.id) && pl.score > 0);
-        if (playersLeft.length > 0 && checkedOut.length === 1) {
-          toast(`${cur.name} checked out! Others get one more turn to tie.`);
+        const playersLeft = newPlayers.filter(pl => !checkedOut.includes(pl.id) && pl.score > 0);
+        if (playersLeft.length > 0) {
+          toast(`${cur.name} checked out! ${playersLeft.length} player${playersLeft.length > 1 ? 's' : ''} left to tie.`);
           Sound.play('win', {}, settings);
           advanceTurn({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, darts: [], mult: 1 });
           return;
@@ -149,10 +150,11 @@ function GameBoard({ game, setGame, settings, players, setGames, setPlayers, toa
         return;
       }
       const nextLeg = game.leg + 1;
+      const nextTurn = (nextLeg - 1) % game.players.length;
       newPlayers.forEach(pl => pl.score = MODES[game.mode].start);
       Sound.play('win', {}, settings);
       toast(`${cur.name} wins leg ${game.leg}`);
-      setGame({ ...game, players: newPlayers, leg: nextLeg, turn: (nextLeg - 1) % game.players.length, checkedOutThisRound: [], darts: [], mult: 1 });
+      setGame({ ...game, players: newPlayers, leg: nextLeg, turn: nextTurn, roundStartTurn: nextTurn, checkedOutThisRound: [], darts: [], mult: 1 });
       return;
     }
 
@@ -172,13 +174,14 @@ function GameBoard({ game, setGame, settings, players, setGames, setPlayers, toa
   };
 
   const advanceTurn = (g: Game) => {
-    let turn = (g.turn + 1) % g.players.length;
-    if (g.checkedOutThisRound.length > 0) {
-      const checkedOutCount = g.checkedOutThisRound.length;
-      if (checkedOutCount >= 1) {
-        const legsToWin = Math.ceil(g.legsBestOf / 2);
-        const anyReached = g.players.some(pl => g.checkedOutThisRound.includes(pl.id) && pl.legsWon >= (g.legsBestOf === 1 ? 1 : legsToWin));
-        if (anyReached && (turn === 0 || checkedOutCount === g.players.length)) {
+    const turn = (g.turn + 1) % g.players.length;
+    const checkedOutCount = g.checkedOutThisRound.length;
+    if (checkedOutCount > 0) {
+      const legsToWin = Math.ceil(g.legsBestOf / 2);
+      const anyReached = g.players.some(pl => g.checkedOutThisRound.includes(pl.id) && pl.legsWon >= (g.legsBestOf === 1 ? 1 : legsToWin));
+      if (anyReached) {
+        const playersLeftToThrow = g.players.filter(pl => !g.checkedOutThisRound.includes(pl.id) && pl.score > 0);
+        if (playersLeftToThrow.length === 0) {
           if (checkedOutCount > 1) { finishGame({ ...g, turn }, null, g.checkedOutThisRound); return; }
           const winner = g.players.find(pl => g.checkedOutThisRound.includes(pl.id));
           if (winner) { finishGame({ ...g, turn }, winner, null); return; }
@@ -207,6 +210,7 @@ function GameBoard({ game, setGame, settings, players, setGames, setPlayers, toa
       <div className="play-current">
         <div className="pc-header">
           <div className="row" style={{ gap: 8 }}>
+            <span className={`turn-order-badge${game.turn === game.roundStartTurn ? ' starter' : ''}`}>{throwOrder(game.turn) + 1}</span>
             <span className="avatar" style={{ width: 32, height: 32, fontSize: 13, background: p.color }}>{initials(p.name)}</span>
             <span className="pc-name">{p.name}</span>
           </div>
@@ -234,6 +238,7 @@ function GameBoard({ game, setGame, settings, players, setGames, setPlayers, toa
               <div key={pl.id} className="play-other">
                 <div className="row between">
                   <div className="row" style={{ gap: 6 }}>
+                    <span className={`turn-order-badge${game.players.indexOf(pl) === game.roundStartTurn ? ' starter' : ''}`} style={{ width: 18, height: 18, fontSize: 10 }}>{throwOrder(game.players.indexOf(pl)) + 1}</span>
                     <span className="avatar" style={{ width: 22, height: 22, fontSize: 10, background: pl.color }}>{initials(pl.name)}</span>
                     <span className="po-name">{pl.name}</span>
                   </div>
@@ -380,8 +385,8 @@ function AtcBoard({ game, setGame, settings, toast, music, onQuit, setGames }: {
 
 function GameOver({ game, onNewGame, onViewStats }: { game: Game; onNewGame: () => void; onViewStats: () => void }) {
   const w = game.players.find(pl => pl.id === game.winner);
-  const isTie = !game.winner && game.checkedOutThisRound.length > 1;
-  const tiedNames = isTie ? game.checkedOutThisRound.map(id => game.players.find(pl => pl.id === id)!.name) : [];
+  const isTie = !!game.tied && !!game.tiedPlayers && game.tiedPlayers.length > 1;
+  const tiedNames = isTie ? (game.tiedPlayers || []).map(id => game.players.find(pl => pl.id === id)?.name || '').filter(Boolean) : [];
   const titleText = game.practice ? 'Practice complete' : isTie ? "It's a tie!" : (w ? `${w.name} wins!` : 'Game over');
   return (
     <div className="view-scroll">

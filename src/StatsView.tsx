@@ -52,7 +52,7 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
         </div>
         <div style={{ flex: 1 }}>
           <h3 style={{ margin: '0 0 4px' }}>Win Rate</h3>
-          <div className="muted small">{s.gamesWon} won{s.gamesTied ? ` · ${s.gamesTied} tied` : ''} out of {s.games} games</div>
+          <div className="muted small">{s.gamesWon} won out of {s.games} games</div>
           <div className="muted small" style={{ marginTop: 2 }}>{s.legsWon} legs won</div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -61,6 +61,21 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
           <div className="muted small">{xp.xp || 0} total XP</div>
           <div className="xp-bar" style={{ width: 80, marginTop: 4 }}><div style={{ width: `${Math.round(li.xpIntoLevel / li.xpNeeded * 100)}%` }} /></div>
           <div className="muted small" style={{ marginTop: 2 }}>{li.xpIntoLevel}/{li.xpNeeded}</div>
+        </div>
+      </div>
+      <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
+        <div style={{ position: 'relative', width: 80, height: 80, flexShrink: 0 }}>
+          <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+            <circle cx="40" cy="40" r="34" fill="none" stroke="var(--border)" strokeWidth="6" />
+            <circle cx="40" cy="40" r="34" fill="none" stroke="var(--muted)" strokeWidth="6"
+              strokeDasharray={2 * Math.PI * 34} strokeDashoffset={2 * Math.PI * 34 * (1 - s.tieRate / 100)}
+              strokeLinecap="round" style={{ transition: 'stroke-dashoffset .6s ease' }} />
+          </svg>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800 }}>{s.tieRate.toFixed(0)}%</div>
+        </div>
+        <div style={{ flex: 1 }}>
+          <h3 style={{ margin: '0 0 4px' }}>Tie Rate</h3>
+          <div className="muted small">{s.gamesTied} tied out of {s.games} games</div>
         </div>
       </div>
       <div className="grid grid-3" style={{ marginBottom: 12 }}>

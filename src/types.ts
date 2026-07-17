@@ -95,7 +95,7 @@ export interface CustomTitle {
   desc?: string;
   icon?: string;
   custom?: boolean;
-  condition?: { type: 'sum'; value: number } | { type: 'combo'; base: number; mult: number; count: number };
+  condition?: { type: 'sum'; value: number } | { type: 'combo'; base: number; mult: number; count: number } | { type: 'sequence'; darts: { base: number; mult: number }[] };
   base?: number;
   mult?: number;
   count?: number;

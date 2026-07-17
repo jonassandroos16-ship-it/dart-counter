@@ -91,12 +91,29 @@ export function buildTitleCheck(t: CustomTitle): (allVisits: any[], gameVisits: 
   if (c.type === 'sum') {
     return (_allVisits, gameVisits) => gameVisits.some((v:any) => !v.atc && v.scored === c.value);
   }
+  if (c.type === 'sequence') {
+    const need = c.darts.map(d => ({ base: d.base, mult: d.mult })).sort((a, b) => a.base - b.base || a.mult - b.mult);
+    return (_allVisits, gameVisits) => gameVisits.some((v:any) => {
+      if (v.atc) return false;
+      const have = (v.darts||[]).map((d:any) => ({ base: d.base, mult: d.mult })).sort((a:any, b:any) => a.base - b.base || a.mult - b.mult);
+      if (have.length < need.length) return false;
+      const needCounts: Record<string, number> = {};
+      need.forEach(d => { const k = d.base + ':' + d.mult; needCounts[k] = (needCounts[k]||0) + 1; });
+      const haveCounts: Record<string, number> = {};
+      have.forEach((d:any) => { const k = d.base + ':' + d.mult; haveCounts[k] = (haveCounts[k]||0) + 1; });
+      return Object.entries(needCounts).every(([k, n]) => (haveCounts[k]||0) >= n);
+    });
+  }
   return (_allVisits, gameVisits) => gameVisits.flatMap((v:any) => v.darts||[]).filter((d:any) => d.base === c.base && d.mult === c.mult).length >= (c.count || 1);
 }
 
 export function conditionLabel(t: CustomTitle): string {
   const c = t.condition || { type: 'combo' as const, base: t.base || 20, mult: t.mult || 1, count: t.count || 1 };
   if (c.type === 'sum') return `Turn total = ${c.value}`;
+  if (c.type === 'sequence') {
+    const parts = c.darts.map(d => (d.mult === 3 ? 'T' : d.mult === 2 ? 'D' : '') + d.base);
+    return `Visit: ${parts.join(' + ')} (any order)`;
+  }
   return `${c.mult||1}×${c.base} × ${c.count||1} in a game`;
 }
 

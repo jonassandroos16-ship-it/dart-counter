@@ -114,8 +114,9 @@ export function playerStats(playerId: string, games: GameRecord[]) {
     });
     return c ? s / c * 3 : 0;
   })();
-  const winRate = playerGames.length ? (gamesWon + gamesTied * 0.5) / playerGames.length * 100 : 0;
-  return { games: playerGames.length, gamesWon, gamesTied, legsWon, winRate, avg: totalDarts ? totalScore / totalDarts * 3 : 0, first9, highScore, highCheckout, n180, n140, tons, visits };
+  const winRate = playerGames.length ? gamesWon / playerGames.length * 100 : 0;
+  const tieRate = playerGames.length ? gamesTied / playerGames.length * 100 : 0;
+  return { games: playerGames.length, gamesWon, gamesTied, legsWon, winRate, tieRate, avg: totalDarts ? totalScore / totalDarts * 3 : 0, first9, highScore, highCheckout, n180, n140, tons, visits };
 }
 
 export function bucketAverages(visits: any[], period: string) {
