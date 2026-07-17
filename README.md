@@ -16,6 +16,10 @@ A dart scoring app built with React + TypeScript + Vite. Tracks scores, stats, X
 - Local backup export
 - Full-screen no-scroll play layout with current player on top and others below
 
+## Live Demo
+
+Deployed at https://jonassandroos16-ship-it.github.io/dart-counter/
+
 ## Development
 
 ```bash
