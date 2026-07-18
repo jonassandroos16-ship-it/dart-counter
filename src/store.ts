@@ -43,6 +43,7 @@ function loadActiveGame(): Game | null {
 // ── Server sync helpers ──────────────────────────────────────────────
 
 async function fetchAppState(): Promise<{ players: Player[]; settings: Settings } | null> {
+  if (!supabase) return null;
   const { data, error } = await supabase
     .from('app_state')
     .select('players, settings')
@@ -56,6 +57,7 @@ async function fetchAppState(): Promise<{ players: Player[]; settings: Settings 
 }
 
 async function upsertAppState(players: Player[], settings: Settings): Promise<void> {
+  if (!supabase) return;
   const { error } = await supabase
     .from('app_state')
     .upsert({ id: 'main', players, settings, updated_at: new Date().toISOString() }, { onConflict: 'id' });
@@ -63,12 +65,14 @@ async function upsertAppState(players: Player[], settings: Settings): Promise<vo
 }
 
 async function fetchAllGames(): Promise<GameRecord[]> {
+  if (!supabase) return [];
   const { data, error } = await supabase.from('games').select('data');
   if (error || !data) return [];
   return data.map((row: any) => row.data as GameRecord);
 }
 
 async function upsertGame(record: GameRecord): Promise<void> {
+  if (!supabase) return;
   const { error } = await supabase
     .from('games')
     .upsert({ id: record.id, data: record }, { onConflict: 'id' });
@@ -76,6 +80,7 @@ async function upsertGame(record: GameRecord): Promise<void> {
 }
 
 async function deleteGame(id: string): Promise<void> {
+  if (!supabase) return;
   const { error } = await supabase.from('games').delete().eq('id', id);
   if (error) console.warn('[sync] game delete failed:', error.message);
 }
