@@ -38,16 +38,24 @@ export function checkoutHint(remaining: number | null, doubleOut: boolean, pract
   if (remaining === 0) return 'Checked out!';
   if (remaining === 1) return doubleOut ? 'No checkout — bust risk' : 'Checkout: S1';
   if (remaining > 170) return 'No 3-dart checkout — score to get ≤ 170';
-  // Straight out: any number finishes. Show the simplest single-dart route.
+  // Prefer the curated CHECKOUTS table — its routes end on a double, which is
+  // valid for both Double Out and Straight Out.
+  const co = CHECKOUTS[remaining];
+  if (co) return 'Checkout: ' + co.join('  ');
+  // Straight out: any single segment finishes. Suggest the simplest route.
   if (!doubleOut) {
     if (remaining <= 20) return `Checkout: S${remaining}`;
     if (remaining === 25) return 'Checkout: 25 (outer bull)';
     if (remaining === 50) return 'Checkout: Bull';
     if (remaining <= 40) { const d = Math.ceil(remaining / 2); return `Checkout: S${remaining} or D${d}`; }
-    return `Checkout: ${remaining}`;
+    // Two-dart straight-out finish: hit a single/triple then a single.
+    if (remaining <= 60) {
+      const first = Math.min(20, remaining - 1);
+      const rest = remaining - first;
+      return `Checkout: S${first} + S${rest}`;
+    }
+    return `Checkout: ${remaining} — score to finish`;
   }
-  const co = CHECKOUTS[remaining];
-  if (co) return 'Checkout: ' + co.join('  ');
   return 'No checkout from ' + remaining;
 }
 
