@@ -42,18 +42,18 @@ export function checkoutHint(remaining: number | null, doubleOut: boolean, pract
   // valid for both Double Out and Straight Out.
   const co = CHECKOUTS[remaining];
   if (co) return 'Checkout: ' + co.join('  ');
-  // Straight out: any single segment finishes. Suggest the simplest route.
+  // Straight out: any segment finishes. Suggest a route using real segments
+  // only (singles 1-20, outer bull 25, bull 50, doubles D1-D20, triples T1-T20).
   if (!doubleOut) {
-    if (remaining <= 20) return `Checkout: S${remaining}`;
+    if (remaining >= 1 && remaining <= 20) return `Checkout: S${remaining}`;
     if (remaining === 25) return 'Checkout: 25 (outer bull)';
     if (remaining === 50) return 'Checkout: Bull';
-    if (remaining <= 40) { const d = Math.ceil(remaining / 2); return `Checkout: S${remaining} or D${d}`; }
-    // Two-dart straight-out finish: hit a single/triple then a single.
-    if (remaining <= 60) {
-      const first = Math.min(20, remaining - 1);
-      const rest = remaining - first;
-      return `Checkout: S${first} + S${rest}`;
-    }
+    if (remaining % 2 === 0 && remaining <= 40) return `Checkout: D${remaining / 2}`;
+    if (remaining % 3 === 0 && remaining <= 60) return `Checkout: T${remaining / 3}`;
+    // Two-dart finish: S20 + a single (rest is 1-20 for remaining 21-40).
+    if (remaining >= 21 && remaining <= 40) return `Checkout: S20 + S${remaining - 20}`;
+    // Three-dart finish: S20 + S20 + a single (rest is 1-20 for remaining 41-60).
+    if (remaining >= 41 && remaining <= 60) return `Checkout: S20 + S20 + S${remaining - 40}`;
     return `Checkout: ${remaining} — score to finish`;
   }
   return 'No checkout from ' + remaining;
