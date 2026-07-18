@@ -65,10 +65,12 @@ function SetupView({ players, onStart }: { players: Player[]; onStart: (mode: st
           </select>
         </label>
         {!noX01 && <label className="field"><span>Finish</span>
+          {/* By rendering Straight Out with value="0", it matches our false state */}
           <select value={doubleOut ? '1' : '0'} onChange={e => setDoubleOut(e.target.value === '1')}>
-            <option value="1">Double Out</option><option value="0">Straight Out</option>
+            <option value="0">Straight Out</option>
+            <option value="1">Double Out</option>
           </select>
-        </label>}
+        </label>}      
         {!noX01 && <label className="field"><span>Best of (legs)</span>
           <select value={legs} onChange={e => setLegs(+e.target.value)}>
             <option>1</option><option>3</option><option>5</option><option>7</option>
