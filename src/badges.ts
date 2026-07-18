@@ -168,3 +168,17 @@ export function computeLifetimeBadges(playerId: string, games: any[]): string[] 
   }
   return Array.from(earned);
 }
+
+// Lifetime per-badge counts: how many times each badge was earned across all
+// of a player's games. A badge earned in a match counts once per match.
+export function computeLifetimeBadgeCounts(playerId: string, games: any[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const g of games) {
+    if (!g || !g.players) continue;
+    if (!g.players.some((p: any) => p.id === playerId)) continue;
+    const map = computeGameBadges(g);
+    const unique = Array.from(new Set(map[playerId] || []));
+    unique.forEach((id) => { counts[id] = (counts[id] || 0) + 1; });
+  }
+  return counts;
+}

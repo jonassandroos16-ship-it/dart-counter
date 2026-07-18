@@ -7,6 +7,7 @@ export interface Player {
   unlockedTitles?: string[];
   selectedTitle?: string | null;
   unlockedBadges?: string[];
+  badgeCounts?: Record<string, number>;
   selectedBadge?: string | null;
 }
 
@@ -69,6 +70,7 @@ export interface Game {
   tiedPlayers?: string[] | null;
   tied?: boolean;
   checkedOutThisRound: string[];
+  thrownThisRound: string[];
   roundStartTurn: number;
   darts: Dart[];
   mult: number;
