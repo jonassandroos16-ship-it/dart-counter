@@ -28,7 +28,8 @@ export function applyTheme(settings: Settings) {
 function loadSettings(): Settings {
   const raw = localStorage.getItem(KEYS.settings);
   if (!raw) return defaultSettings();
-  return { ...defaultSettings(), ...JSON.parse(raw) };
+  const parsed = JSON.parse(raw) as Partial<Settings>;
+  return { ...defaultSettings(), ...parsed, powerUpScaling: { ...defaultSettings().powerUpScaling, ...(parsed.powerUpScaling || {}) } };
 }
 
 function loadActiveGame(): Game | null {
