@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Target, Users, BarChart3, History, Settings as SettingsIcon } from 'lucide-react';
 import { useDB, applyTheme, useToast } from './store';
-import { retroUnlockAll, retroUnlockAllBadges } from './logic';
+import { retroUnlockAll } from './logic';
 import { MusicEngine } from './music';
 import { Sound } from './sound';
 import { PlayView } from './PlayView';
@@ -40,14 +40,6 @@ export default function App() {
     const { players: next, changed } = retroUnlockAll(db.players, db.games, db.settings.customTitles || []);
     if (changed) db.setPlayers(next);
   }, [db.players, db.games, db.settings.customTitles]);
-
-  // One-shot retroactive badge backfill — credits badges earned from past games.
-  useEffect(() => {
-    if (!db.players.length) return;
-    const { players: next, changed } = retroUnlockAllBadges(db.players, db.games);
-    if (changed) db.setPlayers(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [db.players.length]);
 
   useEffect(() => {
     const unlock = () => {

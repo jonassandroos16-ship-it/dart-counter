@@ -276,25 +276,6 @@ export function retroUnlockAll(
 }
 
 // ============ Badge backfill ============
-import { computeLifetimeBadges } from './badges';
-
-export function retroUnlockPlayerBadges(player: Player, games: GameRecord[]): Player {
-  const existing = new Set(player.unlockedBadges || []);
-  const found = computeLifetimeBadges(player.id, games as any[]);
-  let changed = false;
-  found.forEach((id) => { if (!existing.has(id)) { existing.add(id); changed = true; } });
-  return changed ? { ...player, unlockedBadges: Array.from(existing) } : player;
-}
-
-export function retroUnlockAllBadges(
-  players: Player[],
-  games: GameRecord[],
-): { players: Player[]; changed: boolean } {
-  let changed = false;
-  const next = players.map(p => {
-    const updated = retroUnlockPlayerBadges(p, games);
-    if (updated !== p) changed = true;
-    return updated;
-  });
-  return { players: next, changed };
-}
+// Note: badges are only awarded from games played after the badge system was
+// introduced — no retroactive backfill from historical games.
+export { computeLifetimeBadges } from './badges';
