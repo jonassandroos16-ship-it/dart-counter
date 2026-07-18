@@ -38,6 +38,8 @@ function loadActiveGame(): Game | null {
     const g = JSON.parse(raw) as Game;
     // Don't resume a finished game — it's already saved in `games`.
     if (!g || g.finished) return null;
+    // Backfill fields added in later versions so old saved games still load.
+    if (!g.thrownThisRound) g.thrownThisRound = [];
     return g;
   } catch { return null; }
 }
@@ -410,6 +412,7 @@ function mergePlayers(existing: Player[], incoming: Player[]): Player[] {
         level: Math.max(idMatch.level || 0, p.level || 0) || idMatch.level || p.level || 0,
         unlockedTitles: Array.from(new Set([...(idMatch.unlockedTitles || []), ...(p.unlockedTitles || [])])),
         unlockedBadges: Array.from(new Set([...(idMatch.unlockedBadges || []), ...(p.unlockedBadges || [])])),
+        badgeCounts: mergeBadgeCounts(idMatch.badgeCounts, p.badgeCounts),
       });
       byKey.set(matchPlayerKey(p), byId.get(p.id)!);
       continue;
@@ -424,6 +427,7 @@ function mergePlayers(existing: Player[], incoming: Player[]): Player[] {
         level: Math.max(keyMatch.level || 0, p.level || 0) || keyMatch.level || p.level || 0,
         unlockedTitles: Array.from(new Set([...(keyMatch.unlockedTitles || []), ...(p.unlockedTitles || [])])),
         unlockedBadges: Array.from(new Set([...(keyMatch.unlockedBadges || []), ...(p.unlockedBadges || [])])),
+        badgeCounts: mergeBadgeCounts(keyMatch.badgeCounts, p.badgeCounts),
       });
       continue;
     }
@@ -434,6 +438,14 @@ function mergePlayers(existing: Player[], incoming: Player[]): Player[] {
     byKey.set(matchPlayerKey(placed), placed);
   }
   return Array.from(byId.values());
+}
+
+function mergeBadgeCounts(a: Record<string, number> | undefined, b: Record<string, number> | undefined): Record<string, number> {
+  const out: Record<string, number> = { ...(a || {}) };
+  for (const [k, v] of Object.entries(b || {})) {
+    out[k] = Math.max(out[k] || 0, v);
+  }
+  return out;
 }
 
 function mergeGames(existing: GameRecord[], incoming: GameRecord[]): GameRecord[] {
