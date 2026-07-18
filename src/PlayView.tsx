@@ -7,6 +7,7 @@ import { Sound } from './sound';
 import type { MusicEngine } from './music';
 import type { PopupControls } from './Popups';
 import { computeGameBadges, getBadgeInfo, BADGES } from './badges';
+import { BadgeInfoPopup } from './Popups';
 
 interface Props {
   players: Player[];
@@ -167,8 +168,13 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
       const legsToWin = Math.ceil(game.legsBestOf / 2);
       const reachedThreshold = cur.legsWon >= (game.legsBestOf === 1 ? 1 : legsToWin);
       if (reachedThreshold) {
+        // Only give remaining players a chance to tie if they can still check
+        // out in a single visit (≤ 170 — the max achievable 3-dart checkout).
+        // If nobody can catch up, the current player wins outright.
+        const MAX_CHECKOUT = 170;
         const playersLeft = newPlayers.filter(pl => !checkedOut.includes(pl.id) && pl.score > 0);
-        if (playersLeft.length > 0) {
+        const canTie = playersLeft.filter(pl => pl.score <= MAX_CHECKOUT);
+        if (playersLeft.length > 0 && canTie.length === playersLeft.length) {
           toast(`${cur.name} checked out! ${playersLeft.length} player${playersLeft.length > 1 ? 's' : ''} left to tie.`);
           Sound.play('win', {}, settings);
           const next = advanceTurn({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, darts: [], mult: 1 });
@@ -213,8 +219,17 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
       const legsToWin = Math.ceil(g.legsBestOf / 2);
       const anyReached = g.players.some(pl => g.checkedOutThisRound.includes(pl.id) && pl.legsWon >= (g.legsBestOf === 1 ? 1 : legsToWin));
       if (anyReached) {
+        const MAX_CHECKOUT = 170;
         const playersLeftToThrow = g.players.filter(pl => !g.checkedOutThisRound.includes(pl.id) && pl.score > 0);
         if (playersLeftToThrow.length === 0) {
+          if (checkedOutCount > 1) { finishGame({ ...g, turn }, null, g.checkedOutThisRound); return { ...g, turn, finished: true }; }
+          const winner = g.players.find(pl => g.checkedOutThisRound.includes(pl.id));
+          if (winner) { finishGame({ ...g, turn }, winner, null); return { ...g, turn, finished: true }; }
+        }
+        // If no remaining player can possibly check out in one visit, end the
+        // game now instead of dragging out a decided match.
+        const canTie = playersLeftToThrow.filter(pl => pl.score <= MAX_CHECKOUT);
+        if (canTie.length === 0) {
           if (checkedOutCount > 1) { finishGame({ ...g, turn }, null, g.checkedOutThisRound); return { ...g, turn, finished: true }; }
           const winner = g.players.find(pl => g.checkedOutThisRound.includes(pl.id));
           if (winner) { finishGame({ ...g, turn }, winner, null); return { ...g, turn, finished: true }; }
@@ -225,6 +240,7 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
   };
 
   const finishGame = (g: Game, winner: GamePlayer | null, tiedIds: string[] | null) => {
+    if (g.finished) return; // guard against double-finish
     const isTie = !winner && tiedIds && tiedIds.length > 1;
     const finished: Game = { ...g, finished: true, winner: winner ? winner.id : null, tied: !!isTie, tiedPlayers: isTie ? tiedIds : null };
     Sound.play('win', {}, settings);
@@ -426,6 +442,7 @@ function GameOver({ game, onNewGame, onViewStats }: { game: Game; onNewGame: () 
   const titleText = game.practice ? 'Practice complete' : isTie ? "It's a tie!" : (w ? `${w.name} wins!` : 'Game over');
   const badgeMap = useMemo(() => computeGameBadges(game), [game]);
   const anyBadges = Object.values(badgeMap).some((arr) => arr.length > 0);
+  const [badgeInfo, setBadgeInfo] = useState<{ icon: string; name: string; desc: string; player: string } | null>(null);
   return (
     <div className="view-scroll">
       <div className="card center">
@@ -455,10 +472,11 @@ function GameOver({ game, onNewGame, onViewStats }: { game: Game; onNewGame: () 
                       const b = getBadgeInfo(id);
                       if (!b) return null;
                       return (
-                        <div key={id} title={b.desc} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 999, background: 'color-mix(in srgb,var(--accent) 18%,var(--bg-2))', border: '1px solid color-mix(in srgb,var(--accent) 40%,var(--bg-2))' }}>
+                        <button key={id} onClick={() => setBadgeInfo({ icon: b.icon, name: b.name, desc: b.desc, player: pl.name })}
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 999, background: 'color-mix(in srgb,var(--accent) 18%,var(--bg-2))', border: '1px solid color-mix(in srgb,var(--accent) 40%,var(--bg-2))', cursor: 'pointer' }}>
                           <span style={{ fontSize: 18 }}>{b.icon}</span>
                           <span style={{ fontWeight: 600, fontSize: 13 }}>{b.name}</span>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
@@ -470,23 +488,17 @@ function GameOver({ game, onNewGame, onViewStats }: { game: Game; onNewGame: () 
         <button className="btn primary block" onClick={onNewGame}>New Game</button>
         <button className="btn ghost block" style={{ marginTop: 8 }} onClick={onViewStats}>View Stats</button>
       </div>
+      {badgeInfo && <BadgeInfoPopup icon={badgeInfo.icon} name={badgeInfo.name} desc={badgeInfo.desc} player={badgeInfo.player} onDone={() => setBadgeInfo(null)} />}
     </div>
   );
 }
 
 function runMilestones(p: GamePlayer, remaining: number, visitScore: number, settings: Settings, popups: PopupControls, setPlayers: (updater: any) => void, game: Game, players: Player[], games: GameRecord[]) {
-  let scorePopupFired = false;
   if (settings.popups.scores) {
-    for (const sp of SCORE_POPUPS) { if (visitScore >= sp.min) { popups.setMilestone({ emoji: sp.emoji, title: sp.title, sub: sp.sub }); Sound.play('milestone', {}, settings); scorePopupFired = true; break; } }
+    for (const sp of SCORE_POPUPS) { if (visitScore >= sp.min) { popups.setMilestone({ emoji: sp.emoji, title: sp.title, sub: sp.sub }); Sound.play('milestone', {}, settings); break; } }
   }
   if (settings.popups.milestones) {
-    for (const ms of MILESTONES) { if (remaining < ms.threshold && p.score + visitScore >= ms.threshold) {
-      // If a score popup is already showing, delay the milestone popup so it
-      // appears after. Otherwise show immediately so it doesn't get lost.
-      const delay = scorePopupFired ? 1800 : 0;
-      setTimeout(() => popups.setMilestone({ emoji: ms.emoji, title: ms.title, sub: ms.sub }), delay);
-      break;
-    } }
+    for (const ms of MILESTONES) { if (remaining < ms.threshold && p.score + visitScore >= ms.threshold) { setTimeout(() => popups.setMilestone({ emoji: ms.emoji, title: ms.title, sub: ms.sub }), 1800); break; } }
   }
   const pid = p.id;
   const prevVisits = allVisitsFor(pid, []).filter(v => !v.bust && !v.atc);
@@ -509,49 +521,43 @@ function awardVisitXP(p: GamePlayer, visitScore: number, settings: Settings, set
 
 function awardXP(playerId: string, amount: number, reason: string, settings: Settings, setPlayers: (updater: any) => void, popups: PopupControls) {
   if (amount <= 0) return;
-  let leveledUp: { level: number; name: string } | null = null;
   setPlayers((prev: Player[]) => prev.map(p => {
     if (p.id !== playerId) return p;
     const oldLevel = p.level || 1;
     const newXp = (p.xp || 0) + amount;
     const li = levelFromXP(newXp, settings);
-    if (li.level > oldLevel) leveledUp = { level: li.level, name: p.name };
+    if (li.level > oldLevel && settings.popups.xp) { popups.setLevelUp({ level: li.level, name: p.name, xpGained: amount, reason }); Sound.play('levelup', {}, settings); }
     return { ...p, xp: newXp, level: li.level };
   }));
-  if (leveledUp && settings.popups.xp) { popups.setLevelUp({ level: leveledUp.level, name: leveledUp.name, xpGained: amount, reason }); Sound.play('levelup', {}, settings); }
 }
 
 function checkTitleUnlocks(pl: GamePlayer, settings: Settings, popups: PopupControls, setPlayers: (updater: any) => void, game: Game, _players: Player[], games: GameRecord[] = []) {
   if (!settings.popups.titles) return;
   const titles = [...BUILTIN_TITLES, ...settings.customTitles.map(t => ({ ...t, custom: true, check: buildTitleCheck(t) as any }))];
-
-  // Historical stats from prior completed games (excluding the current in-progress game).
-  const historyGames = games.filter(g => g.id !== game.id && g.players.some(p => p.id === pl.id));
-  const historyVisits = allVisitsFor(pl.id, historyGames);
-  const lifetimeVisits = [...historyVisits, ...(pl.visits || [])];
-  const gamesPlayed = historyGames.length + (game.finished ? 1 : 0);
-  const gamesWon = historyGames.filter(g => g.winner === pl.id).length + (game.finished && game.winner === pl.id ? 1 : 0);
-  const ctx = { playerId: pl.id, games: historyGames, gamesPlayed, gamesWon, lifetimeVisits };
-
-  const newlyUnlocked: { id: string; icon?: string; name: string; desc?: string }[] = [];
   setPlayers((prev: Player[]) => {
     const player = prev.find(p => p.id === pl.id);
     if (!player) return prev;
     const unlocked = [...(player.unlockedTitles || [])];
+
+    // Historical stats from prior completed games (excluding the current in-progress game).
+    const historyGames = games.filter(g => g.id !== game.id && g.players.some(p => p.id === pl.id));
+    const historyVisits = allVisitsFor(pl.id, historyGames);
+    const lifetimeVisits = [...historyVisits, ...(pl.visits || [])];
+    const gamesPlayed = historyGames.length + (game.finished ? 1 : 0);
+    const gamesWon = historyGames.filter(g => g.winner === pl.id).length + (game.finished && game.winner === pl.id ? 1 : 0);
+    const ctx = { playerId: pl.id, games: historyGames, gamesPlayed, gamesWon, lifetimeVisits };
+
     titles.forEach(t => {
       if (unlocked.includes(t.id)) return;
       let met = false;
       try { met = t.check(lifetimeVisits, pl.visits || [], game, ctx); } catch { met = false; }
       if (met) {
         unlocked.push(t.id);
-        newlyUnlocked.push({ id: t.id, icon: t.icon, name: t.name, desc: t.desc });
+        popups.setTitleUnlock({ icon: t.icon || '🏅', name: t.name, player: pl.name, desc: t.desc || '' });
+        Sound.play('title', {}, settings);
       }
     });
     return prev.map(p => p.id === pl.id ? { ...p, unlockedTitles: unlocked } : p);
-  });
-  newlyUnlocked.forEach(t => {
-    popups.setTitleUnlock({ icon: t.icon || '🏅', name: t.name, player: pl.name, desc: t.desc || '' });
-    Sound.play('title', {}, settings);
   });
 }
 
@@ -569,6 +575,7 @@ function awardBadges(game: Game, setPlayers: (updater: any) => void) {
 }
 
 function finishSimpleGame(g: Game, winner: GamePlayer | null, settings: Settings, setGame: (g: Game | null) => void, setGames: (updater: any) => void, setPlayers: (updater: any) => void, popups: PopupControls, music: MusicEngine, players: Player[], games: GameRecord[]) {
+  if (g.finished) return; // guard against double-finish
   const finished: Game = { ...g, finished: true, winner: winner ? winner.id : null, tied: false, tiedPlayers: null };
   Sound.play('win', {}, settings);
   music.startContext('setup', settings);

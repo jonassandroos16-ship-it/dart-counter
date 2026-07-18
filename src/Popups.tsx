@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export function Toast({ msg }: { msg: string | null }) {
   return <div className={`toast${msg ? ' show' : ''}`}>{msg || ''}</div>;
@@ -12,22 +12,8 @@ export function Modal({ children, onClose }: { children: React.ReactNode; onClos
   );
 }
 
-// useAutoDismiss: starts a single timer on mount (and whenever the popup
-// payload changes). Using a ref for the callback avoids resetting the timer
-// on every parent re-render, which previously caused popups to either
-// never dismiss or get stuck in a reset loop.
-function useAutoDismiss(onDone: () => void, ms: number, key?: unknown) {
-  const cbRef = useRef(onDone);
-  cbRef.current = onDone;
-  useEffect(() => {
-    const t = setTimeout(() => cbRef.current(), ms);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ms, key]);
-}
-
 export function MilestonePopup({ emoji, title, sub, record, onDone }: { emoji: string; title: string; sub: string; record?: boolean; onDone: () => void }) {
-  useAutoDismiss(onDone, 2500, title + sub + emoji);
+  useEffect(() => { const t = setTimeout(onDone, 2500); return () => clearTimeout(t); }, [onDone]);
   return (
     <div className="milestone-bg" onClick={onDone}>
       <div className="milestone">
@@ -41,7 +27,7 @@ export function MilestonePopup({ emoji, title, sub, record, onDone }: { emoji: s
 }
 
 export function LevelUpPopup({ level, name, xpGained, reason, onDone }: { level: number; name: string; xpGained: number; reason: string; onDone: () => void }) {
-  useAutoDismiss(onDone, 3000, level + name + xpGained + reason);
+  useEffect(() => { const t = setTimeout(onDone, 3000); return () => clearTimeout(t); }, [onDone]);
   return (
     <div className="levelup-bg" onClick={onDone}>
       <div className="levelup">
@@ -55,7 +41,7 @@ export function LevelUpPopup({ level, name, xpGained, reason, onDone }: { level:
 }
 
 export function TitleUnlockPopup({ icon, name, player, desc, onDone }: { icon: string; name: string; player: string; desc: string; onDone: () => void }) {
-  useAutoDismiss(onDone, 3500, name + player + desc);
+  useEffect(() => { const t = setTimeout(onDone, 3500); return () => clearTimeout(t); }, [onDone]);
   return (
     <div className="levelup-bg" onClick={onDone}>
       <div className="levelup">
@@ -71,13 +57,29 @@ export function TitleUnlockPopup({ icon, name, player, desc, onDone }: { icon: s
 }
 
 export function KillPopup({ killer, victim, onDone }: { killer: string; victim: string; onDone: () => void }) {
-  useAutoDismiss(onDone, 2200, killer + victim);
+  useEffect(() => { const t = setTimeout(onDone, 2200); return () => clearTimeout(t); }, [onDone]);
   return (
     <div className="kill-bg" onClick={onDone}>
       <div className="kill">
         <div className="kill-emoji">💀</div>
         <div className="kill-title">ELIMINATED!</div>
         <div className="kill-sub"><b>{killer}</b> knocked out <b>{victim}</b></div>
+      </div>
+    </div>
+  );
+}
+
+export function BadgeInfoPopup({ icon, name, desc, player, onDone }: { icon: string; name: string; desc: string; player?: string; onDone: () => void }) {
+  return (
+    <div className="levelup-bg" onClick={onDone}>
+      <div className="levelup" onClick={(e) => e.stopPropagation()}>
+        <div className="lu-ring" style={{ borderColor: 'var(--accent)', background: 'color-mix(in srgb,var(--accent) 15%,var(--bg-2))' }}>
+          <div style={{ fontSize: 44 }}>{icon}</div>
+        </div>
+        <div className="lu-title">{name}</div>
+        {player ? <div className="lu-sub">{player} earned this badge</div> : null}
+        <div className="lu-sub" style={{ marginTop: 6, fontSize: 13, maxWidth: 280, textAlign: 'center' }}>{desc}</div>
+        <button className="btn primary block" style={{ marginTop: 16 }} onClick={onDone}>Close</button>
       </div>
     </div>
   );
