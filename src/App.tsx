@@ -66,7 +66,9 @@ export default function App() {
       </header>
 
       {view === 'play' && (
-        <PlayView players={db.players} games={db.games} settings={db.settings} setGames={db.setGames} setPlayers={db.setPlayers} toast={show} music={musicRef.current}
+        <PlayView players={db.players} games={db.games} settings={db.settings}
+          activeGame={db.activeGame} setActiveGame={db.setActiveGame}
+          setGames={db.setGames} setPlayers={db.setPlayers} toast={show} music={musicRef.current}
           onQuit={() => { musicRef.current.startContext('setup', db.settings); }}
           onGameOver={() => {}}
           popups={popups} />

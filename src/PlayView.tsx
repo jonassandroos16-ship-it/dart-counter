@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Game, GamePlayer, GameRecord, Player, Settings } from './types';
 import { MODES, ATC_TARGETS, atcLabel, BUILTIN_TITLES, buildTitleCheck, getTitleInfo, SCORE_POPUPS, MILESTONES } from './constants';
 import { createGame, recordFromGame, checkoutHint, leadTrailBadge, visitAvg, levelFromXP, getPlayerXPById, allVisitsFor } from './logic';
@@ -11,6 +11,8 @@ interface Props {
   players: Player[];
   games: GameRecord[];
   settings: Settings;
+  activeGame: Game | null;
+  setActiveGame: (updater: any) => void;
   setGames: (updater: any) => void;
   setPlayers: (updater: any) => void;
   toast: (m: string) => void;
@@ -20,8 +22,15 @@ interface Props {
   popups: PopupControls;
 }
 
-export function PlayView({ players, games, settings, setGames, setPlayers, toast, music, onQuit, onGameOver, popups }: Props) {
-  const [game, setGame] = useState<Game | null>(null);
+export function PlayView({ players, games, settings, activeGame, setActiveGame, setGames, setPlayers, toast, music, onQuit, onGameOver, popups }: Props) {
+  const game = activeGame;
+  const setGame = setActiveGame;
+
+  // Auto-resume: if there's a saved in-progress match, switch music to match context.
+  useEffect(() => {
+    if (game && !game.finished) music.startContext('match', settings);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (game) {
     return <GameBoard game={game} setGame={setGame} settings={settings} players={players} games={games} setGames={setGames} setPlayers={setPlayers} toast={toast} music={music}
