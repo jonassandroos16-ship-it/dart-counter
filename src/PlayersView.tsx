@@ -4,7 +4,7 @@ import { COLORS, allTitles, getTitleInfo, conditionLabel, titleProgressInfo, typ
 import { levelFromXP, getPlayerXP, playerStats, allVisitsFor } from './logic';
 import { initials, uid } from './store';
 import { Modal } from './Popups';
-import { BADGES, getBadgeInfo, computeLifetimeBadgeCounts } from './badges';
+import { BADGES, getBadgeInfo, getBadgeContext, computeLifetimeBadgeCounts } from './badges';
 
 export function PlayersView({ players, games, settings, setPlayers, toast }: {
   players: Player[]; games: any[]; settings: Settings;
@@ -30,10 +30,24 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
         const bi = getBadgeInfo(xp.selectedBadge);
         const avatarContent = bi ? bi.icon : initials(p.name);
         const totalBadgeEarns = Object.values(xp.badgeCounts || {}).reduce((a: number, b: number) => a + b, 0);
+        const ctx = xp.showBadgeContext ? getBadgeContext(xp.selectedBadge, p.id, games as any) : null;
         return (
           <div key={p.id} className="card" style={{ padding: 12 }}>
             <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
-              <div className="avatar" style={{ background: p.color, fontSize: bi ? 18 : undefined }}>{avatarContent}</div>
+              <div style={{ position: 'relative', width: 34, height: 34, flex: '0 0 auto' }}>
+                <div className="avatar" style={{ background: p.color, fontSize: bi ? 18 : undefined, width: 34, height: 34 }}>{avatarContent}</div>
+                {ctx ? (
+                  <span
+                    title={`${ctx.label}: ${ctx.value}`}
+                    style={{
+                      position: 'absolute', bottom: -3, right: -3, minWidth: 18, height: 18, padding: '0 4px',
+                      borderRadius: 9, background: 'var(--accent)', color: '#04150a',
+                      fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      border: '2px solid var(--bg-2)', lineHeight: 1, boxSizing: 'border-box',
+                    }}
+                  >{ctx.value}</span>
+                ) : null}
+              </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="row wrap" style={{ gap: 6, alignItems: 'baseline' }}>
                   <span style={{ fontWeight: 700 }}>{p.name}</span>
@@ -70,6 +84,7 @@ function BadgesModal({ player, games, setPlayers, onClose, toast }: { player: Pl
   const unlocked = xp.unlockedBadges || [];
   const [equipped, setEquipped] = useState<string | null>(xp.selectedBadge);
   const [selectedId, setSelectedId] = useState<string | null>(xp.selectedBadge);
+  const [showContext, setShowContext] = useState<boolean>(xp.showBadgeContext ?? false);
   const selected = BADGES.find(b => b.id === selectedId) || null;
   const badgeCounts = useMemo(() => {
     const stored = xp.badgeCounts || {};
@@ -79,12 +94,18 @@ function BadgesModal({ player, games, setPlayers, onClose, toast }: { player: Pl
     return merged;
   }, [xp.badgeCounts, player.id, games]);
   const totalEarns = Object.values(badgeCounts).reduce((a: number, b: number) => a + b, 0);
+  const previewCtx = selected && selected.context ? getBadgeContext(selected.id, player.id, games as any) : null;
 
   const equip = (id: string | null) => {
     setEquipped(id);
     setSelectedId(id);
-    setPlayers((prev: Player[]) => prev.map(p => p.id === player.id ? { ...p, selectedBadge: id } : p));
+    setPlayers((prev: Player[]) => prev.map(p => p.id === player.id ? { ...p, selectedBadge: id, showBadgeContext: showContext } : p));
     toast(id ? 'Badge equipped' : 'Badge removed');
+  };
+
+  const toggleContext = (on: boolean) => {
+    setShowContext(on);
+    setPlayers((prev: Player[]) => prev.map(p => p.id === player.id ? { ...p, showBadgeContext: on } : p));
   };
 
   return (
@@ -147,6 +168,15 @@ function BadgesModal({ player, games, setPlayers, onClose, toast }: { player: Pl
               </div>
             </div>
           </div>
+          {selected.context ? (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, padding: '8px 10px', borderRadius: 8, background: 'var(--bg-2)', border: '1px solid var(--border)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={showContext} onChange={e => toggleContext(e.target.checked)} style={{ cursor: 'pointer' }} />
+              <span style={{ fontSize: 13, fontWeight: 600 }}>
+                Show {selected.contextLabel || 'context'} on icon
+                {previewCtx ? <span className="muted" style={{ fontWeight: 500 }}> — current: {previewCtx.value}</span> : null}
+              </span>
+            </label>
+          ) : null}
           <button
             className="btn block primary"
             style={{ marginTop: 10 }}

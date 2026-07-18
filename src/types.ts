@@ -9,6 +9,7 @@ export interface Player {
   unlockedBadges?: string[];
   badgeCounts?: Record<string, number>;
   selectedBadge?: string | null;
+  showBadgeContext?: boolean;
 }
 
 export interface Dart {

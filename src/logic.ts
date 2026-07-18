@@ -101,11 +101,12 @@ export function levelFromXP(totalXP: number, settings: Settings) {
 }
 
 export function getPlayerXP(player: Player | undefined) {
-  if (!player) return { xp: 0, level: 1, unlockedTitles: [] as string[], selectedTitle: null as string | null, unlockedBadges: [] as string[], badgeCounts: {} as Record<string, number>, selectedBadge: null as string | null };
+  if (!player) return { xp: 0, level: 1, unlockedTitles: [] as string[], selectedTitle: null as string | null, unlockedBadges: [] as string[], badgeCounts: {} as Record<string, number>, selectedBadge: null as string | null, showBadgeContext: false };
   return {
     xp: player.xp ?? 0, level: player.level ?? 1,
     unlockedTitles: player.unlockedTitles ?? [], selectedTitle: player.selectedTitle ?? null,
     unlockedBadges: player.unlockedBadges ?? [], badgeCounts: player.badgeCounts ?? {}, selectedBadge: player.selectedBadge ?? null,
+    showBadgeContext: player.showBadgeContext ?? false,
   };
 }
 
