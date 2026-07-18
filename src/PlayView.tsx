@@ -45,7 +45,7 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
 
 function SetupView({ players, onStart }: { players: Player[]; onStart: (mode: string, ids: string[], dbl: boolean, legs: number) => void }) {
   const [mode, setMode] = useState('301');
-  const [doubleOut, setDoubleOut] = useState(true);
+  const [doubleOut, setDoubleOut] = useState(false);
   const [legs, setLegs] = useState(1);
   const [picked, setPicked] = useState<string[]>(players.length ? [players[0].id] : []);
 
