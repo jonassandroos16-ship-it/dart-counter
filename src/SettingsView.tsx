@@ -1,14 +1,15 @@
-import { useState } from 'react';
-import type { Player, Settings, CustomTitle } from './types';
+import { useRef, useState } from 'react';
+import type { Player, GameRecord, Settings, CustomTitle } from './types';
 import { COLORS, conditionLabel } from './constants';
 import { tracksFor } from './music';
-import { uid, todayKey } from './store';
+import { uid, todayKey, mergeBackup, type BackupShape } from './store';
 import { Modal } from './Popups';
 
-export function SettingsView({ players, games, settings, setSettings, toast }: { players: Player[]; games: any[]; settings: Settings; setSettings: (updater: any) => void; toast: (m: string) => void }) {
+export function SettingsView({ players, games, settings, setSettings, setPlayers, setGames, toast }: { players: Player[]; games: GameRecord[]; settings: Settings; setSettings: (updater: any) => void; setPlayers: (updater: any) => void; setGames: (updater: any) => void; toast: (m: string) => void }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const cfg = settings.xpConfig;
   const [xpForm, setXpForm] = useState(cfg);
+  const mergeInputRef = useRef<HTMLInputElement>(null);
 
   const update = (patch: Partial<Settings>) => setSettings((prev: Settings) => ({ ...prev, ...patch }));
 
@@ -88,6 +89,28 @@ export function SettingsView({ players, games, settings, setSettings, toast }: {
           const blob = new Blob([JSON.stringify({ players, games, settings, exportedAt: new Date().toISOString() }, null, 2)], { type: 'application/json' });
           const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `dartcounter-backup-${todayKey()}.json`; a.click(); URL.revokeObjectURL(a.href); toast('Backup exported');
         }}>Export backup (.json)</button>
+        <button className="btn block" style={{ marginBottom: 8 }} onClick={() => mergeInputRef.current?.click()}>Merge from backup file…</button>
+        <input ref={mergeInputRef} type="file" accept="application/json,.json" className="hidden" onChange={async (e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (!file) return;
+          try {
+            const text = await file.text();
+            const parsed = JSON.parse(text) as BackupShape;
+            if (!parsed || (!parsed.players && !parsed.games && !parsed.settings)) { toast('Not a valid backup file'); return; }
+            const merged = mergeBackup({ players, games, settings }, parsed);
+            const newPlayers = merged.players.length - players.length;
+            const newGames = merged.games.length - games.length;
+            setPlayers(merged.players);
+            setGames(merged.games);
+            setSettings(merged.settings);
+            toast(`Merged: +${newPlayers} players, +${newGames} games`);
+          } catch (err) {
+            console.error(err);
+            toast('Could not read backup file');
+          }
+        }} />
+        <div className="muted small" style={{ marginTop: 6 }}>Merge combines players, games, and custom titles from another backup file with your current data — handy for syncing multiple devices.</div>
         <button className="btn block danger" onClick={() => {
           if (confirm('Erase ALL players, games and settings? This cannot be undone.')) {
             localStorage.removeItem('dc_players'); localStorage.removeItem('dc_games'); localStorage.removeItem('dc_settings');

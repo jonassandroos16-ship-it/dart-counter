@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import type { Game, GameRecord, Player, Settings } from './types';
+import type { Game, GameRecord, Player, Settings, CustomTitle } from './types';
 import { defaultSettings } from './constants';
 
 const KEYS = { players: 'dc_players', games: 'dc_games', settings: 'dc_settings', activeGame: 'dc_active_game' };
@@ -70,6 +70,90 @@ export function useDB(): DBAPI {
   }, []);
 
   return { players, games, settings, activeGame, setPlayers, setGames, setSettings, setActiveGame };
+}
+
+export interface BackupShape {
+  players?: Player[];
+  games?: GameRecord[];
+  settings?: Settings;
+  exportedAt?: string;
+}
+
+function matchPlayerKey(p: Player): string {
+  return `${(p.name || '').trim().toLowerCase()}|${(p.color || '').toLowerCase()}`;
+}
+
+function mergePlayers(existing: Player[], incoming: Player[]): Player[] {
+  const byId = new Map<string, Player>();
+  const byKey = new Map<string, Player>();
+  for (const p of existing) {
+    byId.set(p.id, p);
+    byKey.set(matchPlayerKey(p), p);
+  }
+  for (const p of incoming) {
+    const idMatch = byId.get(p.id);
+    if (idMatch) {
+      // Keep higher XP/level; union unlocked titles.
+      byId.set(idMatch.id, {
+        ...idMatch,
+        ...p,
+        xp: Math.max(idMatch.xp || 0, p.xp || 0) || idMatch.xp || p.xp || 0,
+        level: Math.max(idMatch.level || 0, p.level || 0) || idMatch.level || p.level || 0,
+        unlockedTitles: Array.from(new Set([...(idMatch.unlockedTitles || []), ...(p.unlockedTitles || [])])),
+      });
+      byKey.set(matchPlayerKey(p), byId.get(p.id)!);
+      continue;
+    }
+    const keyMatch = byKey.get(matchPlayerKey(p));
+    if (keyMatch) {
+      // Same name+color on another device → fold incoming into existing id.
+      byId.set(keyMatch.id, {
+        ...keyMatch,
+        ...p,
+        id: keyMatch.id,
+        xp: Math.max(keyMatch.xp || 0, p.xp || 0) || keyMatch.xp || p.xp || 0,
+        level: Math.max(keyMatch.level || 0, p.level || 0) || keyMatch.level || p.level || 0,
+        unlockedTitles: Array.from(new Set([...(keyMatch.unlockedTitles || []), ...(p.unlockedTitles || [])])),
+      });
+      continue;
+    }
+    // Brand new player — keep a stable id (re-mint if it collides with an existing id).
+    let id = p.id;
+    while (byId.has(id)) id = id + '_' + uid();
+    const placed = { ...p, id };
+    byId.set(id, placed);
+    byKey.set(matchPlayerKey(placed), placed);
+  }
+  return Array.from(byId.values());
+}
+
+function mergeGames(existing: GameRecord[], incoming: GameRecord[]): GameRecord[] {
+  const byId = new Map<string, GameRecord>(existing.map(g => [g.id, g]));
+  for (const g of incoming) {
+    if (!byId.has(g.id)) byId.set(g.id, g);
+  }
+  return Array.from(byId.values());
+}
+
+function mergeSettings(existing: Settings, incoming?: Settings): Settings {
+  if (!incoming) return existing;
+  const customTitles = (() => {
+    const byId = new Map<string, CustomTitle>();
+    for (const t of [...existing.customTitles, ...(incoming.customTitles || [])]) byId.set(t.id, t);
+    return Array.from(byId.values());
+  })();
+  return { ...existing, ...incoming, customTitles };
+}
+
+export function mergeBackup(
+  existing: { players: Player[]; games: GameRecord[]; settings: Settings },
+  backup: BackupShape,
+): { players: Player[]; games: GameRecord[]; settings: Settings } {
+  return {
+    players: mergePlayers(existing.players, backup.players || []),
+    games: mergeGames(existing.games, backup.games || []),
+    settings: mergeSettings(existing.settings, backup.settings),
+  };
 }
 
 export function useToast() {
