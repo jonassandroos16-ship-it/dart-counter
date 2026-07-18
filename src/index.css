@@ -92,18 +92,18 @@ label.field span { display: block; font-size: 12px; color: var(--muted); margin-
 .hidden { display: none !important; }
 
 .play-current {
-  background: var(--bg-2); border: 1px solid var(--border); border-radius: 16px;
-  padding: 10px 14px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;
+  padding: 6px 12px; display: flex; flex-direction: column; align-items: center; gap: 1px;
   flex-shrink: 0;
 }
 .pc-header { width: 100%; display: flex; justify-content: space-between; align-items: center; }
-.pc-name { font-weight: 800; font-size: 17px; }
+.pc-name { font-weight: 800; font-size: 15px; }
 .pc-score-row { display: flex; align-items: baseline; justify-content: center; gap: 8px; }
-.pc-remaining { font-size: 64px; font-weight: 900; line-height: 1; letter-spacing: -.03em; }
-.pc-slots { display:flex; gap:6px; justify-content:center; margin: 4px 0 2px; width: 100%; }
-.pc-slot { flex:1; max-width: 90px; background: var(--bg-3); border:1px dashed var(--border); border-radius:10px; padding: 6px 4px; text-align:center; font-weight:800; font-size:16px; min-height: 38px; display:flex; align-items:center; justify-content:center; }
+.pc-remaining { font-size: 44px; font-weight: 900; line-height: 1; letter-spacing: -.03em; }
+.pc-slots { display:flex; gap:5px; justify-content:center; margin: 2px 0 1px; width: 100%; }
+.pc-slot { flex:1; max-width: 80px; background: var(--bg-3); border:1px dashed var(--border); border-radius:8px; padding: 4px 4px; text-align:center; font-weight:800; font-size:14px; min-height: 30px; display:flex; align-items:center; justify-content:center; }
 .pc-slot.filled { border-style: solid; border-color: var(--accent); }
-.checkout-hint { color: var(--accent); font-weight:700; font-size: 13px; min-height: 18px; }
+.checkout-hint { color: var(--accent); font-weight:700; font-size: 12px; min-height: 16px; }
 .checkout-hint.center { text-align: center; }
 
 .play-others {
@@ -112,11 +112,11 @@ label.field span { display: block; font-size: 12px; color: var(--muted); margin-
 }
 .play-other {
   flex: 1 1 0; min-width: 0; background: var(--bg-2); border: 1px solid var(--border);
-  border-radius: 12px; padding: 8px;
+  border-radius: 10px; padding: 6px;
 }
-.po-name { font-weight: 700; font-size: 13px; }
-.po-score { font-size: 22px; font-weight: 900; margin-top: 2px; }
-.po-sub { font-size: 10px; color: var(--muted); margin-top: 1px; }
+.po-name { font-weight: 700; font-size: 12px; }
+.po-score { font-size: 18px; font-weight: 900; margin-top: 1px; }
+.po-sub { font-size: 9px; color: var(--muted); margin-top: 1px; }
 
 .play-input { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; min-height: 0; }
 .pad-card { background: var(--bg-2); border: 1px solid var(--border); border-radius: 16px; padding: 10px; }

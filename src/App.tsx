@@ -61,9 +61,11 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <div className="brand"><span className="dot"></span> Dart Counter</div>
-      </header>
+      {!(view === 'play' && db.activeGame) && (
+        <header className="topbar">
+          <div className="brand"><span className="dot"></span> Dart Counter</div>
+        </header>
+      )}
 
       {view === 'play' && (
         <PlayView players={db.players} games={db.games} settings={db.settings}
