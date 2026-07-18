@@ -41,7 +41,7 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
                   {ti ? <span className="title-badge">{ti.icon || ''} {ti.name}</span> : null}
                   {bi ? <span className="title-badge" title={bi.desc}>{bi.icon} {bi.name}</span> : null}
                 </div>
-                <div className="muted small">{s.games} games · {s.avg.toFixed(1)} avg · {s.n180} × 180 · {xp.xp} XP · {(xp.unlockedBadges || []).length} badges · {totalBadgeEarns} earned</div>
+                <div className="muted small">{s.games} games ({s.competitiveGames} competitive) · {s.avg.toFixed(1)} avg · {s.n180} × 180 · {xp.xp} XP · {(xp.unlockedBadges || []).length} badges · {totalBadgeEarns} earned</div>
                 <div className="xp-bar" style={{ width: '100%', maxWidth: 240 }}><div style={{ width: `${Math.round(li.xpIntoLevel / li.xpNeeded * 100)}%` }} /></div>
               </div>
             </div>
@@ -205,7 +205,7 @@ function TitlesModal({ player, games, settings, setPlayers, onClose, toast }: { 
   const titles = allTitles(settings.customTitles);
 
   const playerGames = (games as any[]).filter(g => g.players.some((p: any) => p.id === player.id));
-  const gamesWon = playerGames.filter(g => g.winner === player.id).length;
+  const gamesWon = playerGames.filter(g => g.players.length >= 2 && g.winner === player.id).length;
   const ctx: TitleCtx = {
     playerId: player.id,
     games: playerGames,

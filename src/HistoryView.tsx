@@ -25,7 +25,7 @@ export function HistoryView({ players, games, settings, setGames, toast }: { pla
               <div key={pid} className="row between" style={{ marginBottom: 6 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontWeight: 600 }}>{pName}</span>
-                  <span className="muted small">{stats.gamesWon}/{stats.games} games · L{levelFromXP(getPlayerXP(players.find(p => p.id === pid)).xp, settings).level}</span>
+                  <span className="muted small">{stats.gamesWon}/{stats.competitiveGames} games · {stats.games} total · L{levelFromXP(getPlayerXP(players.find(p => p.id === pid)).xp, settings).level}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ width: 100, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
@@ -42,8 +42,10 @@ export function HistoryView({ players, games, settings, setGames, toast }: { pla
         const w = g.players.find(p => p.id === g.winner);
         const tiedPlayers = g.tied ? (g.tiedPlayers || []).map(id => g.players.find(p => p.id === id)).filter(Boolean) : [];
         const scoreline = g.players.map(p => p.legsWon).join('–');
-        const gameLabel = g.atc ? (w ? 'Winner: ' + w.name : 'Around the Clock')
+        const isSolo = g.players.length < 2;
+        const gameLabel = g.atc ? (isSolo ? 'Solo Around the Clock' : w ? 'Winner: ' + w.name : 'Around the Clock')
           : g.practice ? 'Practice session'
+          : isSolo ? 'Solo session'
           : g.tied ? 'Tied: ' + tiedPlayers.filter(Boolean).map(p => p!.name).join(' & ')
           : (w ? 'Winner: ' + w.name + '  ·  legs ' + scoreline : 'Legs ' + scoreline);
         return (
