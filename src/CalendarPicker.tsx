@@ -1,15 +1,8 @@
 import { useState } from 'react';
+import { fmtDateLong } from './store';
 
-export type Period = 'Overall' | 'Daily' | 'Weekly' | 'Monthly' | 'Yearly';
-
-export interface DateFilter {
-  start: string; // inclusive ISO
-  end: string;   // exclusive ISO
-}
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 function startOfDay(d: Date): Date {
   const x = new Date(d); x.setHours(0, 0, 0, 0); return x;
@@ -21,135 +14,134 @@ function startOfMonth(d: Date): Date { return new Date(d.getFullYear(), d.getMon
 function startOfYear(d: Date): Date { return new Date(d.getFullYear(), 0, 1); }
 function iso(d: Date): string { return d.toISOString(); }
 
-export function filterForPeriod(period: Period, ref: Date): DateFilter | null {
-  if (period === 'Overall') return null;
-  if (period === 'Daily') {
-    const s = startOfDay(ref);
-    const e = new Date(s); e.setDate(e.getDate() + 1);
-    return { start: iso(s), end: iso(e) };
-  }
-  if (period === 'Weekly') {
-    const s = startOfWeek(ref);
-    const e = new Date(s); e.setDate(e.getDate() + 7);
-    return { start: iso(s), end: iso(e) };
-  }
-  if (period === 'Monthly') {
-    const s = startOfMonth(ref);
-    const e = new Date(s); e.setMonth(e.getMonth() + 1);
-    return { start: iso(s), end: iso(e) };
-  }
-  // Yearly
+export interface DateFilter { start: string; end: string; period: 'Daily' | 'Weekly' | 'Monthly' | 'Yearly'; }
+
+export function filterThisWeek(ref: Date): DateFilter {
+  const s = startOfWeek(ref);
+  return { start: iso(s), end: iso(new Date(s.getTime() + 7 * 86400000)), period: 'Daily' };
+}
+export function filterThisMonth(ref: Date): DateFilter {
+  const s = startOfMonth(ref);
+  return { start: iso(s), end: iso(new Date(s.getFullYear(), s.getMonth() + 1, 1)), period: 'Weekly' };
+}
+export function filterThisYear(ref: Date): DateFilter {
   const s = startOfYear(ref);
-  const e = new Date(s); e.setFullYear(e.getFullYear() + 1);
-  return { start: iso(s), end: iso(e) };
+  return { start: iso(s), end: iso(new Date(s.getFullYear() + 1, 0, 1)), period: 'Monthly' };
+}
+export function filterAllTime(): DateFilter {
+  return { start: iso(new Date(2000, 0, 1)), end: iso(new Date(2100, 0, 1)), period: 'Monthly' };
 }
 
-export function describeFilter(period: Period, ref: Date): string {
-  if (period === 'Daily') return ref.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+export function describeFilter(ref: Date, period: string): string {
+  if (period === 'Daily') return fmtDateLong(ref);
   if (period === 'Weekly') {
     const s = startOfWeek(ref); const e = new Date(s); e.setDate(e.getDate() + 6);
     return `${s.getDate()} ${MONTHS[s.getMonth()]} – ${e.getDate()} ${MONTHS[e.getMonth()]} ${e.getFullYear()}`;
   }
   if (period === 'Monthly') return `${MONTHS_LONG[ref.getMonth()]} ${ref.getFullYear()}`;
   if (period === 'Yearly') return String(ref.getFullYear());
-  return 'All time';
+  return '';
 }
 
-interface Props {
-  period: Exclude<Period, 'Overall'>;
-  value: Date;
-  onChange: (d: Date) => void;
-}
-
-export function CalendarPicker({ period, value, onChange }: Props) {
+export function CalendarPicker({ value, onChange }: { value: Date; onChange: (d: Date) => void }) {
   const [view, setView] = useState(() => new Date(value));
 
-  if (period === 'Yearly') {
+  const renderYears = () => {
     const currentYear = new Date().getFullYear();
-    const years: number[] = [];
-    for (let y = currentYear; y >= currentYear - 10; y--) years.push(y);
+    const years = Array.from({ length: 9 }, (_, i) => currentYear - 4 + i);
     return (
-      <div className="calendar-picker">
-        <div className="cal-grid cal-years">
-          {years.map(y => (
-            <button key={y} className={`cal-cell${y === value.getFullYear() ? ' on' : ''}`} onClick={() => { onChange(new Date(y, 0, 1)); }}>
-              {y}
-            </button>
-          ))}
-        </div>
+      <div className="cal-grid cal-years">
+        {years.map(y => (
+          <button key={y} className={`cal-cell${y === value.getFullYear() ? ' on' : ''}`} onClick={() => { onChange(new Date(y, 0, 1)); }}>
+            {y}
+          </button>
+        ))}
       </div>
     );
-  }
+  };
 
-  if (period === 'Monthly') {
+  const renderMonths = () => {
     const year = view.getFullYear();
-    const selectedYear = value.getFullYear();
     const selectedMonth = value.getMonth();
     return (
-      <div className="calendar-picker">
-        <div className="cal-nav">
-          <button className="cal-arrow" onClick={() => setView(new Date(year - 1, 0, 1))}>‹</button>
-          <span className="cal-title">{year}</span>
-          <button className="cal-arrow" onClick={() => setView(new Date(year + 1, 0, 1))}>›</button>
-        </div>
-        <div className="cal-grid cal-months">
-          {MONTHS.map((m, i) => (
-            <button key={m}
-              className={`cal-cell${year === selectedYear && i === selectedMonth ? ' on' : ''}`}
-              onClick={() => { onChange(new Date(year, i, 1)); }}>
-              {m}
+      <div className="cal-grid cal-months">
+        {MONTHS_LONG.map((m, i) => (
+          <button key={m} className={`cal-cell${i === selectedMonth && year === value.getFullYear() ? ' on' : ''}`}
+            onClick={() => { onChange(new Date(year, i, 1)); }}>
+            {m}
+          </button>
+        ))}
+      </div>
+    );
+  };
+
+  const renderDays = () => {
+    const year = view.getFullYear();
+    const month = view.getMonth();
+    const first = new Date(year, month, 1);
+    const startOffset = (first.getDay() + 6) % 7; // Monday-first
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cells: (number | null)[] = [
+      ...Array(startOffset).fill(null),
+      ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+    ];
+    while (cells.length % 7 !== 0) cells.push(null);
+
+    const isSel = (d: number) =>
+      d === value.getDate() && month === value.getMonth() && year === value.getFullYear();
+    const inWeek = (d: number) => {
+      if (!d) return false;
+      const cellDate = new Date(year, month, d);
+      const ws = startOfWeek(value).getTime();
+      return cellDate.getTime() >= ws && cellDate.getTime() < ws + 7 * 86400000;
+    };
+    const isToday = (d: number) => {
+      if (!d) return false;
+      const cellDate = new Date(year, month, d);
+      const now = new Date();
+      return cellDate.getDate() === now.getDate() && cellDate.getMonth() === now.getMonth() && cellDate.getFullYear() === now.getFullYear();
+    };
+
+    return (
+      <>
+        <div className="cal-dow"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+        <div className="cal-grid cal-days">
+          {cells.map((d, i) => (
+            <button key={i} disabled={!d} className={`cal-cell${d ? '' : ' empty'}${isSel(d!) ? ' on' : ''}${inWeek(d!) ? ' in-week' : ''}${isToday(d!) ? '' : ''}`}
+              onClick={() => { onChange(new Date(year, month, d!)); }}>
+              {d || ''}
             </button>
           ))}
         </div>
-      </div>
+      </>
     );
-  }
+  };
 
-  // Daily or Weekly — month grid
   const year = view.getFullYear();
   const month = view.getMonth();
-  const first = new Date(year, month, 1);
-  const startOffset = (first.getDay() + 6) % 7;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const cells: (number | null)[] = [];
-  for (let i = 0; i < startOffset; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
-  while (cells.length % 7 !== 0) cells.push(null);
-
-  const isDailySelected = (d: number) => period === 'Daily' &&
-    d === value.getDate() && month === value.getMonth() && year === value.getFullYear();
-  const isWeeklySelected = (d: number) => {
-    if (period !== 'Weekly') return false;
-    const cellDate = new Date(year, month, d);
-    return startOfWeek(cellDate).getTime() === startOfWeek(value).getTime();
-  };
-  const isWeeklyInSelected = (d: number) => {
-    if (period !== 'Weekly') return false;
-    const cellDate = new Date(year, month, d);
-    return startOfWeek(cellDate).getTime() === startOfWeek(value).getTime();
-  };
+  const level = view.getFullYear() === value.getFullYear() ? (view.getMonth() === value.getMonth() ? 'days' : 'months') : 'months';
 
   return (
     <div className="calendar-picker">
       <div className="cal-nav">
-        <button className="cal-arrow" onClick={() => setView(new Date(year, month - 1, 1))}>‹</button>
-        <span className="cal-title">{MONTHS_LONG[month]} {year}</span>
-        <button className="cal-arrow" onClick={() => setView(new Date(year, month + 1, 1))}>›</button>
+        <button className="cal-arrow" onClick={() => setView(new Date(year - 1, 0, 1))}>‹</button>
+        <div className="cal-title">
+          {level === 'days' ? `${MONTHS_LONG[month]} ${year}` : year}
+        </div>
+        <button className="cal-arrow" onClick={() => setView(new Date(year + 1, 0, 1))}>›</button>
       </div>
-      <div className="cal-dow">{DOW.map((d, i) => <span key={i}>{d}</span>)}</div>
-      <div className="cal-grid cal-days">
-        {cells.map((d, i) => {
-          if (d == null) return <span key={i} className="cal-cell empty" />;
-          const on = isDailySelected(d) || isWeeklySelected(d);
-          const inWeek = isWeeklyInSelected(d);
-          return (
-            <button key={i} className={`cal-cell${on ? ' on' : ''}${inWeek && !on ? ' in-week' : ''}`}
-              onClick={() => { onChange(new Date(year, month, d)); }}>
-              {d}
-            </button>
-          );
-        })}
-      </div>
+      {level === 'days' && (
+        <div className="cal-nav" style={{ marginBottom: 8 }}>
+          <button className="cal-arrow" onClick={() => setView(new Date(year, month - 1, 1))}>‹</button>
+          <div className="cal-title">{MONTHS[month]}</div>
+          <button className="cal-arrow" onClick={() => setView(new Date(year, month + 1, 1))}>›</button>
+        </div>
+      )}
+      {level === 'days' ? renderDays() : level === 'months' ? renderMonths() : renderYears()}
+      {/* year view handled via renderYears when level === 'years' */}
+      {level === 'months' && (
+        <div className="cal-dow" style={{ marginTop: 8 }}><span>Year</span></div>
+      )}
     </div>
   );
 }
