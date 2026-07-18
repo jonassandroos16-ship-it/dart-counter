@@ -6,6 +6,8 @@ export interface Player {
   level?: number;
   unlockedTitles?: string[];
   selectedTitle?: string | null;
+  unlockedBadges?: string[];
+  selectedBadge?: string | null;
 }
 
 export interface Dart {
