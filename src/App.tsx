@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Target, Users, BarChart3, History, Settings as SettingsIcon } from 'lucide-react';
 import { useDB, applyTheme, useToast } from './store';
-import { retroUnlockAll } from './logic';
+import { retroUnlockAll, reconcileAllPlayersPoints } from './logic';
 import { MusicEngine } from './music';
 import { Sound } from './sound';
 import { PlayView } from './PlayView';
@@ -43,6 +43,14 @@ export default function App() {
     const { players: next, changed } = retroUnlockAll(db.players, db.games, db.settings.customTitles || []);
     if (changed) db.setPlayers(next);
   }, [db.players, db.games, db.settings.customTitles]);
+
+  // Reconcile attribute & power-up points whenever player levels or scaling
+  // settings change so newly-earned points become spendable.
+  useEffect(() => {
+    const { players: next, changed } = reconcileAllPlayersPoints(db.players, db.settings);
+    if (changed) db.setPlayers(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [db.players.map(p => p.level).join(','), db.settings.powerUpScaling]);
 
   useEffect(() => {
     const unlock = () => {

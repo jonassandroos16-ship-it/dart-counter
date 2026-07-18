@@ -1,3 +1,17 @@
+export type PlayerSoundId = 'none' | 'hero' | 'villain' | 'cyborg' | 'mystic' | 'beast' | 'champion';
+
+export interface PlayerAttributes {
+  health: number;      // current max health (starts 400)
+  armor: number;       // current armor % (starts 0)
+  pointsAvailable: number; // unspent attribute points
+}
+
+export interface PlayerPowerUps {
+  unlocked: string[];          // power up ids the player has unlocked
+  active: string | null;      // equipped power up id (single slot)
+  pointsAvailable: number;    // unspent power-up unlock points
+}
+
 export interface Player {
   id: string;
   name: string;
@@ -10,6 +24,9 @@ export interface Player {
   badgeCounts?: Record<string, number>;
   selectedBadge?: string | null;
   showBadgeContext?: boolean;
+  sound?: PlayerSoundId;
+  attributes?: PlayerAttributes;
+  powerUps?: PlayerPowerUps;
 }
 
 export interface Dart {
@@ -54,6 +71,10 @@ export interface GamePlayer {
   killerHits?: number;
   kills?: string[];
   team?: number; // 0-indexed team id when team mode is active
+  // Power-up state during a match (only present when game.powerUpsEnabled).
+  powerUpCharge?: number;   // 0..100 — fills from doubles/triples/bullseyes
+  powerUpUsed?: boolean;    // true once the equipped power up has been used this match
+  powerUpId?: string | null; // snapshot of the equipped power up at game start
 }
 
 export interface Game {
@@ -83,6 +104,7 @@ export interface Game {
   teamTurn?: number;            // current team whose turn it is (0-indexed)
   teamPlayerCursor?: number[];  // per-team index into its player rotation order
   winningTeam?: number | null;  // team that won (for team mode)
+  powerUpsEnabled?: boolean;    // true when power ups are active for this match
 }
 
 export interface GameRecord {
@@ -99,6 +121,7 @@ export interface GameRecord {
   teamMode?: boolean;
   teamCount?: number;
   winningTeam?: number | null;
+  powerUpsEnabled?: boolean;
   players: {
     id: string;
     name: string;
@@ -130,6 +153,21 @@ export interface XPConfig {
 
 export type VoicePackId = 'off' | 'announcer' | 'cyborg' | 'hype' | 'female';
 
+export interface PowerUpScalingConfig {
+  chargePerDouble: number;   // charge % granted per double hit
+  chargePerTriple: number;   // charge % granted per triple hit
+  chargePerBull: number;     // charge % granted per bull (25/50)
+  chargePerScorePoint: number; // additional charge per scored point (scales with score)
+  chargeMax: number;         // cap for charge
+  pointsPerLevel: number;    // power-up unlock points granted per level gained
+  startingPoints: number;    // points a brand-new player starts with
+  attributePointsPerLevel: number; // attribute points per level
+  attributeStartHealth: number;
+  attributeStartArmor: number;
+  healthPerPoint: number;   // HP gained per point spent on health
+  armorPerPoint: number;     // armor % gained per point spent on armor
+}
+
 export interface Settings {
   theme: 'dark' | 'light';
   accent: string;
@@ -144,4 +182,5 @@ export interface Settings {
   xpConfig: XPConfig;
   customTitles: CustomTitle[];
   popups: { scores: boolean; milestones: boolean; xp: boolean; titles: boolean };
+  powerUpScaling: PowerUpScalingConfig;
 }
