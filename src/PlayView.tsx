@@ -6,7 +6,7 @@ import { initials } from './store';
 import { Sound } from './sound';
 import type { MusicEngine } from './music';
 import type { PopupControls } from './Popups';
-import { computeGameBadges, getBadgeInfo, BADGES } from './badges';
+import { computeGameBadges, getBadgeInfo } from './badges';
 import { BadgeInfoPopup } from './Popups';
 
 interface Props {
@@ -165,6 +165,7 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
       cur.visits.push({ darts: [...game.darts], scored, remaining: 0, leg: game.leg, checkout: scored, date: new Date().toISOString() });
       cur.score = 0; cur.legsWon++;
       const checkedOut = [...game.checkedOutThisRound, cur.id];
+      const thrown = [...game.thrownThisRound, cur.id];
       const legsToWin = Math.ceil(game.legsBestOf / 2);
       const reachedThreshold = cur.legsWon >= (game.legsBestOf === 1 ? 1 : legsToWin);
       if (reachedThreshold) {
@@ -177,12 +178,12 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
         if (playersLeft.length > 0 && canTie.length === playersLeft.length) {
           toast(`${cur.name} checked out! ${playersLeft.length} player${playersLeft.length > 1 ? 's' : ''} left to tie.`);
           Sound.play('win', {}, settings);
-          const next = advanceTurn({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, darts: [], mult: 1 });
+          const next = advanceTurn({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, thrownThisRound: thrown, darts: [], mult: 1 });
           setGame(next);
           return;
         }
-        if (checkedOut.length > 1) { finishGame({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, darts: [], mult: 1 }, null, checkedOut); return; }
-        finishGame({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, darts: [], mult: 1 }, cur, null);
+        if (checkedOut.length > 1) { finishGame({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, thrownThisRound: thrown, darts: [], mult: 1 }, null, checkedOut); return; }
+        finishGame({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, thrownThisRound: thrown, darts: [], mult: 1 }, cur, null);
         return;
       }
       const nextLeg = game.leg + 1;
@@ -190,7 +191,7 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
       newPlayers.forEach(pl => pl.score = MODES[game.mode].start);
       Sound.play('win', {}, settings);
       toast(`${cur.name} wins leg ${game.leg}`);
-      setGame({ ...game, players: newPlayers, leg: nextLeg, turn: nextTurn, roundStartTurn: nextTurn, checkedOutThisRound: [], darts: [], mult: 1 });
+      setGame({ ...game, players: newPlayers, leg: nextLeg, turn: nextTurn, roundStartTurn: nextTurn, checkedOutThisRound: [], thrownThisRound: [], darts: [], mult: 1 });
       return;
     }
 
@@ -198,7 +199,8 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
       cur.visits.push({ darts: [...game.darts], scored: 0, remaining: cur.score, leg: game.leg, bust: true, date: new Date().toISOString() });
       Sound.play('bust', {}, settings);
       toast('Bust!');
-      const next = advanceTurn({ ...game, players: newPlayers, darts: [], mult: 1 });
+      const thrown = [...game.thrownThisRound, cur.id];
+      const next = advanceTurn({ ...game, players: newPlayers, thrownThisRound: thrown, darts: [], mult: 1 });
       setGame(next);
       return;
     }
@@ -206,7 +208,8 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
     cur.score = remaining;
     cur.visits.push({ darts: [...game.darts], scored, remaining, leg: game.leg, date: new Date().toISOString() });
     Sound.play('enter', {}, settings);
-    const next = advanceTurn({ ...game, players: newPlayers, darts: [], mult: 1 });
+    const thrown = [...game.thrownThisRound, cur.id];
+    const next = advanceTurn({ ...game, players: newPlayers, thrownThisRound: thrown, darts: [], mult: 1 });
     setGame(next);
     runMilestones(cur, remaining, scored, settings, popups, setPlayers, { ...game, players: newPlayers }, players, games);
   };
@@ -215,12 +218,18 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
   const advanceTurn = (g: Game): Game => {
     const turn = (g.turn + 1) % g.players.length;
     const checkedOutCount = g.checkedOutThisRound.length;
+    const thrown = g.thrownThisRound || [];
     if (checkedOutCount > 0) {
       const legsToWin = Math.ceil(g.legsBestOf / 2);
       const anyReached = g.players.some(pl => g.checkedOutThisRound.includes(pl.id) && pl.legsWon >= (g.legsBestOf === 1 ? 1 : legsToWin));
       if (anyReached) {
         const MAX_CHECKOUT = 170;
-        const playersLeftToThrow = g.players.filter(pl => !g.checkedOutThisRound.includes(pl.id) && pl.score > 0);
+        // Players who still need to throw this round: not checked out, not yet
+        // thrown, and still have score remaining.
+        const playersLeftToThrow = g.players.filter(pl =>
+          !g.checkedOutThisRound.includes(pl.id) && !thrown.includes(pl.id) && pl.score > 0);
+        // If everyone who could throw has thrown, the round is over — the
+        // checked-out player(s) win (tie if more than one).
         if (playersLeftToThrow.length === 0) {
           if (checkedOutCount > 1) { finishGame({ ...g, turn }, null, g.checkedOutThisRound); return { ...g, turn, finished: true }; }
           const winner = g.players.find(pl => g.checkedOutThisRound.includes(pl.id));
@@ -562,15 +571,23 @@ function checkTitleUnlocks(pl: GamePlayer, settings: Settings, popups: PopupCont
 }
 
 // Award badges earned in this finished game to each player's lifetime list.
+// Badges can be earned multiple times — we track a per-badge count.
 function awardBadges(game: Game, setPlayers: (updater: any) => void) {
   const map = computeGameBadges(game);
   setPlayers((prev: Player[]) => prev.map(p => {
     const ids = map[p.id] || [];
     if (!ids.length) return p;
     const existing = new Set(p.unlockedBadges || []);
+    const counts: Record<string, number> = { ...(p.badgeCounts || {}) };
     let changed = false;
-    ids.forEach((id) => { if (!existing.has(id)) { existing.add(id); changed = true; } });
-    return changed ? { ...p, unlockedBadges: Array.from(existing) } : p;
+    // De-duplicate within this game (a badge is earned at most once per match).
+    const uniqueThisGame = Array.from(new Set(ids));
+    uniqueThisGame.forEach((id) => {
+      if (!existing.has(id)) { existing.add(id); changed = true; }
+      counts[id] = (counts[id] || 0) + 1;
+      changed = true;
+    });
+    return changed ? { ...p, unlockedBadges: Array.from(existing), badgeCounts: counts } : p;
   }));
 }
 
