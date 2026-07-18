@@ -1,4 +1,4 @@
-'50vh' { useState } from 'react';
+import { useState } from 'react';
 import type { Player, Settings, CustomTitle } from './types';
 import { COLORS, allTitles, getTitleInfo, conditionLabel, titleProgressInfo, type TitleCtx } from './constants';
 import { levelFromXP, getPlayerXP, playerStats, allVisitsFor } from './logic';
