@@ -103,7 +103,6 @@ function BadgesModal({ player, setPlayers, onClose, toast }: { player: Player; s
           return (
             <button
               key={b.id}
-              disabled={!isUnlocked}
               onClick={() => setSelectedId(b.id)}
               title={b.desc}
               style={{
@@ -111,7 +110,7 @@ function BadgesModal({ player, setPlayers, onClose, toast }: { player: Player; s
                 background: isSelected ? 'color-mix(in srgb,var(--accent) 22%,var(--bg-3))' : 'var(--bg-3)',
                 border: `1px solid ${isEquipped ? 'var(--accent)' : isSelected ? 'color-mix(in srgb,var(--accent) 50%,var(--border))' : 'var(--border)'}`,
                 opacity: isUnlocked ? 1 : 0.5,
-                cursor: isUnlocked ? 'pointer' : 'not-allowed', color: 'inherit',
+                cursor: 'pointer', color: 'inherit',
               }}
             >
               <div style={{ fontSize: 24 }}>{isUnlocked ? b.icon : '🔒'}</div>
