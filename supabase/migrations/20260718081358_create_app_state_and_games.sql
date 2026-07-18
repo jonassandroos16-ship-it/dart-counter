@@ -24,6 +24,8 @@ Single-row table holding shared players and settings as JSONB.
 - `id` (text, primary key, default 'main')
 - `players` (jsonb, default '[]')
 - `settings` (jsonb, default '{}')
+- `deleted_player_ids` (text[], default '{}') — tombstones for delete sync
+- `deleted_game_ids` (text[], default '{}') — tombstones for delete sync
 - `updated_at` (timestamptz)
 
 ### games
@@ -43,12 +45,17 @@ One row per completed match record.
    The app writes only `{ id, data }`, so it is unaffected.
 2. Index on `mode` supports fast per-mode SELECTs.
 3. `IF NOT EXISTS` guards make this safe to re-run after a timeout.
+4. Tombstone arrays (`deleted_player_ids`, `deleted_game_ids`) record IDs
+   deleted on any client so the additive merge logic can filter them out on
+   every other client. They are append-only and stay small in practice.
 */
 
 CREATE TABLE IF NOT EXISTS app_state (
   id text PRIMARY KEY DEFAULT 'main',
   players jsonb NOT NULL DEFAULT '[]'::jsonb,
   settings jsonb NOT NULL DEFAULT '{}'::jsonb,
+  deleted_player_ids text[] NOT NULL DEFAULT '{}'::text[],
+  deleted_game_ids text[] NOT NULL DEFAULT '{}'::text[],
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
