@@ -45,6 +45,7 @@ function loadActiveGame(): Game | null {
 // ── Server sync helpers ──────────────────────────────────────────────
 // All helpers THROW on network/permission errors (so callers can mark the
 // connection offline) and return null/empty on legitimate no-data cases.
+// Tombstones (deleted_player_ids / deleted_game_ids) propagate deletes.
 
 async function fetchAppState(): Promise<{ players: Player[]; settings: Settings; deletedPlayerIds: string[]; deletedGameIds: string[] } | null> {
   if (!supabase) return null;
