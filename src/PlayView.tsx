@@ -234,7 +234,7 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
         <div className="pc-slots">
           {[0, 1, 2].map(i => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
         </div>
-        <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{buffScored}</b></div>
+        <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{buffScored}</b> · Darts thrown: <b style={{ color: 'var(--text)' }}>{(p.visits.reduce((a, v) => a + v.darts.length, 0)) + game.darts.length}</b></div>
       </div>
 
       {game.players.length > 1 && (
@@ -258,7 +258,7 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
                   </div>
                 </div>
                 <div className="po-score">{pl.score}</div>
-                <div className="po-sub">avg {visitAvg(pl).toFixed(1)} · L{li.level}{ti ? ` · ${ti.icon || ''} ${ti.name}` : ''}</div>
+                <div className="po-sub">avg {visitAvg(pl).toFixed(1)} · {pl.visits.reduce((a, v) => a + v.darts.length, 0)} 🎯 · L{li.level}{ti ? ` · ${ti.icon || ''} ${ti.name}` : ''}</div>
               </div>
             );
           })}

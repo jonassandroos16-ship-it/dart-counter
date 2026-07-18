@@ -116,7 +116,28 @@ export function playerStats(playerId: string, games: GameRecord[]) {
   })();
   const winRate = playerGames.length ? gamesWon / playerGames.length * 100 : 0;
   const tieRate = playerGames.length ? gamesTied / playerGames.length * 100 : 0;
-  return { games: playerGames.length, gamesWon, gamesTied, legsWon, winRate, tieRate, avg: totalDarts ? totalScore / totalDarts * 3 : 0, first9, highScore, highCheckout, n180, n140, tons, visits };
+
+  // Darts thrown (all visits, incl. bust/atc) and darts-to-finish per completed leg
+  let dartsThrown = 0;
+  const finishDartsList: number[] = [];
+  playerGames.forEach(g => {
+    const pl = g.players.find(p => p.id === playerId); if (!pl) return;
+    const byLeg: Record<string, { darts: number; finished: boolean }> = {};
+    pl.visits.forEach((v: any) => {
+      dartsThrown += (v.darts?.length || 0);
+      if (v.atc || g.practice) return;
+      const k = String(v.leg || 1);
+      const b = byLeg[k] = byLeg[k] || { darts: 0, finished: false };
+      b.darts += (v.darts?.length || 0);
+      if (v.remaining === 0) b.finished = true;
+    });
+    Object.values(byLeg).forEach(b => { if (b.finished) finishDartsList.push(b.darts); });
+  });
+  const finishMin = finishDartsList.length ? Math.min(...finishDartsList) : 0;
+  const finishMax = finishDartsList.length ? Math.max(...finishDartsList) : 0;
+  const finishAvg = finishDartsList.length ? finishDartsList.reduce((a, b) => a + b, 0) / finishDartsList.length : 0;
+
+  return { games: playerGames.length, gamesWon, gamesTied, legsWon, winRate, tieRate, avg: totalDarts ? totalScore / totalDarts * 3 : 0, first9, highScore, highCheckout, n180, n140, tons, visits, dartsThrown, finishMin, finishMax, finishAvg, legsFinished: finishDartsList.length };
 }
 
 export function bucketAverages(visits: any[], period: string) {

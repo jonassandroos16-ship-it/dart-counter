@@ -32,6 +32,11 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
     ['3-dart avg', s.avg.toFixed(1)], ['First 9', s.first9.toFixed(1)], ['Games', s.games],
     ['180s', s.n180], ['140+', s.n140], ['100+', s.tons],
     ['High score', s.highScore], ['High checkout', s.highCheckout], ['Legs won', s.legsWon],
+    ['Darts thrown', s.dartsThrown],
+    ['Best finish', s.finishMin || '—'],
+    ['Worst finish', s.finishMax || '—'],
+    ['Avg finish', s.legsFinished ? s.finishAvg.toFixed(1) : '—'],
+    ['Legs finished', s.legsFinished],
     ['Level', li.level], ['Total XP', xp.xp || 0], ['Titles', xp.unlockedTitles.length],
   ];
 
