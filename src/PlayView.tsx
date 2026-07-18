@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Game, GamePlayer, GameRecord, Player, Settings } from './types';
 import { MODES, ATC_TARGETS, atcLabel, BUILTIN_TITLES, buildTitleCheck, getTitleInfo, SCORE_POPUPS, MILESTONES, TEAM_COLORS, TEAM_NAMES } from './constants';
-import { createGame, recordFromGame, checkoutHint, leadTrailBadge, visitAvg, levelFromXP, getPlayerXPById, allVisitsFor } from './logic';
+import { createGame, recordFromGame, checkoutHint, leadTrailBadge, visitAvg, levelFromXP, getPlayerXPById, allVisitsFor, computeBattleDamage } from './logic';
 import { initials } from './store';
 import { Sound } from './sound';
 import type { MusicEngine } from './music';
@@ -24,10 +24,6 @@ interface Props {
   onGameOver: () => void;
   popups: PopupControls;
 }
-
-// ── Power-up charge helpers ───────────────────────────────────────────
-// Charge a player's equipped power-up from a thrown dart. Doubles, triples
-// and bullseyes add charge; higher scores add a small bonus scaled by score.
 
 function chargeFromDart(dart: { value: number; isDouble: boolean; mult: number; base: number }, settings: Settings): number {
   const cfg = settings.powerUpScaling;
@@ -73,8 +69,6 @@ function activatePowerUp(game: Game, playerIdx: number, settings: Settings, toas
   return { ...nextGame, players };
 }
 
-// Renders the equipped power-up, its charge bar, and an Activate button.
-// Shown only when power-ups are enabled for this match.
 function PowerUpBar({ game, curIdx, settings, onActivate }: { game: Game; curIdx: number; settings: Settings; onActivate: () => void; toast: (m: string) => void }) {
   if (!game.powerUpsEnabled) return null;
   const pl = game.players[curIdx];
@@ -100,12 +94,25 @@ function PowerUpBar({ game, curIdx, settings, onActivate }: { game: Game; curIdx
   );
 }
 
+function AttributeStrip({ playerId, players }: { playerId: string; players: Player[] }) {
+  const player = players.find(p => p.id === playerId);
+  if (!player) return null;
+  const attrs = player.attributes;
+  if (!attrs) return null;
+  return (
+    <div className="row wrap" style={{ gap: 4, marginTop: 2 }}>
+      <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--muted)' }}>❤️ {attrs.health}</span>
+      <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--muted)' }}>🛡️ {attrs.armor}%</span>
+      <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--muted)' }}>⚡ {attrs.power}%</span>
+    </div>
+  );
+}
+
 export function PlayView({ players, games, settings, activeGame, setActiveGame, setGames, setPlayers, toast, music, onQuit, onGameOver, popups }: Props) {
   const game = activeGame;
   const setGame = setActiveGame;
   const [showdown, setShowdown] = useState<Game | null>(null);
 
-  // Auto-resume: if there's a saved in-progress match, switch music to match context.
   useEffect(() => {
     if (game && !game.finished) music.startContext('match', settings);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -125,7 +132,7 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
       onQuit={() => { setGame(null); onQuit(); }} onGameOver={onGameOver} popups={popups} />;
   }
   return <SetupView players={players} onStart={(mode, ids, dbl, legs, teamMode, teamAssignment, powerUps) => {
-    const g = createGame(mode, ids, players, dbl, legs, teamMode, teamAssignment, powerUps);
+    const g = createGame(mode, ids, players, dbl, legs, teamMode, teamAssignment, powerUps, settings);
     Sound.play('showdown', {}, settings);
     music.stop();
     setActiveGame(g);
@@ -140,11 +147,9 @@ function SetupView({ players, onStart }: { players: Player[]; onStart: (mode: st
   const [picked, setPicked] = useState<string[]>(players.length ? [players[0].id] : []);
   const [teamMode, setTeamMode] = useState(false);
   const [powerUps, setPowerUps] = useState(false);
-  // team assignment aligned to `picked` indices; values are team ids (0-indexed).
   const [teams, setTeams] = useState<number[]>([]);
   const [teamCount, setTeamCount] = useState(2);
 
-  // Keep the teams array in sync with picked length and teamCount.
   useEffect(() => {
     setTeams(prev => {
       const next = picked.map((_, i) => {
@@ -174,10 +179,10 @@ function SetupView({ players, onStart }: { players: Player[]; onStart: (mode: st
             <option value="killer">Killer (elimination)</option>
             <option value="speed101">Speed 101 (party)</option>
             <option value="highscore">High Score (party)</option>
+            <option value="battle">Battle (attributes)</option>
           </select>
         </label>
         {!noX01 && <label className="field"><span>Finish</span>
-          {/* By rendering Straight Out with value="0", it matches our false state */}
           <select value={doubleOut ? '1' : '0'} onChange={e => setDoubleOut(e.target.value === '1')}>
             <option value="0">Straight Out</option>
             <option value="1">Double Out</option>
@@ -287,6 +292,7 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
   if (game.atc) return <AtcBoard game={game} setGame={setGame} settings={settings} toast={toast} music={music} onQuit={onQuit} setGames={setGames} setPlayers={setPlayers} />;
   if (game.mode === 'killer') return <KillerBoard game={game} setGame={setGame} settings={settings} toast={toast} music={music} onQuit={onQuit} setGames={setGames} setPlayers={setPlayers} popups={popups} onGameOver={onGameOver} />;
   if (game.mode === 'highscore') return <HighScoreBoard game={game} setGame={setGame} settings={settings} toast={toast} music={music} onQuit={onQuit} setGames={setGames} setPlayers={setPlayers} popups={popups} onGameOver={onGameOver} />;
+  if (game.mode === 'battle') return <BattleBoard game={game} setGame={setGame} settings={settings} toast={toast} music={music} onQuit={onQuit} setGames={setGames} setPlayers={setPlayers} popups={popups} onGameOver={onGameOver} />;
   if (game.finished) return <GameOver game={game} onNewGame={() => { setGame(null); onGameOver(); music.startContext('setup', settings); }} onViewStats={() => { setGame(null); onGameOver(); }} />;
 
   const p = game.players[game.turn];
@@ -297,7 +303,6 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
   const curXp = getPlayerXPById(p.id, players);
   const curBadge = getBadgeInfo(curXp.selectedBadge);
 
-  // Team rosters helper used for turn rotation and display.
   const curTeam = game.teamMode ? (p.team ?? 0) : -1;
   const curTeamColor = game.teamMode ? TEAM_COLORS[curTeam % TEAM_COLORS.length] : p.color;
 
@@ -326,7 +331,6 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
     const scored = surgeActive ? rawScored * 2 : rawScored;
     const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
     const cur = newPlayers[game.turn] as any;
-    // Consume one-shot power-up flags on the current player.
     if (cur._surgeNext) delete cur._surgeNext;
     if (cur._fourthDart) delete cur._fourthDart;
 
@@ -347,7 +351,6 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
     if (remaining === 0 && (!game.doubleOut || lastDart.isDouble)) {
       cur.visits.push({ darts: [...game.darts], scored, remaining: 0, leg: game.leg, checkout: scored, date: new Date().toISOString() });
       cur.score = 0; cur.legsWon++;
-      // Team mode: sync teammates' shared score to 0 and award the leg to the team.
       if (game.teamMode) {
         newPlayers.forEach(pl => { if (pl.team === cur.team) pl.score = 0; });
         const teamLegs = [...(game.teamLegsWon || [])];
@@ -376,9 +379,6 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
       const legsToWin = Math.ceil(game.legsBestOf / 2);
       const reachedThreshold = cur.legsWon >= (game.legsBestOf === 1 ? 1 : legsToWin);
       if (reachedThreshold) {
-        // Only give remaining players a chance to tie if they can still check
-        // out in a single visit (≤ 170 — the max achievable 3-dart checkout).
-        // If nobody can catch up, the current player wins outright.
         const MAX_CHECKOUT = 170;
         const playersLeft = newPlayers.filter(pl => !checkedOut.includes(pl.id) && pl.score > 0);
         const canTie = playersLeft.filter(pl => pl.score <= MAX_CHECKOUT);
@@ -423,7 +423,6 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
     }
 
     cur.score = remaining;
-    // Team mode: keep the shared team score in sync across teammates.
     if (game.teamMode) newPlayers.forEach(pl => { if (pl.team === cur.team && pl.id !== cur.id) pl.score = remaining; });
     cur.visits.push({ darts: [...game.darts], scored, remaining, leg: game.leg, date: new Date().toISOString() });
     Sound.play('enter', {}, settings);
@@ -433,15 +432,12 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
     runMilestones(cur, remaining, scored, settings, popups, setPlayers, { ...game, players: newPlayers }, players, games);
   };
 
-  // Pure: computes the next game state with the turn advanced. Does NOT call setGame.
   const advanceTurn = (g: Game): Game => {
-    // Team mode: rotate to the next team, cycling through that team's players.
     if (g.teamMode) {
       const tc = g.teamCount || 2;
       const ros: number[][] = Array.from({ length: tc }, () => []);
       g.players.forEach((pl, i) => { const t = pl.team ?? 0; if (t < tc) ros[t].push(i); });
       const cursors = [...(g.teamPlayerCursor || Array(tc).fill(0))];
-      // Advance the cursor of the team that just threw.
       const curT = g.teamTurn || 0;
       if (ros[curT].length) cursors[curT] = (cursors[curT] + 1) % ros[curT].length;
       const nextTeam = (curT + 1) % tc;
@@ -449,7 +445,6 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
       return { ...g, turn: nextTurn, teamTurn: nextTeam, teamPlayerCursor: cursors };
     }
     let turn = (g.turn + 1) % g.players.length;
-    // Skip players blocked or frozen by a power up, consuming their flag.
     if (g.powerUpsEnabled) {
       let guards = 0;
       while (guards < g.players.length) {
@@ -458,7 +453,6 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
           const flag = np._blockedNext ? 'blocked' : 'frozen';
           g = { ...g, players: g.players.map((pl, i) => i === turn ? (() => { const c = { ...pl } as any; delete c._blockedNext; delete c._frozenNext; return c; })() : pl) };
           if (flag === 'frozen') {
-            // Frozen visit: scores 0 and ends immediately — record an empty visit.
             const frozenPl = g.players[turn];
             const visits = [...frozenPl.visits, { darts: [], scored: 0, remaining: frozenPl.score, leg: g.leg, frozen: true, date: new Date().toISOString() }];
             g = { ...g, players: g.players.map((pl, i) => i === turn ? { ...pl, visits } : pl), thrownThisRound: [...(g.thrownThisRound || []), frozenPl.id] };
@@ -480,19 +474,13 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
       const anyReached = g.players.some(pl => g.checkedOutThisRound.includes(pl.id) && pl.legsWon >= (g.legsBestOf === 1 ? 1 : legsToWin));
       if (anyReached) {
         const MAX_CHECKOUT = 170;
-        // Players who still need to throw this round: not checked out, not yet
-        // thrown, and still have score remaining.
         const playersLeftToThrow = g.players.filter(pl =>
           !g.checkedOutThisRound.includes(pl.id) && !thrown.includes(pl.id) && pl.score > 0);
-        // If everyone who could throw has thrown, the round is over — the
-        // checked-out player(s) win (tie if more than one).
         if (playersLeftToThrow.length === 0) {
           if (checkedOutCount > 1) { finishGame({ ...g, turn }, null, g.checkedOutThisRound); return { ...g, turn, finished: true }; }
           const winner = g.players.find(pl => g.checkedOutThisRound.includes(pl.id));
           if (winner) { finishGame({ ...g, turn }, winner, null); return { ...g, turn, finished: true }; }
         }
-        // If no remaining player can possibly check out in one visit, end the
-        // game now instead of dragging out a decided match.
         const canTie = playersLeftToThrow.filter(pl => pl.score <= MAX_CHECKOUT);
         if (canTie.length === 0) {
           if (checkedOutCount > 1) { finishGame({ ...g, turn }, null, g.checkedOutThisRound); return { ...g, turn, finished: true }; }
@@ -505,7 +493,7 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
   };
 
   const finishGame = (g: Game, winner: GamePlayer | null, tiedIds: string[] | null) => {
-    if (g.finished) return; // guard against double-finish
+    if (g.finished) return;
     const isTie = !winner && tiedIds && tiedIds.length > 1;
     const winningTeam = g.winningTeam ?? null;
     const finished: Game = { ...g, finished: true, winner: winner ? winner.id : null, tied: !!isTie, tiedPlayers: isTie ? tiedIds : null, winningTeam };
@@ -514,7 +502,6 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
     setGames((prev: GameRecord[]) => [...prev, recordFromGame(finished)]);
     if (!finished.practice) {
       if (finished.teamMode && winningTeam != null) {
-        // Reward every player on the winning team with a win + XP.
         finished.players.filter(pl => pl.team === winningTeam).forEach(pl => awardXP(pl.id, settings.xpConfig.win, `Team ${winningTeam + 1} won`, settings, setPlayers, popups));
       } else if (winner) {
         awardXP(winner.id, settings.xpConfig.win, 'Winning the game', settings, setPlayers, popups);
@@ -548,6 +535,7 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
           {[0, 1, 2].map(i => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
         </div>
         <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{buffScored}</b> · Darts thrown: <b style={{ color: 'var(--text)' }}>{(p.visits.reduce((a, v) => a + v.darts.length, 0)) + game.darts.length}</b></div>
+        <AttributeStrip playerId={p.id} players={players} />
         <PowerUpBar game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
           const next = activatePowerUp(game, game.turn, settings, toast);
           if (next) setGame(next);
@@ -581,6 +569,7 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
                 </div>
                 <div className="po-score">{pl.score}</div>
                 <div className="po-sub">avg {visitAvg(pl).toFixed(1)} · {pl.visits.reduce((a, v) => a + v.darts.length, 0)} 🎯 · L{li.level}{ti ? ` · ${ti.icon || ''} ${ti.name}` : ''}</div>
+                <AttributeStrip playerId={pl.id} players={players} />
               </div>
             );
           })}
@@ -841,7 +830,6 @@ function checkTitleUnlocks(pl: GamePlayer, settings: Settings, popups: PopupCont
     if (!player) return prev;
     const unlocked = [...(player.unlockedTitles || [])];
 
-    // Historical stats from prior completed games (excluding the current in-progress game).
     const historyGames = games.filter(g => g.id !== game.id && g.players.some(p => p.id === pl.id));
     const historyVisits = allVisitsFor(pl.id, historyGames);
     const lifetimeVisits = [...historyVisits, ...(pl.visits || [])];
@@ -863,8 +851,6 @@ function checkTitleUnlocks(pl: GamePlayer, settings: Settings, popups: PopupCont
   });
 }
 
-// Award badges earned in this finished game to each player's lifetime list.
-// Badges can be earned multiple times — we track a per-badge count.
 function awardBadges(game: Game, setPlayers: (updater: any) => void) {
   const map = computeGameBadges(game);
   setPlayers((prev: Player[]) => prev.map(p => {
@@ -873,7 +859,6 @@ function awardBadges(game: Game, setPlayers: (updater: any) => void) {
     const existing = new Set(p.unlockedBadges || []);
     const counts: Record<string, number> = { ...(p.badgeCounts || {}) };
     let changed = false;
-    // De-duplicate within this game (a badge is earned at most once per match).
     const uniqueThisGame = Array.from(new Set(ids));
     uniqueThisGame.forEach((id) => {
       if (!existing.has(id)) { existing.add(id); changed = true; }
@@ -885,7 +870,7 @@ function awardBadges(game: Game, setPlayers: (updater: any) => void) {
 }
 
 function finishSimpleGame(g: Game, winner: GamePlayer | null, settings: Settings, setGame: (g: Game | null) => void, setGames: (updater: any) => void, setPlayers: (updater: any) => void, popups: PopupControls, music: MusicEngine, players: Player[], games: GameRecord[]) {
-  if (g.finished) return; // guard against double-finish
+  if (g.finished) return;
   const finished: Game = { ...g, finished: true, winner: winner ? winner.id : null, tied: false, tiedPlayers: null };
   Sound.play('win', {}, settings);
   music.startContext('setup', settings);
@@ -895,10 +880,6 @@ function finishSimpleGame(g: Game, winner: GamePlayer | null, settings: Settings
   awardBadges(finished, setPlayers);
   setGame(finished);
 }
-
-// ── Killer mode ──────────────────────────────────────────────────────
-// Each player has an assigned number. Hit it 5 times to become a Killer.
-// Killers hit other players' numbers to remove lives. Last alive wins.
 
 function KillerBoard({ game, setGame, settings, toast, music, onQuit, setGames, setPlayers, popups, onGameOver }: {
   game: Game; setGame: (g: Game | null) => void; settings: Settings; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void;
@@ -935,7 +916,7 @@ function KillerBoard({ game, setGame, settings, toast, music, onQuit, setGames, 
 
     for (const dart of game.darts) {
       dartsLog.push(dart);
-      if (dart.base === 0) continue; // miss
+      if (dart.base === 0) continue;
       if (!isKiller) {
         if (dart.base === cur.killerNumber) {
           cur.killerHits = Math.min(5, (cur.killerHits || 0) + 1);
@@ -970,7 +951,6 @@ function KillerBoard({ game, setGame, settings, toast, music, onQuit, setGames, 
     if (killedThisVisit) popups.setKill(killedThisVisit);
     let nextTurn = (game.turn + 1) % game.players.length;
     while (newPlayers[nextTurn].eliminated) nextTurn = (nextTurn + 1) % game.players.length;
-    // Skip blocked/frozen players (power ups).
     if (game.powerUpsEnabled) {
       let guards = 0;
       while (guards < newPlayers.length) {
@@ -982,8 +962,8 @@ function KillerBoard({ game, setGame, settings, toast, music, onQuit, setGames, 
             np.visits.push({ darts: [], scored: 0, remaining: np.lives, leg: 1, mode: 'killer', date: new Date().toISOString(), frozen: true, hits: (np.kills || []).length });
           }
           toast(`${np.name} ${flag === 'frozen' ? 'is frozen' : 'is blocked'} — visit skipped.`);
-          nextTurn = (nextTurn + 1) % game.players.length;
-          while (newPlayers[nextTurn].eliminated) nextTurn = (nextTurn + 1) % game.players.length;
+          nextTurn = (nextTurn + 1) % newPlayers.length;
+          while (newPlayers[nextTurn].eliminated) nextTurn = (nextTurn + 1) % newPlayers.length;
           guards++;
         } else break;
       }
@@ -1063,9 +1043,6 @@ function KillerBoard({ game, setGame, settings, toast, music, onQuit, setGames, 
   );
 }
 
-// ── High Score (party) ───────────────────────────────────────────────
-// 7 visits each. Highest total score wins. Pure scoring, no checkout.
-
 const HIGH_SCORE_VISITS = 7;
 
 function HighScoreBoard({ game, setGame, settings, toast, music, onQuit, setGames, setPlayers, popups, onGameOver }: {
@@ -1121,8 +1098,7 @@ function HighScoreBoard({ game, setGame, settings, toast, music, onQuit, setGame
       return;
     }
     let nextTurn = (game.turn + 1) % game.players.length;
-    while (newPlayers[nextTurn].visits.length >= HIGH_SCORE_VISITS) nextTurn = (nextTurn + 1) % game.players.length;
-    // Skip blocked/frozen players (power ups).
+    while (newPlayers[nextTurn].visits.length >= HIGH_SCORE_VISITS) nextTurn = (nextTurn + 1) % newPlayers.length;
     if (game.powerUpsEnabled) {
       let guards = 0;
       while (guards < newPlayers.length) {
@@ -1134,8 +1110,8 @@ function HighScoreBoard({ game, setGame, settings, toast, music, onQuit, setGame
             np.visits.push({ darts: [], scored: 0, remaining: np.score, leg: 1, mode: 'highscore', date: new Date().toISOString(), frozen: true });
           }
           toast(`${np.name} ${flag === 'frozen' ? 'is frozen' : 'is blocked'} — visit skipped.`);
-          nextTurn = (nextTurn + 1) % game.players.length;
-          while (newPlayers[nextTurn].visits.length >= HIGH_SCORE_VISITS) nextTurn = (nextTurn + 1) % game.players.length;
+          nextTurn = (nextTurn + 1) % newPlayers.length;
+          while (newPlayers[nextTurn].visits.length >= HIGH_SCORE_VISITS) nextTurn = (nextTurn + 1) % newPlayers.length;
           guards++;
         } else break;
       }
@@ -1211,18 +1187,214 @@ function HighScoreBoard({ game, setGame, settings, toast, music, onQuit, setGame
   );
 }
 
-// ── Showdown intro ────────────────────────────────────────────────────
-// Full-screen animated "VS" reveal of players (or teams) before a match.
-// Tap anywhere to dismiss and start playing. Supports up to 4 players/teams
-// in a dynamic grid with no scrolling.
+function BattleBoard({ game, setGame, settings, toast, music, onQuit, setGames, setPlayers, popups, onGameOver }: {
+  game: Game; setGame: (g: Game | null) => void; settings: Settings; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void;
+}) {
+  const [targetId, setTargetId] = useState<string | null>(null);
+  const [shaking, setShaking] = useState<Record<string, number>>({});
+  const [lastHit, setLastHit] = useState<{ target: string; damage: number } | null>(null);
+  const p = game.players[game.turn];
+  const others = [...game.players.slice(game.turn + 1), ...game.players.slice(0, game.turn)];
+  const alive = game.players.filter(pl => !pl.defeated);
+  const aliveOthers = others.filter(pl => !pl.defeated);
+
+  useEffect(() => {
+    if (aliveOthers.length === 1) setTargetId(aliveOthers[0].id);
+    else setTargetId(null);
+  }, [game.turn, aliveOthers.length]);
+
+  const triggerShake = (id: string) => {
+    setShaking(s => ({ ...s, [id]: (s[id] || 0) + 1 }));
+  };
+
+  const addDart = (base: number, mult: number, labelOverride?: string, isBull?: boolean) => {
+    const maxDarts = (game.powerUpsEnabled && (game.players[game.turn] as any)._fourthDart) ? 4 : 3;
+    if (game.darts.length >= maxDarts) { toast(`${maxDarts} darts already`); return; }
+    let value: number, label: string;
+    if (isBull) { value = 50; label = 'Bull'; }
+    else if (base === 25) { value = mult === 2 ? 50 : 25; label = mult === 2 ? 'Bull' : '25'; }
+    else if (base === 0) { value = 0; label = 'Miss'; }
+    else { value = base * mult; label = (mult === 2 ? 'D' : mult === 3 ? 'T' : '') + base; }
+    const dart = { value, label: labelOverride || label, base, mult: isBull ? 2 : (base === 25 && value === 50 ? 2 : mult), isDouble: !!(isBull || (base === 25 && value === 50) || mult === 2), isOuter: false };
+    Sound.play('dart', { score: value }, settings);
+    let next: Game = { ...game, darts: [...game.darts, dart], mult: 1 };
+    if (game.powerUpsEnabled) next = applyCharge(next, game.turn, chargeFromDart(dart, settings), settings);
+    setGame(next);
+  };
+
+  const undoDart = () => { if (game.darts.length) setGame({ ...game, darts: game.darts.slice(0, -1) }); };
+
+  const enterVisit = () => {
+    if (!game.darts.length) { toast('Add at least one dart'); return; }
+    const cur0 = game.players[game.turn] as any;
+    const surgeActive = !!cur0._surgeNext;
+    const rawScored = game.darts.reduce((a, d) => a + d.value, 0);
+    const scored = surgeActive ? rawScored * 2 : rawScored;
+    const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
+    const cur = newPlayers[game.turn] as any;
+    if (cur._surgeNext) delete cur._surgeNext;
+    if (cur._fourthDart) delete cur._fourthDart;
+
+    let target = targetId;
+    const aliveTargets = newPlayers.filter((pl: any) => pl.id !== cur.id && !pl.defeated);
+    if (aliveTargets.length === 1) target = aliveTargets[0].id;
+    if (!target) { toast('Pick a target to attack'); return; }
+    const victim = newPlayers.find((pl: any) => pl.id === target);
+    if (!victim || victim.defeated) { toast('That opponent is already defeated'); return; }
+
+    const damage = computeBattleDamage(scored, cur.powerPct || 0, victim.armorPct || 0, settings);
+    victim.hp = Math.max(0, (victim.hp || 0) - damage);
+    cur.damageDealt = (cur.damageDealt || 0) + damage;
+    victim.damageTaken = (victim.damageTaken || 0) + damage;
+    cur.attacks = [...(cur.attacks || []), { target: victim.id, damage, visit: cur.visits.length + 1, date: new Date().toISOString() }];
+    cur.score += scored;
+    cur.visits.push({ darts: [...game.darts], scored, remaining: cur.hp, leg: 1, mode: 'battle', date: new Date().toISOString() });
+    cur.dartsThrown += game.darts.length;
+    Sound.play('impact', {}, settings);
+    setLastHit({ target: victim.id, damage });
+    triggerShake(victim.id);
+
+    if (victim.hp <= 0 && !victim.defeated) {
+      victim.defeated = true;
+      popups.setKill({ killer: cur.name, victim: victim.name });
+      Sound.play('kill', {}, settings);
+    }
+
+    if (settings.popups.scores) {
+      for (const sp of SCORE_POPUPS) { if (scored >= sp.min) { popups.setMilestone({ emoji: sp.emoji, title: sp.title, sub: sp.sub }); Sound.play('milestone', {}, settings); break; } }
+    }
+
+    const remainingAlive = newPlayers.filter((pl: any) => !pl.defeated);
+    const finishedState = { ...game, players: newPlayers, darts: [], mult: 1 };
+    if (remainingAlive.length <= 1) {
+      const winner = remainingAlive[0] || null;
+      setTimeout(() => finishSimpleGame(finishedState, winner, settings, setGame, setGames, setPlayers, popups, music, [], []), 1200);
+      return;
+    }
+    Sound.play('enter', {}, settings);
+    let nextTurn = (game.turn + 1) % newPlayers.length;
+    while (newPlayers[nextTurn].defeated) nextTurn = (nextTurn + 1) % newPlayers.length;
+    if (game.powerUpsEnabled) {
+      let guards = 0;
+      while (guards < newPlayers.length) {
+        const np = newPlayers[nextTurn] as any;
+        if (np._blockedNext || np._frozenNext) {
+          const flag = np._blockedNext ? 'blocked' : 'frozen';
+          delete np._blockedNext; delete np._frozenNext;
+          if (flag === 'frozen') {
+            np.visits.push({ darts: [], scored: 0, remaining: np.hp, leg: 1, mode: 'battle', date: new Date().toISOString(), frozen: true });
+          }
+          toast(`${np.name} ${flag === 'frozen' ? 'is frozen' : 'is blocked'} — visit skipped.`);
+          nextTurn = (nextTurn + 1) % newPlayers.length;
+          while (newPlayers[nextTurn].defeated) nextTurn = (nextTurn + 1) % newPlayers.length;
+          guards++;
+        } else break;
+      }
+    }
+    setGame({ ...finishedState, turn: nextTurn });
+  };
+
+  if (game.finished) return <GameOver game={game} onNewGame={() => { setGame(null); onGameOver(); music.startContext('setup', settings); }} onViewStats={() => { setGame(null); onGameOver(); }} />;
+
+  const hpPct = (pl: any) => Math.max(0, Math.min(100, ((pl.hp || 0) / (pl.maxHp || 1)) * 100));
+
+  return (
+    <div className="view-noscroll">
+      <div className="play-current">
+        <div className="pc-header">
+          <div className="row" style={{ gap: 8 }}>
+            <span className="avatar" style={{ width: 32, height: 32, fontSize: 13, background: p.color }}>{initials(p.name)}</span>
+            <span className="pc-name">{p.name}</span>
+          </div>
+          <span className="muted small">BATTLE · {alive.length} ALIVE</span>
+        </div>
+        <div className="pc-remaining" style={{ fontSize: 28 }}>{p.hp} HP</div>
+        <div className="checkout-hint center">❤️ {p.hp}/{p.maxHp} · 🛡️ {p.armorPct}% armor · ⚡ {p.powerPct}% power</div>
+        <div style={{ width: '100%', height: 8, borderRadius: 4, background: 'var(--bg-3)', overflow: 'hidden', margin: '4px 0' }}>
+          <div style={{ height: '100%', width: `${hpPct(p)}%`, background: p.color, transition: 'width .3s' }} />
+        </div>
+        <div className="pc-slots">
+          {[0, 1, 2].map(i => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
+        </div>
+        <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{game.darts.reduce((a, d) => a + d.value, 0)}</b>{lastHit && lastHit.target ? <span style={{ marginLeft: 8, color: 'var(--danger)' }}>−{lastHit.damage} dmg</span> : null}</div>
+        {aliveOthers.length > 1 && (
+          <div style={{ width: '100%', marginTop: 6 }}>
+            <div className="muted small" style={{ marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Attack target</div>
+            <div className="row wrap" style={{ gap: 6 }}>
+              {aliveOthers.map(pl => (
+                <button key={pl.id} className="pill" style={{ background: targetId === pl.id ? pl.color : 'var(--bg-3)', color: targetId === pl.id ? '#0b0e13' : 'var(--text)', cursor: 'pointer' }}
+                  onClick={() => setTargetId(pl.id)}>
+                  <span className="avatar" style={{ width: 18, height: 18, fontSize: 9, background: targetId === pl.id ? 'rgba(0,0,0,.2)' : pl.color }}>{initials(pl.name)}</span>{pl.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <PowerUpBar game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
+          const next = activatePowerUp(game, game.turn, settings, toast);
+          if (next) setGame(next);
+        }} />
+      </div>
+
+      <div className="play-others">
+        {others.map(pl => {
+          const shake = shaking[pl.id] || 0;
+          const defeated = pl.defeated;
+          return (
+            <div key={`${pl.id}-${shake}`} className="play-other" style={{
+              ...(defeated ? { opacity: 0.4, filter: 'grayscale(.6)' } : {}),
+              animation: shake > 0 ? `dmgShake${shake % 2 === 0 ? 'B' : 'A'} .4s ease` : undefined,
+            }}
+            >
+              <div className="row between">
+                <div className="row" style={{ gap: 6 }}>
+                  <span className="avatar" style={{ width: 22, height: 22, fontSize: 10, background: pl.color }}>{initials(pl.name)}</span>
+                  <span className="po-name">{pl.name}</span>
+                  {defeated && <span className="pill" style={{ fontSize: 9, background: '#ef4444', color: '#fff' }}>DEFEATED</span>}
+                </div>
+                <span className="pill" style={{ fontSize: 10 }}>{pl.hp} HP</span>
+              </div>
+              <div style={{ marginTop: 4, height: 6, borderRadius: 3, background: 'var(--bg-3)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${hpPct(pl)}%`, background: pl.color, transition: 'width .3s' }} />
+              </div>
+              <div className="po-sub">🛡️ {pl.armorPct}% · ⚡ {pl.powerPct}%{pl.damageDealt ? ` · 💥 ${pl.damageDealt}` : ''}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="play-input">
+        <div className="pad-card">
+          <div className="mult">
+            <button className={game.mult === 1 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 1 })}>Single</button>
+            <button className={game.mult === 2 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 2 })}>Double</button>
+            <button className={game.mult === 3 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 3 })}>Triple</button>
+          </div>
+          <div className="keypad">
+            {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20].map(n => (
+              <button key={n} className="key" onClick={() => addDart(n, game.mult)}>{n}</button>
+            ))}
+            <button className="key" style={{ background: 'color-mix(in srgb,var(--accent) 20%,var(--bg-3))' }} onClick={() => addDart(25, game.mult === 2 ? 2 : 1)}>25</button>
+            <button className="key" style={{ gridColumn: 'span 2', background: 'color-mix(in srgb,var(--accent) 30%,var(--bg-3))' }} onClick={() => addDart(50, 1, 'Bull', true)}>Bull<br /><small>50</small></button>
+            <button className="key" style={{ gridColumn: 'span 2', color: 'var(--muted)' }} onClick={() => addDart(0, 1, '0')}>Miss</button>
+          </div>
+          <div className="row" style={{ gap: 8, marginTop: 8 }}>
+            <button className="btn block ghost" onClick={undoDart}>↶ Undo dart</button>
+            <button className="btn block primary" onClick={enterVisit}>Attack!</button>
+          </div>
+        </div>
+      </div>
+      <button className="btn danger sm" style={{ alignSelf: 'flex-end' }} onClick={() => { if (confirm('Quit this game?')) onQuit(); }}>Quit</button>
+    </div>
+  );
+}
+
 function Showdown({ game, players, settings, onClose }: {
   game: Game; players: Player[]; settings: Settings; music: MusicEngine; onClose: () => void;
 }) {
   const teamMode = !!game.teamMode;
   const teamCount = game.teamCount || 2;
 
-  // Build the list of "sides" to display. In team mode each side is a team
-  // with its roster; in solo mode each side is a single player.
   const sides = useMemo(() => {
     if (!teamMode) {
       return game.players.map((pl, i) => ({ kind: 'player' as const, idx: i, name: pl.name, color: pl.color, members: [{ id: pl.id, name: pl.name, color: pl.color }] }));
@@ -1234,14 +1406,12 @@ function Showdown({ game, players, settings, onClose }: {
     });
   }, [game.players, teamMode, teamCount]);
 
-  // Play the VS impact sound shortly after mount, after the initial swell.
   useEffect(() => {
     const t = setTimeout(() => Sound.play('vs', {}, settings), 700);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Play each player's entrance sound in showdown card order, staggered.
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
     sides.forEach((s, i) => {
