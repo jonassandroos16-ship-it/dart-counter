@@ -115,7 +115,8 @@ function playSfxByName(ctx: AudioContext, name: string, vol: number, startOffset
       osc(ctx, master, 180, t, 0.14, 'sine', 0.6);
       noiseBurst(ctx, master, t, 0.06, 0.3, 2000, 1500);
       break;
-    case 'win': {\n      const notes = [523, 659, 784, 1047];
+    case 'win': {
+      const notes = [523, 659, 784, 1047];
       notes.forEach((f, i) => osc(ctx, master, f, t + i * 0.12, 0.4, 'triangle', 0.4));
       break;
     }
@@ -123,16 +124,19 @@ function playSfxByName(ctx: AudioContext, name: string, vol: number, startOffset
       sweep(ctx, master, t, 0.5, 220, 60, 'sawtooth', 0.6);
       noiseBurst(ctx, master, t, 0.3, 0.3, 600, 100);
       break;
-    case 'milestone': {\n      const notes = [523, 659, 784, 1047, 1319];
+    case 'milestone': {
+      const notes = [523, 659, 784, 1047, 1319];
       notes.forEach((f, i) => osc(ctx, master, f, t + i * 0.08, 0.3, 'triangle', 0.4));
       break;
     }
-    case 'levelup': {\n      const notes = [392, 523, 659, 784, 1047, 1319, 1568];
+    case 'levelup': {
+      const notes = [392, 523, 659, 784, 1047, 1319, 1568];
       notes.forEach((f, i) => osc(ctx, master, f, t + i * 0.10, 0.35, 'triangle', 0.4));
       osc(ctx, master, 2093, t + 0.7, 0.6, 'sine', 0.2);
       break;
     }
-    case 'title': {\n      const notes = [659, 784, 1047, 1319];
+    case 'title': {
+      const notes = [659, 784, 1047, 1319];
       notes.forEach((f, i) => osc(ctx, master, f, t + i * 0.10, 0.4, 'sine', 0.4));
       break;
     }
@@ -140,7 +144,8 @@ function playSfxByName(ctx: AudioContext, name: string, vol: number, startOffset
       sweep(ctx, master, t, 0.6, 180, 50, 'sine', 0.7);
       noiseBurst(ctx, master, t, 0.4, 0.4, 500, 100);
       break;
-    case 'record': {\n      const notes = [392, 523, 659, 784, 1047, 1319];
+    case 'record': {
+      const notes = [392, 523, 659, 784, 1047, 1319];
       notes.forEach((f, i) => osc(ctx, master, f, t + i * 0.10, 0.3, 'triangle', 0.4));
       break;
     }
@@ -158,7 +163,8 @@ function playPlayerSoundByName(ctx: AudioContext, id: PlayerSoundId, vol: number
   master.connect(ctx.destination);
   const t = startOffset;
   switch (id) {
-    case 'hero': {\n      // Bright rising fanfare: C-E-G-C arpeggio.
+    case 'hero': {
+      // Bright rising fanfare: C-E-G-C arpeggio.
       const notes = [523.25, 659.25, 783.99, 1046.5];
       notes.forEach((f, i) => {
         osc(ctx, master, f, t + i * 0.12, 0.3, 'triangle', 0.45);
@@ -166,7 +172,8 @@ function playPlayerSoundByName(ctx: AudioContext, id: PlayerSoundId, vol: number
       });
       break;
     }
-    case 'villain': {\n      // Dark low brass stab + descending tritone.
+    case 'villain': {
+      // Dark low brass stab + descending tritone.
       osc(ctx, master, 110, t, 0.5, 'sawtooth', 0.5);
       osc(ctx, master, 146.83, t, 0.5, 'sawtooth', 0.3); // D — tritone above A
       noiseBurst(ctx, master, t, 0.18, 0.25, 600, 80);
@@ -174,13 +181,15 @@ function playPlayerSoundByName(ctx: AudioContext, id: PlayerSoundId, vol: number
       osc(ctx, master, 98, t + 0.35, 0.3, 'sine', 0.2);
       break;
     }
-    case 'cyborg': {\n      // Robotic chirp + servo whine.
+    case 'cyborg': {
+      // Robotic chirp + servo whine.
       const blips = [880, 1320, 880, 1760];
       blips.forEach((f, i) => osc(ctx, master, f, t + i * 0.08, 0.07, 'square', 0.35));
       sweep(ctx, master, t + 0.32, 0.4, 400, 1200, 'sawtooth', 0.25);
       break;
     }
-    case 'mystic': {\n      // Shimmering chime — high sine cluster with slow vibrato.
+    case 'mystic': {
+      // Shimmering chime — high sine cluster with slow vibrato.
       const notes = [783.99, 987.77, 1174.66, 1567.98];
       notes.forEach((f, i) => {
         const o = ctx.createOscillator();
@@ -197,13 +206,15 @@ function playPlayerSoundByName(ctx: AudioContext, id: PlayerSoundId, vol: number
       });
       break;
     }
-    case 'beast': {\n      // Aggressive growl — low sawtooth + noise burst with downward sweep.
+    case 'beast': {
+      // Aggressive growl — low sawtooth + noise burst with downward sweep.
       osc(ctx, master, 80, t, 0.6, 'sawtooth', 0.55);
       sweep(ctx, master, t, 0.5, 220, 70, 'sawtooth', 0.35);
       noiseBurst(ctx, master, t, 0.4, 0.4, 800, 100);
       break;
     }
-    case 'champion': {\n      // Triumphant brass + crowd-roar swell.
+    case 'champion': {
+      // Triumphant brass + crowd-roar swell.
       const notes = [392, 523.25, 659.25, 783.99];
       notes.forEach((f, i) => osc(ctx, master, f, t + i * 0.1, 0.5, 'sawtooth', 0.4));
       // Crowd roar: filtered noise swell.

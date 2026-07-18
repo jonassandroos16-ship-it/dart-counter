@@ -2,7 +2,8 @@ export type PlayerSoundId = 'none' | 'hero' | 'villain' | 'cyborg' | 'mystic' | 
 
 export interface PlayerAttributes {
   health: number;      // current max health (starts 400)
-  armor: number;       // current armor % (starts 0)
+  armor: number;       // current armor % (starts 0, capped at 60)
+  power: number;       // current power % — boosts attack damage (starts 0)
   pointsAvailable: number; // unspent attribute points
 }
 
@@ -75,6 +76,15 @@ export interface GamePlayer {
   powerUpCharge?: number;   // 0..100 — fills from doubles/triples/bullseyes
   powerUpUsed?: boolean;    // true once the equipped power up has been used this match
   powerUpId?: string | null; // snapshot of the equipped power up at game start
+  // Battle mode state (only present when game.mode === 'battle').
+  hp?: number;              // current health points (decreases when attacked)
+  maxHp?: number;           // snapshot of max HP at game start
+  armorPct?: number;        // snapshot of armor % at game start
+  powerPct?: number;        // snapshot of power % at game start
+  defeated?: boolean;       // true when HP hits 0
+  attacks?: { target: string; damage: number; visit: number; date: string }[];
+  damageDealt?: number;     // total damage dealt this match
+  damageTaken?: number;     // total damage taken this match
 }
 
 export interface Game {
@@ -164,8 +174,14 @@ export interface PowerUpScalingConfig {
   attributePointsPerLevel: number; // attribute points per level
   attributeStartHealth: number;
   attributeStartArmor: number;
+  attributeStartPower: number;
   healthPerPoint: number;   // HP gained per point spent on health
   armorPerPoint: number;     // armor % gained per point spent on armor
+  powerPerPoint: number;     // power % gained per point spent on power
+  armorMax: number;          // hard cap for armor % (default 60)
+  powerMax: number;          // hard cap for power % (default 100)
+  battleBaseDamage: number;  // base attack damage per visit in battle mode
+  battlePowerBonus: number;  // extra damage per point of power %
 }
 
 export interface Settings {
