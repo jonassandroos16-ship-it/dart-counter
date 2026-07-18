@@ -186,7 +186,7 @@ canvas { width: 100%; display:block; }
 .xp-bar { height:6px; border-radius:3px; background:var(--bg-3); overflow:hidden; margin-top:4px; }
 .xp-bar > div { height:100%; background:var(--accent); border-radius:3px; transition:width .4s ease; }
 .xp-pill { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:999px; background:color-mix(in srgb,var(--accent) 20%,var(--bg-3)); font-size:11px; font-weight:700; color:var(--accent); }
-.title-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:6px; background:color-mix(in srgb,var(--accent) 15%,var(--bg-3)); font-size:11px; font-weight:700; }
+.title-badge { display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:8px; background:color-mix(in srgb,var(--accent) 15%,var(--bg-3)); font-size:13px; font-weight:700; line-height:1.2; white-space:nowrap; max-width:100%; }
 
 .levelup-bg { position:fixed; inset:0; background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; z-index:70; padding:16px; animation:msFade .3s ease; }
 .levelup { text-align:center; animation:msPop .4s cubic-bezier(.18,.89,.32,1.28); }
