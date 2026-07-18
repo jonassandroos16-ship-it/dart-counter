@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Game, GamePlayer, GameRecord, Player, Settings } from './types';
 import { MODES, ATC_TARGETS, atcLabel, BUILTIN_TITLES, buildTitleCheck, getTitleInfo, SCORE_POPUPS, MILESTONES } from './constants';
 import { createGame, recordFromGame, checkoutHint, leadTrailBadge, visitAvg, levelFromXP, getPlayerXPById, allVisitsFor } from './logic';
@@ -6,6 +6,7 @@ import { initials } from './store';
 import { Sound } from './sound';
 import type { MusicEngine } from './music';
 import type { PopupControls } from './Popups';
+import { computeGameBadges, getBadgeInfo, BADGES } from './badges';
 
 interface Props {
   players: Player[];
@@ -112,7 +113,7 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
   setGames: (updater: any) => void; setPlayers: (updater: any) => void; toast: (m: string) => void;
   music: MusicEngine; onQuit: () => void; onGameOver: () => void; popups: PopupControls;
 }) {
-  if (game.atc) return <AtcBoard game={game} setGame={setGame} settings={settings} toast={toast} music={music} onQuit={onQuit} setGames={setGames} />;
+  if (game.atc) return <AtcBoard game={game} setGame={setGame} settings={settings} toast={toast} music={music} onQuit={onQuit} setGames={setGames} setPlayers={setPlayers} />;
   if (game.mode === 'killer') return <KillerBoard game={game} setGame={setGame} settings={settings} toast={toast} music={music} onQuit={onQuit} setGames={setGames} setPlayers={setPlayers} popups={popups} onGameOver={onGameOver} />;
   if (game.mode === 'highscore') return <HighScoreBoard game={game} setGame={setGame} settings={settings} toast={toast} music={music} onQuit={onQuit} setGames={setGames} setPlayers={setPlayers} popups={popups} onGameOver={onGameOver} />;
   if (game.finished) return <GameOver game={game} onNewGame={() => { setGame(null); onGameOver(); music.startContext('setup', settings); }} onViewStats={() => { setGame(null); onGameOver(); }} />;
@@ -122,6 +123,8 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
   const projected = game.practice ? p.score + buffScored : p.score - buffScored;
   const others = [...game.players.slice(game.turn + 1), ...game.players.slice(0, game.turn)];
   const throwOrder = (idx: number) => (idx - game.roundStartTurn + game.players.length) % game.players.length;
+  const curXp = getPlayerXPById(p.id, players);
+  const curBadge = getBadgeInfo(curXp.selectedBadge);
 
   const addDart = (base: number, mult: number, labelOverride?: string, isBull?: boolean) => {
     if (game.darts.length >= 3) { toast('3 darts already'); return; }
@@ -232,6 +235,7 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
       if (isTie && tiedIds) tiedIds.forEach(pid => awardXP(pid, Math.round(settings.xpConfig.win / 2), 'Tied the game', settings, setPlayers, popups));
     }
     finished.players.forEach(pl => checkTitleUnlocks(pl, settings, popups, setPlayers, finished, players, games));
+    awardBadges(finished, setPlayers);
     setGame(finished);
   };
 
@@ -241,7 +245,7 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
         <div className="pc-header">
           <div className="row" style={{ gap: 8 }}>
             <span className={`turn-order-badge${game.turn === game.roundStartTurn ? ' starter' : ''}`}>{throwOrder(game.turn) + 1}</span>
-            <span className="avatar" style={{ width: 32, height: 32, fontSize: 13, background: p.color }}>{initials(p.name)}</span>
+            <span className="avatar" style={{ width: 32, height: 32, fontSize: 16, background: p.color }}>{curBadge ? curBadge.icon : initials(p.name)}</span>
             <span className="pc-name">{p.name}</span>
           </div>
           <div className="row" style={{ gap: 6 }}>
@@ -263,13 +267,14 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
             const xpInfo = getPlayerXPById(pl.id, players);
             const li = levelFromXP(xpInfo.xp, settings);
             const ti = getTitleInfo(xpInfo.selectedTitle, settings.customTitles);
+            const bi = getBadgeInfo(xpInfo.selectedBadge);
             const badge = leadTrailBadge(pl, game);
             return (
               <div key={pl.id} className="play-other">
                 <div className="row between">
                   <div className="row" style={{ gap: 6 }}>
                     <span className={`turn-order-badge${game.players.indexOf(pl) === game.roundStartTurn ? ' starter' : ''}`} style={{ width: 18, height: 18, fontSize: 10 }}>{throwOrder(game.players.indexOf(pl)) + 1}</span>
-                    <span className="avatar" style={{ width: 22, height: 22, fontSize: 10, background: pl.color }}>{initials(pl.name)}</span>
+                    <span className="avatar" style={{ width: 22, height: 22, fontSize: 12, background: pl.color }}>{bi ? bi.icon : initials(pl.name)}</span>
                     <span className="po-name">{pl.name}</span>
                   </div>
                   <div className="row" style={{ gap: 4 }}>
@@ -311,8 +316,8 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
   );
 }
 
-function AtcBoard({ game, setGame, settings, toast, music, onQuit, setGames }: {
-  game: Game; setGame: (g: Game | null) => void; settings: Settings; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void;
+function AtcBoard({ game, setGame, settings, toast, music, onQuit, setGames, setPlayers }: {
+  game: Game; setGame: (g: Game | null) => void; settings: Settings; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void;
 }) {
   const p = game.players[game.turn];
   const total = ATC_TARGETS.length;
@@ -351,6 +356,7 @@ function AtcBoard({ game, setGame, settings, toast, music, onQuit, setGames }: {
       Sound.play('win', {}, settings);
       music.startContext('setup', settings);
       setGames((prev: GameRecord[]) => [...prev, recordFromGame(finished)]);
+      awardBadges(finished, setPlayers);
       setGame(finished);
       return;
     }
@@ -418,6 +424,8 @@ function GameOver({ game, onNewGame, onViewStats }: { game: Game; onNewGame: () 
   const isTie = !!game.tied && !!game.tiedPlayers && game.tiedPlayers.length > 1;
   const tiedNames = isTie ? (game.tiedPlayers || []).map(id => game.players.find(pl => pl.id === id)?.name || '').filter(Boolean) : [];
   const titleText = game.practice ? 'Practice complete' : isTie ? "It's a tie!" : (w ? `${w.name} wins!` : 'Game over');
+  const badgeMap = useMemo(() => computeGameBadges(game), [game]);
+  const anyBadges = Object.values(badgeMap).some((arr) => arr.length > 0);
   return (
     <div className="view-scroll">
       <div className="card center">
@@ -433,6 +441,32 @@ function GameOver({ game, onNewGame, onViewStats }: { game: Game; onNewGame: () 
             ];
           })}
         </div>
+        {anyBadges && (
+          <div style={{ margin: '14px 0', textAlign: 'left' }}>
+            <h3 style={{ margin: '0 0 8px', textAlign: 'center' }}>Badges Earned</h3>
+            {game.players.map(pl => {
+              const ids = badgeMap[pl.id] || [];
+              if (!ids.length) return null;
+              return (
+                <div key={pl.id} style={{ marginBottom: 10, padding: 10, borderRadius: 12, background: 'var(--bg-3)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontWeight: 700, marginBottom: 6, color: pl.color }}>{pl.name}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {ids.map((id) => {
+                      const b = getBadgeInfo(id);
+                      if (!b) return null;
+                      return (
+                        <div key={id} title={b.desc} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 999, background: 'color-mix(in srgb,var(--accent) 18%,var(--bg-2))', border: '1px solid color-mix(in srgb,var(--accent) 40%,var(--bg-2))' }}>
+                          <span style={{ fontSize: 18 }}>{b.icon}</span>
+                          <span style={{ fontWeight: 600, fontSize: 13 }}>{b.name}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
         <button className="btn primary block" onClick={onNewGame}>New Game</button>
         <button className="btn ghost block" style={{ marginTop: 8 }} onClick={onViewStats}>View Stats</button>
       </div>
@@ -508,6 +542,19 @@ function checkTitleUnlocks(pl: GamePlayer, settings: Settings, popups: PopupCont
   });
 }
 
+// Award badges earned in this finished game to each player's lifetime list.
+function awardBadges(game: Game, setPlayers: (updater: any) => void) {
+  const map = computeGameBadges(game);
+  setPlayers((prev: Player[]) => prev.map(p => {
+    const ids = map[p.id] || [];
+    if (!ids.length) return p;
+    const existing = new Set(p.unlockedBadges || []);
+    let changed = false;
+    ids.forEach((id) => { if (!existing.has(id)) { existing.add(id); changed = true; } });
+    return changed ? { ...p, unlockedBadges: Array.from(existing) } : p;
+  }));
+}
+
 function finishSimpleGame(g: Game, winner: GamePlayer | null, settings: Settings, setGame: (g: Game | null) => void, setGames: (updater: any) => void, setPlayers: (updater: any) => void, popups: PopupControls, music: MusicEngine, players: Player[], games: GameRecord[]) {
   const finished: Game = { ...g, finished: true, winner: winner ? winner.id : null, tied: false, tiedPlayers: null };
   Sound.play('win', {}, settings);
@@ -515,6 +562,7 @@ function finishSimpleGame(g: Game, winner: GamePlayer | null, settings: Settings
   setGames((prev: GameRecord[]) => [...prev, recordFromGame(finished)]);
   if (winner) awardXP(winner.id, settings.xpConfig.win, 'Winning the game', settings, setPlayers, popups);
   finished.players.forEach(pl => checkTitleUnlocks(pl, settings, popups, setPlayers, finished, players, games));
+  awardBadges(finished, setPlayers);
   setGame(finished);
 }
 

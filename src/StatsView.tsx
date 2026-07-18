@@ -4,6 +4,7 @@ import { getTitleInfo, MODES, MODE_KEYS } from './constants';
 import { playerStats, levelFromXP, getPlayerXP, bucketAverages, allVisitsFor, filterGamesByDate } from './logic';
 import { LineChart, BarChart, DartboardHeatmap } from './Charts';
 import { CalendarPicker, filterForPeriod, describeFilter, type Period } from './CalendarPicker';
+import { BADGES, getBadgeInfo } from './badges';
 
 export function StatsView({ players, games, settings }: { players: Player[]; games: any[]; settings: Settings }) {
   const [pid, setPid] = useState<string>(players[0]?.id || '');
@@ -101,6 +102,29 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
       </div>
       <div className="grid grid-3" style={{ marginBottom: 12 }}>
         {cells.map(([l, v]) => <div key={l} className="stat"><div className="v">{v}</div><div className="l">{l}</div></div>)}
+      </div>
+      <div className="card" style={{ marginBottom: 12 }}>
+        <div className="row between" style={{ marginBottom: 8 }}>
+          <h3 style={{ margin: 0 }}>Badges</h3>
+          <span className="muted small">{(xp.unlockedBadges || []).length} / {BADGES.length} unlocked</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 8 }}>
+          {BADGES.map((b) => {
+            const unlocked = (xp.unlockedBadges || []).includes(b.id);
+            return (
+              <div key={b.id} title={`${b.name} — ${b.desc}`} style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                padding: '8px 4px', borderRadius: 10, textAlign: 'center',
+                background: unlocked ? 'color-mix(in srgb,var(--accent) 14%,var(--bg-3))' : 'var(--bg-3)',
+                border: `1px solid ${unlocked ? 'color-mix(in srgb,var(--accent) 40%,var(--bg-3))' : 'var(--border)'}`,
+                opacity: unlocked ? 1 : 0.5,
+              }}>
+                <div style={{ fontSize: 22 }}>{unlocked ? b.icon : '🔒'}</div>
+                <div style={{ fontSize: 10, fontWeight: 700, lineHeight: 1.1 }}>{b.name}</div>
+              </div>
+            );
+          })}
+        </div>
       </div>
       <div className="tabbar">
         {(['Overall', 'Daily', 'Weekly', 'Monthly', 'Yearly'] as Period[]).map(t => (

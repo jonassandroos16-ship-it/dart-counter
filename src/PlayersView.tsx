@@ -4,6 +4,7 @@ import { COLORS, allTitles, getTitleInfo, conditionLabel, titleProgressInfo, typ
 import { levelFromXP, getPlayerXP, playerStats, allVisitsFor } from './logic';
 import { initials, uid } from './store';
 import { Modal } from './Popups';
+import { BADGES, getBadgeInfo } from './badges';
 
 export function PlayersView({ players, games, settings, setPlayers, toast }: {
   players: Player[]; games: any[]; settings: Settings;
@@ -12,6 +13,7 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
   const [editing, setEditing] = useState<Player | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [titlesFor, setTitlesFor] = useState<Player | null>(null);
+  const [badgesFor, setBadgesFor] = useState<Player | null>(null);
 
   return (
     <div>
@@ -25,23 +27,27 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
         const xp = getPlayerXP(p);
         const li = levelFromXP(xp.xp, settings);
         const ti = getTitleInfo(xp.selectedTitle, settings.customTitles);
+        const bi = getBadgeInfo(xp.selectedBadge);
+        const avatarContent = bi ? bi.icon : initials(p.name);
         return (
           <div key={p.id} className="card" style={{ padding: 12 }}>
             <div className="row between">
               <div className="row">
-                <div className="avatar" style={{ background: p.color }}>{initials(p.name)}</div>
+                <div className="avatar" style={{ background: p.color, fontSize: bi ? 18 : undefined }}>{avatarContent}</div>
                 <div>
                   <div className="row" style={{ gap: 6, alignItems: 'baseline' }}>
                     <span style={{ fontWeight: 700 }}>{p.name}</span>
                     <span className="xp-pill">Lvl {li.level}</span>
                     {ti ? <span className="title-badge">{ti.icon || ''} {ti.name}</span> : null}
+                    {bi ? <span className="title-badge" title={bi.desc}>{bi.icon} {bi.name}</span> : null}
                   </div>
-                  <div className="muted small">{s.games} games · {s.avg.toFixed(1)} avg · {s.n180} × 180 · {xp.xp} XP</div>
+                  <div className="muted small">{s.games} games · {s.avg.toFixed(1)} avg · {s.n180} × 180 · {xp.xp} XP · {(xp.unlockedBadges || []).length} badges</div>
                   <div className="xp-bar" style={{ width: 140 }}><div style={{ width: `${Math.round(li.xpIntoLevel / li.xpNeeded * 100)}%` }} /></div>
                 </div>
               </div>
               <div className="row" style={{ gap: 6 }}>
                 <button className="btn ghost sm" onClick={() => setTitlesFor(p)}>Titles</button>
+                <button className="btn ghost sm" onClick={() => setBadgesFor(p)}>Badges</button>
                 <button className="btn ghost sm" onClick={() => { setEditing(p); setIsNew(false); }}>Edit</button>
                 <button className="btn danger sm" onClick={() => { if (confirm(`Delete ${p.name}?`)) { setPlayers((prev: Player[]) => prev.filter(x => x.id !== p.id)); toast('Player deleted'); } }}>Delete</button>
               </div>
@@ -55,7 +61,58 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
         setEditing(null); toast(isNew ? 'Player added' : 'Saved');
       }} />}
       {titlesFor && <TitlesModal player={titlesFor} games={games} settings={settings} setPlayers={setPlayers} onClose={() => setTitlesFor(null)} toast={toast} />}
+      {badgesFor && <BadgesModal player={badgesFor} setPlayers={setPlayers} onClose={() => setBadgesFor(null)} toast={toast} />}
     </div>
+  );
+}
+
+function BadgesModal({ player, setPlayers, onClose, toast }: { player: Player; setPlayers: (updater: any) => void; onClose: () => void; toast: (m: string) => void }) {
+  const xp = getPlayerXP(player);
+  const unlocked = xp.unlockedBadges || [];
+  const equipped = xp.selectedBadge;
+  return (
+    <Modal onClose={onClose}>
+      <h3 style={{ marginBottom: 4 }}>Badges — {player.name}</h3>
+      <div className="muted small" style={{ marginBottom: 14 }}>Tap to equip a badge as your icon. {unlocked.length} / {BADGES.length} unlocked.</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 8, maxHeight: '50vh', overflow: 'auto' }}>
+        <button
+          onClick={() => { setPlayers((prev: Player[]) => prev.map(p => p.id === player.id ? { ...p, selectedBadge: null } : p)); toast('Badge removed'); }}
+          style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: 10, borderRadius: 10,
+            background: equipped === null ? 'color-mix(in srgb,var(--accent) 20%,var(--bg-3))' : 'var(--bg-3)',
+            border: `1px solid ${equipped === null ? 'var(--accent)' : 'var(--border)'}`,
+            cursor: 'pointer', color: 'inherit',
+          }}
+        >
+          <div className="avatar" style={{ background: player.color, width: 32, height: 32, fontSize: 12 }}>{initials(player.name)}</div>
+          <div style={{ fontSize: 11, fontWeight: 700 }}>None</div>
+        </button>
+        {BADGES.map((b) => {
+          const isUnlocked = unlocked.includes(b.id);
+          const isEquipped = equipped === b.id;
+          return (
+            <button
+              key={b.id}
+              disabled={!isUnlocked}
+              onClick={() => { setPlayers((prev: Player[]) => prev.map(p => p.id === player.id ? { ...p, selectedBadge: b.id } : p)); toast('Badge equipped'); }}
+              title={b.desc}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: 10, borderRadius: 10,
+                background: isEquipped ? 'color-mix(in srgb,var(--accent) 20%,var(--bg-3))' : 'var(--bg-3)',
+                border: `1px solid ${isEquipped ? 'var(--accent)' : 'var(--border)'}`,
+                opacity: isUnlocked ? 1 : 0.5,
+                cursor: isUnlocked ? 'pointer' : 'not-allowed', color: 'inherit',
+              }}
+            >
+              <div style={{ fontSize: 24 }}>{isUnlocked ? b.icon : '🔒'}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, textAlign: 'center', lineHeight: 1.1 }}>{b.name}</div>
+              {isEquipped ? <span className="xp-pill" style={{ fontSize: 9 }}>Equipped</span> : null}
+            </button>
+          );
+        })}
+      </div>
+      <button className="btn block ghost" style={{ marginTop: 14 }} onClick={onClose}>Close</button>
+    </Modal>
   );
 }
 
@@ -108,7 +165,7 @@ function TitlesModal({ player, games, settings, setPlayers, onClose, toast }: { 
     <Modal onClose={onClose}>
       <h3 style={{ marginBottom: 4 }}>Titles — {player.name}</h3>
       <div className="muted small" style={{ marginBottom: 14 }}>Tap to equip. Locked titles are earned through play.</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '85vh', overflow: 'auto' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '50vh', overflow: 'auto' }}>
         {sorted.map(({ t, unlocked, prog }) => {
           const equipped = xp.selectedTitle === t.id;
           const pct = prog ? prog.pct : 0;
