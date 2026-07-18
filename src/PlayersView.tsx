@@ -1,4 +1,4 @@
-import { useState } from 'react';
+'50vh' { useState } from 'react';
 import type { Player, Settings, CustomTitle } from './types';
 import { COLORS, allTitles, getTitleInfo, conditionLabel, titleProgressInfo, type TitleCtx } from './constants';
 import { levelFromXP, getPlayerXP, playerStats, allVisitsFor } from './logic';
@@ -108,7 +108,7 @@ function TitlesModal({ player, games, settings, setPlayers, onClose, toast }: { 
     <Modal onClose={onClose}>
       <h3 style={{ marginBottom: 4 }}>Titles — {player.name}</h3>
       <div className="muted small" style={{ marginBottom: 14 }}>Tap to equip. Locked titles are earned through play.</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '50vh', overflow: 'auto' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '85vh', overflow: 'auto' }}>
         {sorted.map(({ t, unlocked, prog }) => {
           const equipped = xp.selectedTitle === t.id;
           const pct = prog ? prog.pct : 0;
