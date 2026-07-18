@@ -52,6 +52,7 @@ export interface GamePlayer {
   killerNumber?: number;
   killerHits?: number;
   kills?: string[];
+  team?: number; // 0-indexed team id when team mode is active
 }
 
 export interface Game {
@@ -75,6 +76,12 @@ export interface Game {
   darts: Dart[];
   mult: number;
   atcDarts?: { hit: boolean; target: string }[];
+  teamMode?: boolean;            // true when playing team vs team
+  teamCount?: number;           // number of teams
+  teamLegsWon?: number[];       // legs won per team (parallel to team index)
+  teamTurn?: number;            // current team whose turn it is (0-indexed)
+  teamPlayerCursor?: number[];  // per-team index into its player rotation order
+  winningTeam?: number | null;  // team that won (for team mode)
 }
 
 export interface GameRecord {
@@ -88,6 +95,9 @@ export interface GameRecord {
   winner: string | null;
   tied: boolean;
   tiedPlayers: string[] | null;
+  teamMode?: boolean;
+  teamCount?: number;
+  winningTeam?: number | null;
   players: {
     id: string;
     name: string;
@@ -95,6 +105,7 @@ export interface GameRecord {
     legsWon: number;
     dartsThrown: number;
     visits: Visit[];
+    team?: number;
   }[];
 }
 

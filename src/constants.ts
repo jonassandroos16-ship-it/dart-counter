@@ -421,6 +421,7 @@ export function defaultSettings(): Settings {
   return {
     theme: 'dark', accent: '#22c55e', confirmReset: true, sound: true, music: true,
     musicSetupTrack: 'setup_calm', musicMatchTrack: 'match_drive',
+    voicePack: 'off', voiceVolume: 0.7, sfxVolume: 0.8,
     xpConfig: { win: 50, visit60: 5, visit80: 10, visit100: 15, visit120: 20, visit140: 25, visit180: 50, checkout: 10, perDart: 1, levelMult: 1.5, baseLevelXp: 100 },
     customTitles: [],
     popups: { scores: true, milestones: true, xp: true, titles: true },
