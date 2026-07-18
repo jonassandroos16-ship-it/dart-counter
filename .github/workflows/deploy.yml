@@ -24,8 +24,8 @@ jobs:
           node-version: 20
       - run: npm install
       - env:
-          VITE_SUPABASE_URL: https://mipbvfrzcqpemqexjfgn.supabase.co
-          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1pcGJ2ZnJ6Y3FwZW1xZXhqZmduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzNTQ5NTQsImV4cCI6MjA5OTkzMDk1NH0.fN8aNtdXxyOU3sEhsCykCf1icl7V5Z5TE7--R2yIADw
+          VITE_SUPABASE_URL: https://ulgwamsiuumwkgpolubj.supabase.co
+          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVsZ3dhbXNpdXVtd2tncG9sdWJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzNjAyMzgsImV4cCI6MjA5OTkzNjIzOH0.8L01K0TCh9HnOWYEO2qLhQKoc6bsDciiLZLzbEqdFVs
         run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -39,4 +39,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@v4
