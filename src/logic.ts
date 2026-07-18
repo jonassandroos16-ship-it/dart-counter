@@ -137,9 +137,13 @@ export function playerStats(playerId: string, games: GameRecord[]) {
   const totalScore = scoring.reduce((a: number, v: any) => a + v.scored, 0);
   const totalDarts = scoring.reduce((a: number, v: any) => a + v.darts.length, 0);
   const playerGames = games.filter(g => g.players.some(p => p.id === playerId));
-  const legsWon = playerGames.reduce((a, g) => a + (g.players.find(p => p.id === playerId)?.legsWon || 0), 0);
-  const gamesWon = playerGames.filter(g => g.winner === playerId).length;
-  const gamesTied = playerGames.filter(g => g.tied && g.tiedPlayers && g.tiedPlayers.includes(playerId)).length;
+  // Solo games (playing against yourself) don't count toward competitive
+  // stats — wins, legs, ties, win/tie rates. They still count as games
+  // played and contribute to scoring stats (avg, high score, 180s, etc.).
+  const competitiveGames = playerGames.filter(g => g.players.length >= 2);
+  const legsWon = competitiveGames.reduce((a, g) => a + (g.players.find(p => p.id === playerId)?.legsWon || 0), 0);
+  const gamesWon = competitiveGames.filter(g => g.winner === playerId).length;
+  const gamesTied = competitiveGames.filter(g => g.tied && g.tiedPlayers && g.tiedPlayers.includes(playerId)).length;
   const checkouts = scoring.filter((v: any) => v.remaining === 0);
   const highCheckout = Math.max(0, ...checkouts.map((v: any) => v.scored));
   const highScore = Math.max(0, ...scoring.map((v: any) => v.scored));
@@ -156,8 +160,8 @@ export function playerStats(playerId: string, games: GameRecord[]) {
     });
     return c ? s / c * 3 : 0;
   })();
-  const winRate = playerGames.length ? gamesWon / playerGames.length * 100 : 0;
-  const tieRate = playerGames.length ? gamesTied / playerGames.length * 100 : 0;
+  const winRate = competitiveGames.length ? gamesWon / competitiveGames.length * 100 : 0;
+  const tieRate = competitiveGames.length ? gamesTied / competitiveGames.length * 100 : 0;
 
   // Darts thrown (all visits, incl. bust/atc) and darts-to-finish per completed leg
   let dartsThrown = 0;
@@ -179,7 +183,7 @@ export function playerStats(playerId: string, games: GameRecord[]) {
   const finishMax = finishDartsList.length ? Math.max(...finishDartsList) : 0;
   const finishAvg = finishDartsList.length ? finishDartsList.reduce((a, b) => a + b, 0) / finishDartsList.length : 0;
 
-  return { games: playerGames.length, gamesWon, gamesTied, legsWon, winRate, tieRate, avg: totalDarts ? totalScore / totalDarts * 3 : 0, first9, highScore, highCheckout, n180, n140, tons, visits, dartsThrown, finishMin, finishMax, finishAvg, legsFinished: finishDartsList.length };
+  return { games: playerGames.length, competitiveGames: competitiveGames.length, gamesWon, gamesTied, legsWon, winRate, tieRate, avg: totalDarts ? totalScore / totalDarts * 3 : 0, first9, highScore, highCheckout, n180, n140, tons, visits, dartsThrown, finishMin, finishMax, finishAvg, legsFinished: finishDartsList.length };
 }
 
 export function bucketAverages(visits: any[], period: string) {
@@ -218,7 +222,8 @@ export function computeUnlockedTitlesForPlayer(
   customTitles: CustomTitle[] = [],
 ): string[] {
   const playerGames = games.filter(g => g.players.some(p => p.id === playerId));
-  const gamesWon = playerGames.filter(g => g.winner === playerId).length;
+  // Solo games don't count toward competitive wins.
+  const gamesWon = playerGames.filter(g => g.players.length >= 2 && g.winner === playerId).length;
   const gamesPlayed = playerGames.length;
   const lifetimeVisits: any[] = [];
   playerGames.forEach(g => {

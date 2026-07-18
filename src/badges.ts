@@ -137,6 +137,9 @@ export function computeGameBadges(game: any): Record<string, string[]> {
   for (const pl of game.players || []) {
     out[pl.id] = [];
   }
+  // Solo games (playing against yourself) don't earn badges — there's no
+  // opponent to compete against, so comparative awards are meaningless.
+  if ((game?.players || []).length < 2) return out;
   for (const badge of BADGES) {
     if (badge.kind === 'in-game') {
       for (const pl of game.players || []) {
