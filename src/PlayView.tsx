@@ -52,6 +52,7 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
     const g = createGame(mode, ids, players, dbl, legs, teamMode, teamAssignment);
     Sound.play('showdown', {}, settings);
     music.stop();
+    setActiveGame(g);
     setShowdown(g);
   }} />;
 }
