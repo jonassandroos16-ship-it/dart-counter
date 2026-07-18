@@ -8,6 +8,7 @@ import type { MusicEngine } from './music';
 import type { PopupControls } from './Popups';
 import { computeGameBadges, getBadgeInfo } from './badges';
 import { BadgeInfoPopup } from './Popups';
+import { getPowerUpInfo } from './powerups';
 
 interface Props {
   players: Player[];
@@ -22,6 +23,81 @@ interface Props {
   onQuit: () => void;
   onGameOver: () => void;
   popups: PopupControls;
+}
+
+// ── Power-up charge helpers ───────────────────────────────────────────
+// Charge a player's equipped power-up from a thrown dart. Doubles, triples
+// and bullseyes add charge; higher scores add a small bonus scaled by score.
+
+function chargeFromDart(dart: { value: number; isDouble: boolean; mult: number; base: number }, settings: Settings): number {
+  const cfg = settings.powerUpScaling;
+  let c = 0;
+  const isBull = dart.value === 50 || dart.value === 25;
+  if (isBull) c += cfg.chargePerBull;
+  else if (dart.mult === 3) c += cfg.chargePerTriple;
+  else if (dart.mult === 2 || dart.isDouble) c += cfg.chargePerDouble;
+  c += dart.value * cfg.chargePerScorePoint;
+  return c;
+}
+
+function applyCharge(game: Game, playerIdx: number, charge: number, settings: Settings): Game {
+  if (!game.powerUpsEnabled) return game;
+  const cap = settings.powerUpScaling.chargeMax;
+  const players = game.players.map((pl, i) => {
+    if (i !== playerIdx) return pl;
+    if (pl.powerUpUsed) return pl;
+    const next = Math.min(cap, (pl.powerUpCharge || 0) + charge);
+    return { ...pl, powerUpCharge: next };
+  });
+  return { ...game, players };
+}
+
+function activatePowerUp(game: Game, playerIdx: number, settings: Settings, toast: (m: string) => void): Game | null {
+  if (!game.powerUpsEnabled) return null;
+  const pl = game.players[playerIdx];
+  if (!pl || pl.powerUpUsed) { toast('Power-up already used'); return null; }
+  const cap = settings.powerUpScaling.chargeMax;
+  if ((pl.powerUpCharge || 0) < cap) { toast('Power-up not fully charged'); return null; }
+  const puId = pl.powerUpId;
+  const pu = getPowerUpInfo(puId);
+  if (!pu) { toast('No power-up equipped'); return null; }
+  const { game: nextGame, message } = pu.apply(game, playerIdx);
+  const players = nextGame.players.map((p: any, i: number) => {
+    if (i !== playerIdx) return p;
+    const updated: any = { ...p, powerUpUsed: true, powerUpCharge: 0 };
+    if (puId === 'pu_fourth_dart') updated._fourthDart = true;
+    return updated;
+  });
+  toast(message);
+  Sound.playSfx('impact', settings);
+  return { ...nextGame, players };
+}
+
+// Renders the equipped power-up, its charge bar, and an Activate button.
+// Shown only when power-ups are enabled for this match.
+function PowerUpBar({ game, curIdx, settings, onActivate }: { game: Game; curIdx: number; settings: Settings; onActivate: () => void; toast: (m: string) => void }) {
+  if (!game.powerUpsEnabled) return null;
+  const pl = game.players[curIdx];
+  if (!pl) return null;
+  const pu = getPowerUpInfo(pl.powerUpId);
+  const cap = settings.powerUpScaling.chargeMax;
+  const charge = Math.min(cap, pl.powerUpCharge || 0);
+  const pct = Math.round((charge / cap) * 100);
+  const ready = !pl.powerUpUsed && charge >= cap && !!pu;
+  return (
+    <div style={{ width: '100%', marginTop: 6, padding: 10, borderRadius: 12, background: 'var(--bg-3)', border: '1px solid var(--border)' }}>
+      <div className="row between" style={{ marginBottom: 6 }}>
+        <div className="row" style={{ gap: 6 }}>
+          <span style={{ fontSize: 18 }}>{pu ? pu.icon : '🔒'}</span>
+          <span style={{ fontWeight: 700, fontSize: 13 }}>{pu ? pu.name : 'No power-up'}</span>
+        </div>
+        <span className="muted small">{pl.powerUpUsed ? 'Used' : ready ? 'Ready!' : `${pct}% charged`}</span>
+      </div>
+      <div className="xp-bar" style={{ width: '100%' }}><div style={{ width: `${pct}%`, background: ready ? 'var(--accent)' : 'color-mix(in srgb,var(--accent) 60%,var(--bg-3))' }} /></div>
+      {pu ? <div className="muted small" style={{ marginTop: 6, lineHeight: 1.3 }}>{pu.desc}</div> : null}
+      <button className="btn block primary" style={{ marginTop: 8 }} disabled={!ready} onClick={onActivate}>Activate Power-Up</button>
+    </div>
+  );
 }
 
 export function PlayView({ players, games, settings, activeGame, setActiveGame, setGames, setPlayers, toast, music, onQuit, onGameOver, popups }: Props) {
@@ -48,8 +124,8 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
     return <GameBoard game={game} setGame={setGame} settings={settings} players={players} games={games} setGames={setGames} setPlayers={setPlayers} toast={toast} music={music}
       onQuit={() => { setGame(null); onQuit(); }} onGameOver={onGameOver} popups={popups} />;
   }
-  return <SetupView players={players} onStart={(mode, ids, dbl, legs, teamMode, teamAssignment) => {
-    const g = createGame(mode, ids, players, dbl, legs, teamMode, teamAssignment);
+  return <SetupView players={players} onStart={(mode, ids, dbl, legs, teamMode, teamAssignment, powerUps) => {
+    const g = createGame(mode, ids, players, dbl, legs, teamMode, teamAssignment, powerUps);
     Sound.play('showdown', {}, settings);
     music.stop();
     setActiveGame(g);
@@ -57,12 +133,13 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
   }} />;
 }
 
-function SetupView({ players, onStart }: { players: Player[]; onStart: (mode: string, ids: string[], dbl: boolean, legs: number, teamMode: boolean, teamAssignment: number[]) => void }) {
+function SetupView({ players, onStart }: { players: Player[]; onStart: (mode: string, ids: string[], dbl: boolean, legs: number, teamMode: boolean, teamAssignment: number[], powerUps: boolean) => void }) {
   const [mode, setMode] = useState('301');
   const [doubleOut, setDoubleOut] = useState(false);
   const [legs, setLegs] = useState(1);
   const [picked, setPicked] = useState<string[]>(players.length ? [players[0].id] : []);
   const [teamMode, setTeamMode] = useState(false);
+  const [powerUps, setPowerUps] = useState(false);
   // team assignment aligned to `picked` indices; values are team ids (0-indexed).
   const [teams, setTeams] = useState<number[]>([]);
   const [teamCount, setTeamCount] = useState(2);
@@ -119,6 +196,17 @@ function SetupView({ players, onStart }: { players: Player[]; onStart: (mode: st
             {teamMode ? 'ON' : 'OFF'}
           </button>
         </div>
+
+        <div className="row between" style={{ margin: '0 0 10px' }}>
+          <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Power-Ups</span>
+          <button className="pill" style={{ background: powerUps ? 'var(--accent)' : 'var(--bg-3)', color: powerUps ? '#04150a' : 'var(--text)' }}
+            onClick={() => setPowerUps(v => !v)} title="Toggle to enable equipped power-ups for this match. Power-up matches are tracked separately in stats.">
+            {powerUps ? 'ON' : 'OFF'}
+          </button>
+        </div>
+        {powerUps && (
+          <div className="muted small" style={{ marginBottom: 10, fontStyle: 'italic' }}>Power-ups are active. Each player's equipped power-up charges from doubles, triples and bullseyes, then can be activated during play. Power-up games are tracked separately in Stats.</div>
+        )}
 
         {teamMode && (
           <>
@@ -183,7 +271,7 @@ function SetupView({ players, onStart }: { players: Player[]; onStart: (mode: st
           }
         </div>
         <button className="btn primary block" disabled={!picked.length || !teamValid}
-          onClick={() => { if (!picked.length || !teamValid) return; onStart(mode, picked, doubleOut, legs, teamMode, teamMode ? teams : []); }}>
+          onClick={() => { if (!picked.length || !teamValid) return; onStart(mode, picked, doubleOut, legs, teamMode, teamMode ? teams : [], powerUps); }}>
           Start Game
         </button>
       </div>
@@ -214,7 +302,8 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
   const curTeamColor = game.teamMode ? TEAM_COLORS[curTeam % TEAM_COLORS.length] : p.color;
 
   const addDart = (base: number, mult: number, labelOverride?: string, isBull?: boolean) => {
-    if (game.darts.length >= 3) { toast('3 darts already'); return; }
+    const maxDarts = (game.powerUpsEnabled && (game.players[game.turn] as any)._fourthDart) ? 4 : 3;
+    if (game.darts.length >= maxDarts) { toast(`${maxDarts} darts already`); return; }
     let value: number, label: string;
     if (isBull) { value = 50; label = 'Bull'; }
     else if (base === 25) { value = mult === 2 ? 50 : 25; label = mult === 2 ? 'Bull' : '25'; }
@@ -222,16 +311,24 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
     else { value = base * mult; label = (mult === 2 ? 'D' : mult === 3 ? 'T' : '') + base; }
     const dart = { value, label: labelOverride || label, base, mult: isBull ? 2 : (base === 25 && value === 50 ? 2 : mult), isDouble: !!(isBull || (base === 25 && value === 50) || mult === 2), isOuter: false };
     Sound.play('dart', { score: value }, settings);
-    setGame({ ...game, darts: [...game.darts, dart], mult: 1 });
+    let next: Game = { ...game, darts: [...game.darts, dart], mult: 1 };
+    if (game.powerUpsEnabled) next = applyCharge(next, game.turn, chargeFromDart(dart, settings), settings);
+    setGame(next);
   };
 
   const undoDart = () => { if (game.darts.length) setGame({ ...game, darts: game.darts.slice(0, -1) }); };
 
   const enterVisit = () => {
     if (!game.darts.length) { toast('Add at least one dart'); return; }
-    const scored = game.darts.reduce((a, d) => a + d.value, 0);
+    const cur0 = game.players[game.turn] as any;
+    const surgeActive = !!cur0._surgeNext;
+    const rawScored = game.darts.reduce((a, d) => a + d.value, 0);
+    const scored = surgeActive ? rawScored * 2 : rawScored;
     const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
-    const cur = newPlayers[game.turn];
+    const cur = newPlayers[game.turn] as any;
+    // Consume one-shot power-up flags on the current player.
+    if (cur._surgeNext) delete cur._surgeNext;
+    if (cur._fourthDart) delete cur._fourthDart;
 
     if (game.practice) {
       cur.score += scored;
@@ -306,6 +403,16 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
     }
 
     if (bust) {
+      if (cur._luckyMiss) {
+        delete cur._luckyMiss;
+        cur.visits.push({ darts: [...game.darts], scored: 0, remaining: cur.score, leg: game.leg, bust: true, luckyMiss: true, date: new Date().toISOString() });
+        Sound.play('enter', {}, settings);
+        toast('Lucky Miss! Bust cancelled — score stays.');
+        const thrown = [...game.thrownThisRound, cur.id];
+        const next = advanceTurn({ ...game, players: newPlayers, thrownThisRound: thrown, darts: [], mult: 1 });
+        setGame(next);
+        return;
+      }
       cur.visits.push({ darts: [...game.darts], scored: 0, remaining: cur.score, leg: game.leg, bust: true, date: new Date().toISOString() });
       Sound.play('bust', {}, settings);
       toast('Bust!');
@@ -341,7 +448,31 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
       const nextTurn = ros[nextTeam][cursors[nextTeam] % ros[nextTeam].length];
       return { ...g, turn: nextTurn, teamTurn: nextTeam, teamPlayerCursor: cursors };
     }
-    const turn = (g.turn + 1) % g.players.length;
+    let turn = (g.turn + 1) % g.players.length;
+    // Skip players blocked or frozen by a power up, consuming their flag.
+    if (g.powerUpsEnabled) {
+      let guards = 0;
+      while (guards < g.players.length) {
+        const np = g.players[turn] as any;
+        if (np._blockedNext || np._frozenNext) {
+          const flag = np._blockedNext ? 'blocked' : 'frozen';
+          g = { ...g, players: g.players.map((pl, i) => i === turn ? (() => { const c = { ...pl } as any; delete c._blockedNext; delete c._frozenNext; return c; })() : pl) };
+          if (flag === 'frozen') {
+            // Frozen visit: scores 0 and ends immediately — record an empty visit.
+            const frozenPl = g.players[turn];
+            const visits = [...frozenPl.visits, { darts: [], scored: 0, remaining: frozenPl.score, leg: g.leg, frozen: true, date: new Date().toISOString() }];
+            g = { ...g, players: g.players.map((pl, i) => i === turn ? { ...pl, visits } : pl), thrownThisRound: [...(g.thrownThisRound || []), frozenPl.id] };
+          } else {
+            g = { ...g, thrownThisRound: [...(g.thrownThisRound || []), g.players[turn].id] };
+          }
+          toast(`${g.players[turn].name} ${flag === 'frozen' ? 'is frozen' : 'is blocked'} — visit skipped.`);
+          turn = (turn + 1) % g.players.length;
+          guards++;
+        } else {
+          break;
+        }
+      }
+    }
     const checkedOutCount = g.checkedOutThisRound.length;
     const thrown = g.thrownThisRound || [];
     if (checkedOutCount > 0) {
@@ -417,6 +548,10 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
           {[0, 1, 2].map(i => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
         </div>
         <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{buffScored}</b> · Darts thrown: <b style={{ color: 'var(--text)' }}>{(p.visits.reduce((a, v) => a + v.darts.length, 0)) + game.darts.length}</b></div>
+        <PowerUpBar game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
+          const next = activatePowerUp(game, game.turn, settings, toast);
+          if (next) setGame(next);
+        }} />
       </div>
 
       {game.players.length > 1 && (
@@ -773,7 +908,8 @@ function KillerBoard({ game, setGame, settings, toast, music, onQuit, setGames, 
   const alive = game.players.filter(pl => !pl.eliminated);
 
   const addDart = (base: number, mult: number, labelOverride?: string, isBull?: boolean) => {
-    if (game.darts.length >= 3) { toast('3 darts already'); return; }
+    const maxDarts = (game.powerUpsEnabled && (game.players[game.turn] as any)._fourthDart) ? 4 : 3;
+    if (game.darts.length >= maxDarts) { toast(`${maxDarts} darts already`); return; }
     let value: number, label: string;
     if (isBull) { value = 50; label = 'Bull'; }
     else if (base === 25) { value = mult === 2 ? 50 : 25; label = mult === 2 ? 'Bull' : '25'; }
@@ -781,7 +917,9 @@ function KillerBoard({ game, setGame, settings, toast, music, onQuit, setGames, 
     else { value = base * mult; label = (mult === 2 ? 'D' : mult === 3 ? 'T' : '') + base; }
     const dart = { value, label: labelOverride || label, base, mult: isBull ? 2 : (base === 25 && value === 50 ? 2 : mult), isDouble: !!(isBull || (base === 25 && value === 50) || mult === 2), isOuter: false };
     Sound.play('dart', { score: value }, settings);
-    setGame({ ...game, darts: [...game.darts, dart], mult: 1 });
+    let next: Game = { ...game, darts: [...game.darts, dart], mult: 1 };
+    if (game.powerUpsEnabled) next = applyCharge(next, game.turn, chargeFromDart(dart, settings), settings);
+    setGame(next);
   };
 
   const undoDart = () => { if (game.darts.length) setGame({ ...game, darts: game.darts.slice(0, -1) }); };
@@ -789,7 +927,8 @@ function KillerBoard({ game, setGame, settings, toast, music, onQuit, setGames, 
   const enterVisit = () => {
     if (!game.darts.length) { toast('Add at least one dart'); return; }
     const newPlayers = game.players.map(pl => ({ ...pl }));
-    const cur = newPlayers[game.turn];
+    const cur = newPlayers[game.turn] as any;
+    if (cur._fourthDart) delete cur._fourthDart;
     const isKiller = (cur.killerHits || 0) >= 5;
     let killedThisVisit: { killer: string; victim: string } | null = null;
     const dartsLog: any[] = [];
@@ -831,6 +970,24 @@ function KillerBoard({ game, setGame, settings, toast, music, onQuit, setGames, 
     if (killedThisVisit) popups.setKill(killedThisVisit);
     let nextTurn = (game.turn + 1) % game.players.length;
     while (newPlayers[nextTurn].eliminated) nextTurn = (nextTurn + 1) % game.players.length;
+    // Skip blocked/frozen players (power ups).
+    if (game.powerUpsEnabled) {
+      let guards = 0;
+      while (guards < newPlayers.length) {
+        const np = newPlayers[nextTurn] as any;
+        if (np._blockedNext || np._frozenNext) {
+          const flag = np._blockedNext ? 'blocked' : 'frozen';
+          delete np._blockedNext; delete np._frozenNext;
+          if (flag === 'frozen') {
+            np.visits.push({ darts: [], scored: 0, remaining: np.lives, leg: 1, mode: 'killer', date: new Date().toISOString(), frozen: true, hits: (np.kills || []).length });
+          }
+          toast(`${np.name} ${flag === 'frozen' ? 'is frozen' : 'is blocked'} — visit skipped.`);
+          nextTurn = (nextTurn + 1) % game.players.length;
+          while (newPlayers[nextTurn].eliminated) nextTurn = (nextTurn + 1) % game.players.length;
+          guards++;
+        } else break;
+      }
+    }
     setGame({ ...finishedState, turn: nextTurn });
   };
 
@@ -857,6 +1014,10 @@ function KillerBoard({ game, setGame, settings, toast, music, onQuit, setGames, 
           {[0, 1, 2].map(i => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
         </div>
         <div className="muted small">Lives: <b style={{ color: 'var(--text)' }}>{'❤️'.repeat(p.lives || 0) || 'none'}</b></div>
+        <PowerUpBar game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
+          const next = activatePowerUp(game, game.turn, settings, toast);
+          if (next) setGame(next);
+        }} />
       </div>
 
       <div className="play-others">
@@ -915,7 +1076,8 @@ function HighScoreBoard({ game, setGame, settings, toast, music, onQuit, setGame
   const visitNum = p.visits.length + 1;
 
   const addDart = (base: number, mult: number, labelOverride?: string, isBull?: boolean) => {
-    if (game.darts.length >= 3) { toast('3 darts already'); return; }
+    const maxDarts = (game.powerUpsEnabled && (game.players[game.turn] as any)._fourthDart) ? 4 : 3;
+    if (game.darts.length >= maxDarts) { toast(`${maxDarts} darts already`); return; }
     let value: number, label: string;
     if (isBull) { value = 50; label = 'Bull'; }
     else if (base === 25) { value = mult === 2 ? 50 : 25; label = mult === 2 ? 'Bull' : '25'; }
@@ -923,16 +1085,23 @@ function HighScoreBoard({ game, setGame, settings, toast, music, onQuit, setGame
     else { value = base * mult; label = (mult === 2 ? 'D' : mult === 3 ? 'T' : '') + base; }
     const dart = { value, label: labelOverride || label, base, mult: isBull ? 2 : (base === 25 && value === 50 ? 2 : mult), isDouble: !!(isBull || (base === 25 && value === 50) || mult === 2), isOuter: false };
     Sound.play('dart', { score: value }, settings);
-    setGame({ ...game, darts: [...game.darts, dart], mult: 1 });
+    let next: Game = { ...game, darts: [...game.darts, dart], mult: 1 };
+    if (game.powerUpsEnabled) next = applyCharge(next, game.turn, chargeFromDart(dart, settings), settings);
+    setGame(next);
   };
 
   const undoDart = () => { if (game.darts.length) setGame({ ...game, darts: game.darts.slice(0, -1) }); };
 
   const enterVisit = () => {
     if (!game.darts.length) { toast('Add at least one dart'); return; }
-    const scored = game.darts.reduce((a, d) => a + d.value, 0);
+    const cur0 = game.players[game.turn] as any;
+    const surgeActive = !!cur0._surgeNext;
+    const rawScored = game.darts.reduce((a, d) => a + d.value, 0);
+    const scored = surgeActive ? rawScored * 2 : rawScored;
     const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
-    const cur = newPlayers[game.turn];
+    const cur = newPlayers[game.turn] as any;
+    if (cur._surgeNext) delete cur._surgeNext;
+    if (cur._fourthDart) delete cur._fourthDart;
     cur.score += scored;
     cur.visits.push({ darts: [...game.darts], scored, remaining: cur.score, leg: 1, mode: 'highscore', date: new Date().toISOString() });
     cur.dartsThrown += game.darts.length;
@@ -953,6 +1122,24 @@ function HighScoreBoard({ game, setGame, settings, toast, music, onQuit, setGame
     }
     let nextTurn = (game.turn + 1) % game.players.length;
     while (newPlayers[nextTurn].visits.length >= HIGH_SCORE_VISITS) nextTurn = (nextTurn + 1) % game.players.length;
+    // Skip blocked/frozen players (power ups).
+    if (game.powerUpsEnabled) {
+      let guards = 0;
+      while (guards < newPlayers.length) {
+        const np = newPlayers[nextTurn] as any;
+        if (np._blockedNext || np._frozenNext) {
+          const flag = np._blockedNext ? 'blocked' : 'frozen';
+          delete np._blockedNext; delete np._frozenNext;
+          if (flag === 'frozen') {
+            np.visits.push({ darts: [], scored: 0, remaining: np.score, leg: 1, mode: 'highscore', date: new Date().toISOString(), frozen: true });
+          }
+          toast(`${np.name} ${flag === 'frozen' ? 'is frozen' : 'is blocked'} — visit skipped.`);
+          nextTurn = (nextTurn + 1) % game.players.length;
+          while (newPlayers[nextTurn].visits.length >= HIGH_SCORE_VISITS) nextTurn = (nextTurn + 1) % game.players.length;
+          guards++;
+        } else break;
+      }
+    }
     setGame({ ...finishedState, turn: nextTurn });
   };
 
@@ -974,6 +1161,10 @@ function HighScoreBoard({ game, setGame, settings, toast, music, onQuit, setGame
           {[0, 1, 2].map(i => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
         </div>
         <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{game.darts.reduce((a, d) => a + d.value, 0)}</b></div>
+        <PowerUpBar game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
+          const next = activatePowerUp(game, game.turn, settings, toast);
+          if (next) setGame(next);
+        }} />
       </div>
 
       {game.players.length > 1 && (
@@ -1024,7 +1215,7 @@ function HighScoreBoard({ game, setGame, settings, toast, music, onQuit, setGame
 // Full-screen animated "VS" reveal of players (or teams) before a match.
 // Tap anywhere to dismiss and start playing. Supports up to 4 players/teams
 // in a dynamic grid with no scrolling.
-function Showdown({ game, settings, onClose }: {
+function Showdown({ game, players, settings, onClose }: {
   game: Game; players: Player[]; settings: Settings; music: MusicEngine; onClose: () => void;
 }) {
   const teamMode = !!game.teamMode;
@@ -1047,6 +1238,20 @@ function Showdown({ game, settings, onClose }: {
   useEffect(() => {
     const t = setTimeout(() => Sound.play('vs', {}, settings), 700);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Play each player's entrance sound in showdown card order, staggered.
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    sides.forEach((s, i) => {
+      if (s.kind !== 'player') return;
+      const p = players.find(pp => pp.id === s.members[0]?.id);
+      if (!p || !p.sound || p.sound === 'none') return;
+      const t = setTimeout(() => Sound.playPlayerSound(p.sound!, settings), 1200 + i * 600);
+      timers.push(t);
+    });
+    return () => { timers.forEach(t => clearTimeout(t)); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
