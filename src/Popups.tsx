@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import type { Settings } from './types';
+import { Sound } from './sound';
 
 export function Toast({ msg }: { msg: string | null }) {
   return <div className={`toast${msg ? ' show' : ''}`}>{msg || ''}</div>;
@@ -12,8 +14,20 @@ export function Modal({ children, onClose }: { children: React.ReactNode; onClos
   );
 }
 
-export function MilestonePopup({ emoji, title, sub, record, onDone }: { emoji: string; title: string; sub: string; record?: boolean; onDone: () => void }) {
-  useEffect(() => { const t = setTimeout(onDone, 2500); return () => clearTimeout(t); }, [onDone]);
+export function MilestonePopup({ emoji, title, sub, record, onDone, settings }: { emoji: string; title: string; sub: string; record?: boolean; onDone: () => void; settings?: Settings }) {
+  useEffect(() => {
+    // Tailored audio: a 180 milestone gets the "180!" voice line; otherwise
+    // play a layered SFX + (optional) milestone announcer.
+    if (title.toUpperCase().includes('EIGHTY')) {
+      Sound.playSfx('milestone', settings || ({} as Settings));
+      Sound.playVoice('one_eighty', settings || ({} as Settings));
+    } else {
+      Sound.playSfx('milestone', settings || ({} as Settings));
+      Sound.playVoice('milestone', settings || ({} as Settings));
+    }
+    const t = setTimeout(onDone, 2500);
+    return () => clearTimeout(t);
+  }, [onDone, title, settings]);
   return (
     <div className="milestone-bg" onClick={onDone}>
       <div className="milestone">
@@ -26,8 +40,13 @@ export function MilestonePopup({ emoji, title, sub, record, onDone }: { emoji: s
   );
 }
 
-export function LevelUpPopup({ level, name, xpGained, reason, onDone }: { level: number; name: string; xpGained: number; reason: string; onDone: () => void }) {
-  useEffect(() => { const t = setTimeout(onDone, 3000); return () => clearTimeout(t); }, [onDone]);
+export function LevelUpPopup({ level, name, xpGained, reason, onDone, settings }: { level: number; name: string; xpGained: number; reason: string; onDone: () => void; settings?: Settings }) {
+  useEffect(() => {
+    Sound.playSfx('levelup', settings || ({} as Settings));
+    Sound.playVoice('level_up', settings || ({} as Settings));
+    const t = setTimeout(onDone, 3000);
+    return () => clearTimeout(t);
+  }, [onDone, settings]);
   return (
     <div className="levelup-bg" onClick={onDone}>
       <div className="levelup">
@@ -40,8 +59,13 @@ export function LevelUpPopup({ level, name, xpGained, reason, onDone }: { level:
   );
 }
 
-export function TitleUnlockPopup({ icon, name, player, desc, onDone }: { icon: string; name: string; player: string; desc: string; onDone: () => void }) {
-  useEffect(() => { const t = setTimeout(onDone, 3500); return () => clearTimeout(t); }, [onDone]);
+export function TitleUnlockPopup({ icon, name, player, desc, onDone, settings }: { icon: string; name: string; player: string; desc: string; onDone: () => void; settings?: Settings }) {
+  useEffect(() => {
+    Sound.playSfx('title', settings || ({} as Settings));
+    Sound.playVoice('title_unlocked', settings || ({} as Settings));
+    const t = setTimeout(onDone, 3500);
+    return () => clearTimeout(t);
+  }, [onDone, settings]);
   return (
     <div className="levelup-bg" onClick={onDone}>
       <div className="levelup">
@@ -56,8 +80,13 @@ export function TitleUnlockPopup({ icon, name, player, desc, onDone }: { icon: s
   );
 }
 
-export function KillPopup({ killer, victim, onDone }: { killer: string; victim: string; onDone: () => void }) {
-  useEffect(() => { const t = setTimeout(onDone, 2200); return () => clearTimeout(t); }, [onDone]);
+export function KillPopup({ killer, victim, onDone, settings }: { killer: string; victim: string; onDone: () => void; settings?: Settings }) {
+  useEffect(() => {
+    Sound.playSfx('kill', settings || ({} as Settings));
+    Sound.playVoice('eliminated', settings || ({} as Settings));
+    const t = setTimeout(onDone, 2200);
+    return () => clearTimeout(t);
+  }, [onDone, settings]);
   return (
     <div className="kill-bg" onClick={onDone}>
       <div className="kill">

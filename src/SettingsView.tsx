@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react';
-import type { Player, GameRecord, Settings, CustomTitle } from './types';
-import { COLORS, conditionLabel } from './constants';
+import type { Player, GameRecord, Settings, CustomTitle, VoicePackId } from './types';
+import { COLORS, VOICE_PACKS, conditionLabel } from './constants';
 import { tracksFor } from './music';
 import { uid, todayKey, mergeBackup, type BackupShape, type SyncResult } from './store';
+import { Sound } from './sound';
 import { Modal } from './Popups';
 
 export function SettingsView({ players, games, settings, setSettings, setPlayers, setGames, toast, hasDatabase, connected, upToDate, lastSync, syncing, onSync }: { players: Player[]; games: GameRecord[]; settings: Settings; setSettings: (updater: any) => void; setPlayers: (updater: any) => void; setGames: (updater: any) => void; toast: (m: string) => void; hasDatabase: boolean; connected: boolean; upToDate: boolean; lastSync: number | null; syncing: boolean; onSync: () => Promise<SyncResult> }) {
@@ -78,6 +79,28 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
           </>
         )}
         <label className="row between"><b>Confirm before quitting/reset</b><input type="checkbox" checked={settings.confirmReset} onChange={e => update({ confirmReset: e.target.checked })} style={{ width: 'auto' }} /></label>
+      </div>
+
+      <div className="card">
+        <h3 style={{ marginBottom: 4 }}>Voice Announcer</h3>
+        <div className="muted small" style={{ marginBottom: 12 }}>Pick a voice that shouts "Double Kill", "Eliminated", "Level Up" and more when popups fire. Inspired by classic arena FPS announcers.</div>
+        <label className="field" style={{ marginBottom: 12 }}><span>Voice pack</span>
+          <select value={settings.voicePack} onChange={e => { update({ voicePack: e.target.value as VoicePackId }); }}>
+            {VOICE_PACKS.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+          </select>
+        </label>
+        <label className="field" style={{ marginBottom: 12 }}><span>Voice volume · {Math.round((settings.voiceVolume ?? 0.8) * 100)}%</span>
+          <input type="range" min={0} max={1} step={0.05} value={settings.voiceVolume ?? 0.8} onChange={e => update({ voiceVolume: +e.target.value })} />
+        </label>
+        <label className="field" style={{ marginBottom: 12 }}><span>Sound effect volume · {Math.round((settings.sfxVolume ?? 0.9) * 100)}%</span>
+          <input type="range" min={0} max={1} step={0.05} value={settings.sfxVolume ?? 0.9} onChange={e => update({ sfxVolume: +e.target.value })} />
+        </label>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn ghost sm" onClick={() => { Sound.unlock(); Sound.playSfx('milestone', settings); Sound.playVoice('milestone', settings); }}>Test milestone</button>
+          <button className="btn ghost sm" onClick={() => { Sound.unlock(); Sound.playSfx('levelup', settings); Sound.playVoice('level_up', settings); }}>Test level up</button>
+          <button className="btn ghost sm" onClick={() => { Sound.unlock(); Sound.playSfx('kill', settings); Sound.playVoice('eliminated', settings); }}>Test eliminated</button>
+          <button className="btn ghost sm" onClick={() => { Sound.unlock(); Sound.playSfx('milestone', settings); Sound.playVoice('one_eighty', settings); }}>Test 180</button>
+        </div>
       </div>
 
       <div className="card">

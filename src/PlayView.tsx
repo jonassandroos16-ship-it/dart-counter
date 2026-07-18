@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Game, GamePlayer, GameRecord, Player, Settings } from './types';
-import { MODES, ATC_TARGETS, atcLabel, BUILTIN_TITLES, buildTitleCheck, getTitleInfo, SCORE_POPUPS, MILESTONES, TEAM_COLORS, TEAM_NAMES } from './constants';
+import { MODES, ATC_TARGETS, atcLabel, BUILTIN_TITLES, buildTitleCheck, getTitleInfo, SCORE_POPUPS, MILESTONES } from './constants';
 import { createGame, recordFromGame, checkoutHint, leadTrailBadge, visitAvg, levelFromXP, getPlayerXPById, allVisitsFor } from './logic';
 import { initials } from './store';
 import { Sound } from './sound';
@@ -27,7 +27,6 @@ interface Props {
 export function PlayView({ players, games, settings, activeGame, setActiveGame, setGames, setPlayers, toast, music, onQuit, onGameOver, popups }: Props) {
   const game = activeGame;
   const setGame = setActiveGame;
-  const [showdown, setShowdown] = useState<Game | null>(null);
 
   // Auto-resume: if there's a saved in-progress match, switch music to match context.
   useEffect(() => {
@@ -35,55 +34,26 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (showdown) {
-    return <Showdown game={showdown} players={players} settings={settings} music={music}
-      onClose={() => {
-        Sound.play('showdown_close', {}, settings);
-        setShowdown(null);
-        music.startContext('match', settings);
-      }} />;
-  }
-
   if (game) {
     return <GameBoard game={game} setGame={setGame} settings={settings} players={players} games={games} setGames={setGames} setPlayers={setPlayers} toast={toast} music={music}
       onQuit={() => { setGame(null); onQuit(); }} onGameOver={onGameOver} popups={popups} />;
   }
-  return <SetupView players={players} onStart={(mode, ids, dbl, legs, teamMode, teamAssignment) => {
-    const g = createGame(mode, ids, players, dbl, legs, teamMode, teamAssignment);
-    Sound.play('showdown', {}, settings);
-    music.stop();
-    setActiveGame(g);
-    setShowdown(g);
+  return <SetupView players={players} onStart={(mode, ids, dbl, legs) => {
+    const g = createGame(mode, ids, players, dbl, legs);
+    setGame(g);
+    music.startContext('match', settings);
   }} />;
 }
 
-function SetupView({ players, onStart }: { players: Player[]; onStart: (mode: string, ids: string[], dbl: boolean, legs: number, teamMode: boolean, teamAssignment: number[]) => void }) {
+function SetupView({ players, onStart }: { players: Player[]; onStart: (mode: string, ids: string[], dbl: boolean, legs: number) => void }) {
   const [mode, setMode] = useState('301');
   const [doubleOut, setDoubleOut] = useState(false);
   const [legs, setLegs] = useState(1);
   const [picked, setPicked] = useState<string[]>(players.length ? [players[0].id] : []);
-  const [teamMode, setTeamMode] = useState(false);
-  // team assignment aligned to `picked` indices; values are team ids (0-indexed).
-  const [teams, setTeams] = useState<number[]>([]);
-  const [teamCount, setTeamCount] = useState(2);
-
-  // Keep the teams array in sync with picked length and teamCount.
-  useEffect(() => {
-    setTeams(prev => {
-      const next = picked.map((_, i) => {
-        const t = prev[i];
-        if (t == null || t >= teamCount) return i % teamCount;
-        return t;
-      });
-      return next;
-    });
-  }, [picked, teamCount]);
 
   if (!players.length) return <div className="view-scroll"><div className="card empty">Add a player before starting a game.</div></div>;
   const m = MODES[mode];
   const noX01 = !!(m.practice || m.atc || m.killer || m.party);
-
-  const teamValid = !teamMode || (picked.length >= teamCount && teams.every(t => t != null && t < teamCount) && new Set(teams).size >= 1);
 
   return (
     <div className="view-scroll">
@@ -105,48 +75,12 @@ function SetupView({ players, onStart }: { players: Player[]; onStart: (mode: st
             <option value="0">Straight Out</option>
             <option value="1">Double Out</option>
           </select>
-        </label>}
+        </label>}      
         {!noX01 && <label className="field"><span>Best of (legs)</span>
           <select value={legs} onChange={e => setLegs(+e.target.value)}>
             <option>1</option><option>3</option><option>5</option><option>7</option>
           </select>
         </label>}
-
-        <div className="row between" style={{ margin: '10px 0 8px' }}>
-          <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Teams</span>
-          <button className={teamMode ? 'pill' : 'pill'} style={{ background: teamMode ? 'var(--accent)' : 'var(--bg-3)', color: teamMode ? '#04150a' : 'var(--text)' }}
-            onClick={() => setTeamMode(v => !v)}>
-            {teamMode ? 'ON' : 'OFF'}
-          </button>
-        </div>
-
-        {teamMode && (
-          <>
-            <label className="field" style={{ marginBottom: 8 }}><span>Number of teams</span>
-              <select value={teamCount} onChange={e => { const n = +e.target.value; setTeamCount(n); }}>
-                <option value={2}>2 teams</option>
-                <option value={3}>3 teams</option>
-                <option value={4}>4 teams</option>
-              </select>
-            </label>
-            <div className="muted small" style={{ marginBottom: 6 }}>Tap a player to cycle through teams.</div>
-            <div className="row wrap" style={{ gap: 8, marginBottom: 10 }}>
-              {picked.map((id, i) => {
-                const p = players.find(pp => pp.id === id)!;
-                const t = teams[i] ?? 0;
-                const color = TEAM_COLORS[t % TEAM_COLORS.length];
-                return (
-                  <button key={id} className="pill" style={{ background: color, color: '#04150a', borderColor: 'transparent' }}
-                    onClick={() => setTeams(prev => prev.map((x, j) => j === i ? (x + 1) % teamCount : x))}>
-                    <span className="avatar" style={{ width: 18, height: 18, fontSize: 9, background: 'rgba(0,0,0,.25)' }}>{initials(p.name)}</span>
-                    {p.name} · T{t + 1}
-                  </button>
-                );
-              })}
-            </div>
-          </>
-        )}
-
         <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Players (tap to add)</span>
         <div className="row wrap" style={{ gap: 8, marginBottom: 8 }}>
           {players.map(p => {
@@ -167,25 +101,9 @@ function SetupView({ players, onStart }: { players: Player[]; onStart: (mode: st
           </ul>
         </details>
         <div className="muted small" style={{ marginBottom: 16 }}>
-          {picked.length === 0 ? 'Select at least one player' :
-            teamMode ? (
-              <div>
-                <div>Teams: {teamCount} · {picked.length} players</div>
-                <div style={{ marginTop: 4 }}>
-                  {Array.from({ length: teamCount }, (_, ti) => {
-                    const members = picked.filter((_, i) => teams[i] === ti).map(id => players.find(p => p.id === id)!.name).join(', ');
-                    return <div key={ti}><b style={{ color: TEAM_COLORS[ti % TEAM_COLORS.length] }}>Team {ti + 1}:</b> {members || '—'}</div>;
-                  })}
-                </div>
-              </div>
-            )
-            : 'Order: ' + picked.map(id => players.find(p => p.id === id)!.name).join(' → ')
-          }
+          {picked.length ? 'Order: ' + picked.map(id => players.find(p => p.id === id)!.name).join(' → ') : 'Select at least one player'}
         </div>
-        <button className="btn primary block" disabled={!picked.length || !teamValid}
-          onClick={() => { if (!picked.length || !teamValid) return; onStart(mode, picked, doubleOut, legs, teamMode, teamMode ? teams : []); }}>
-          Start Game
-        </button>
+        <button className="btn primary block" onClick={() => { if (!picked.length) return; onStart(mode, picked, doubleOut, legs); }}>Start Game</button>
       </div>
     </div>
   );
@@ -208,10 +126,6 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
   const throwOrder = (idx: number) => (idx - game.roundStartTurn + game.players.length) % game.players.length;
   const curXp = getPlayerXPById(p.id, players);
   const curBadge = getBadgeInfo(curXp.selectedBadge);
-
-  // Team rosters helper used for turn rotation and display.
-  const curTeam = game.teamMode ? (p.team ?? 0) : -1;
-  const curTeamColor = game.teamMode ? TEAM_COLORS[curTeam % TEAM_COLORS.length] : p.color;
 
   const addDart = (base: number, mult: number, labelOverride?: string, isBull?: boolean) => {
     if (game.darts.length >= 3) { toast('3 darts already'); return; }
@@ -250,30 +164,6 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
     if (remaining === 0 && (!game.doubleOut || lastDart.isDouble)) {
       cur.visits.push({ darts: [...game.darts], scored, remaining: 0, leg: game.leg, checkout: scored, date: new Date().toISOString() });
       cur.score = 0; cur.legsWon++;
-      // Team mode: sync teammates' shared score to 0 and award the leg to the team.
-      if (game.teamMode) {
-        newPlayers.forEach(pl => { if (pl.team === cur.team) pl.score = 0; });
-        const teamLegs = [...(game.teamLegsWon || [])];
-        teamLegs[cur.team!] = (teamLegs[cur.team!] || 0) + 1;
-        const legsToWin = Math.ceil(game.legsBestOf / 2);
-        const teamWonMatch = teamLegs[cur.team!] >= (game.legsBestOf === 1 ? 1 : legsToWin);
-        if (teamWonMatch) {
-          finishGame({ ...game, players: newPlayers, teamLegsWon: teamLegs, darts: [], mult: 1, winningTeam: cur.team }, null, null);
-          return;
-        }
-        const nextLeg = game.leg + 1;
-        newPlayers.forEach(pl => pl.score = MODES[game.mode].start);
-        const tc = game.teamCount || 2;
-        const nextTeam = ((game.teamTurn || 0) + 1) % tc;
-        const cursors = [...(game.teamPlayerCursor || Array(tc).fill(0))];
-        const ros: number[][] = Array.from({ length: tc }, () => []);
-        newPlayers.forEach((pl, i) => { const t = pl.team ?? 0; if (t < tc) ros[t].push(i); });
-        const nextTurn = ros[nextTeam][cursors[nextTeam] % ros[nextTeam].length];
-        Sound.play('win', {}, settings);
-        toast(`Team ${cur.team! + 1} wins leg ${game.leg}`);
-        setGame({ ...game, players: newPlayers, leg: nextLeg, turn: nextTurn, teamTurn: nextTeam, teamLegsWon: teamLegs, roundStartTurn: nextTurn, checkedOutThisRound: [], thrownThisRound: [], darts: [], mult: 1 });
-        return;
-      }
       const checkedOut = [...game.checkedOutThisRound, cur.id];
       const thrown = [...game.thrownThisRound, cur.id];
       const legsToWin = Math.ceil(game.legsBestOf / 2);
@@ -316,8 +206,6 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
     }
 
     cur.score = remaining;
-    // Team mode: keep the shared team score in sync across teammates.
-    if (game.teamMode) newPlayers.forEach(pl => { if (pl.team === cur.team && pl.id !== cur.id) pl.score = remaining; });
     cur.visits.push({ darts: [...game.darts], scored, remaining, leg: game.leg, date: new Date().toISOString() });
     Sound.play('enter', {}, settings);
     const thrown = [...game.thrownThisRound, cur.id];
@@ -328,19 +216,6 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
 
   // Pure: computes the next game state with the turn advanced. Does NOT call setGame.
   const advanceTurn = (g: Game): Game => {
-    // Team mode: rotate to the next team, cycling through that team's players.
-    if (g.teamMode) {
-      const tc = g.teamCount || 2;
-      const ros: number[][] = Array.from({ length: tc }, () => []);
-      g.players.forEach((pl, i) => { const t = pl.team ?? 0; if (t < tc) ros[t].push(i); });
-      const cursors = [...(g.teamPlayerCursor || Array(tc).fill(0))];
-      // Advance the cursor of the team that just threw.
-      const curT = g.teamTurn || 0;
-      if (ros[curT].length) cursors[curT] = (cursors[curT] + 1) % ros[curT].length;
-      const nextTeam = (curT + 1) % tc;
-      const nextTurn = ros[nextTeam][cursors[nextTeam] % ros[nextTeam].length];
-      return { ...g, turn: nextTurn, teamTurn: nextTeam, teamPlayerCursor: cursors };
-    }
     const turn = (g.turn + 1) % g.players.length;
     const checkedOutCount = g.checkedOutThisRound.length;
     const thrown = g.thrownThisRound || [];
@@ -376,18 +251,12 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
   const finishGame = (g: Game, winner: GamePlayer | null, tiedIds: string[] | null) => {
     if (g.finished) return; // guard against double-finish
     const isTie = !winner && tiedIds && tiedIds.length > 1;
-    const winningTeam = g.winningTeam ?? null;
-    const finished: Game = { ...g, finished: true, winner: winner ? winner.id : null, tied: !!isTie, tiedPlayers: isTie ? tiedIds : null, winningTeam };
+    const finished: Game = { ...g, finished: true, winner: winner ? winner.id : null, tied: !!isTie, tiedPlayers: isTie ? tiedIds : null };
     Sound.play('win', {}, settings);
     music.startContext('setup', settings);
     setGames((prev: GameRecord[]) => [...prev, recordFromGame(finished)]);
-    if (!finished.practice) {
-      if (finished.teamMode && winningTeam != null) {
-        // Reward every player on the winning team with a win + XP.
-        finished.players.filter(pl => pl.team === winningTeam).forEach(pl => awardXP(pl.id, settings.xpConfig.win, `Team ${winningTeam + 1} won`, settings, setPlayers, popups));
-      } else if (winner) {
-        awardXP(winner.id, settings.xpConfig.win, 'Winning the game', settings, setPlayers, popups);
-      }
+    if (!finished.practice && finished.players.length >= 2) {
+      if (winner) awardXP(winner.id, settings.xpConfig.win, 'Winning the game', settings, setPlayers, popups);
       if (isTie && tiedIds) tiedIds.forEach(pid => awardXP(pid, Math.round(settings.xpConfig.win / 2), 'Tied the game', settings, setPlayers, popups));
     }
     finished.players.forEach(pl => checkTitleUnlocks(pl, settings, popups, setPlayers, finished, players, games));
@@ -397,17 +266,15 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
 
   return (
     <div className="view-noscroll">
-      <div className="play-current" style={game.teamMode ? { borderColor: curTeamColor, boxShadow: `0 0 0 2px ${curTeamColor}33` } : {}}>
+      <div className="play-current">
         <div className="pc-header">
           <div className="row" style={{ gap: 8 }}>
             <span className={`turn-order-badge${game.turn === game.roundStartTurn ? ' starter' : ''}`}>{throwOrder(game.turn) + 1}</span>
             <span className="avatar" style={{ width: 32, height: 32, fontSize: 16, background: p.color }}>{curBadge ? curBadge.icon : initials(p.name)}</span>
             <span className="pc-name">{p.name}</span>
-            {game.teamMode && <span className="pill" style={{ background: curTeamColor, color: '#04150a' }}>Team {curTeam + 1}</span>}
           </div>
           <div className="row" style={{ gap: 6 }}>
-            {game.teamMode && game.legsBestOf > 1 ? <span className="pill" style={{ background: curTeamColor, color: '#04150a' }}>{(game.teamLegsWon || [])[curTeam] || 0} legs</span> : null}
-            {!game.teamMode && game.legsBestOf > 1 ? <span className="pill">{p.legsWon} legs</span> : null}
+            {game.legsBestOf > 1 ? <span className="pill">{p.legsWon} legs</span> : null}
             <span className="muted small">{game.practice ? 'PRACTICE' : `LEG ${game.leg} · ${game.doubleOut ? 'DOUBLE OUT' : 'STRAIGHT OUT'}`}</span>
           </div>
         </div>
@@ -427,20 +294,16 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
             const ti = getTitleInfo(xpInfo.selectedTitle, settings.customTitles);
             const bi = getBadgeInfo(xpInfo.selectedBadge);
             const badge = leadTrailBadge(pl, game);
-            const plTeam = game.teamMode ? (pl.team ?? 0) : -1;
-            const plTeamColor = game.teamMode ? TEAM_COLORS[plTeam % TEAM_COLORS.length] : pl.color;
             return (
-              <div key={pl.id} className="play-other" style={game.teamMode ? { borderColor: plTeamColor } : {}}>
+              <div key={pl.id} className="play-other">
                 <div className="row between">
                   <div className="row" style={{ gap: 6 }}>
                     <span className={`turn-order-badge${game.players.indexOf(pl) === game.roundStartTurn ? ' starter' : ''}`} style={{ width: 18, height: 18, fontSize: 10 }}>{throwOrder(game.players.indexOf(pl)) + 1}</span>
                     <span className="avatar" style={{ width: 22, height: 22, fontSize: 12, background: pl.color }}>{bi ? bi.icon : initials(pl.name)}</span>
                     <span className="po-name">{pl.name}</span>
-                    {game.teamMode && <span style={{ fontSize: 9, fontWeight: 800, color: plTeamColor }}>T{plTeam + 1}</span>}
                   </div>
                   <div className="row" style={{ gap: 4 }}>
-                    {game.teamMode && game.legsBestOf > 1 ? <span className="pill" style={{ fontSize: 10, background: plTeamColor, color: '#04150a' }}>{(game.teamLegsWon || [])[plTeam] || 0}</span> : null}
-                    {!game.teamMode && game.legsBestOf > 1 ? <span className="pill" style={{ fontSize: 10 }}>{pl.legsWon}</span> : null}
+                    {game.legsBestOf > 1 ? <span className="pill" style={{ fontSize: 10 }}>{pl.legsWon}</span> : null}
                     {badge ? <span className={`lead-badge ${badge.startsWith('+') ? 'lead' : 'trail'}`}>{badge}</span> : null}
                   </div>
                 </div>
@@ -585,37 +448,17 @@ function GameOver({ game, onNewGame, onViewStats }: { game: Game; onNewGame: () 
   const w = game.players.find(pl => pl.id === game.winner);
   const isTie = !!game.tied && !!game.tiedPlayers && game.tiedPlayers.length > 1;
   const tiedNames = isTie ? (game.tiedPlayers || []).map(id => game.players.find(pl => pl.id === id)?.name || '').filter(Boolean) : [];
-  const isTeamWin = !!(game.teamMode && game.winningTeam != null);
-  const winningTeamPlayers = isTeamWin ? game.players.filter(pl => pl.team === game.winningTeam) : [];
-  const winningTeamColor = isTeamWin ? TEAM_COLORS[game.winningTeam! % TEAM_COLORS.length] : 'var(--accent)';
-  const titleText = game.practice ? 'Practice complete' : isTie ? "It's a tie!" : isTeamWin ? `Team ${game.winningTeam! + 1} wins!` : (w ? `${w.name} wins!` : 'Game over');
+  const isSolo = game.players.length < 2;
+  const titleText = game.practice ? 'Practice complete' : isSolo ? 'Solo session complete' : isTie ? "It's a tie!" : (w ? `${w.name} wins!` : 'Game over');
   const badgeMap = useMemo(() => computeGameBadges(game), [game]);
   const anyBadges = Object.values(badgeMap).some((arr) => arr.length > 0);
   const [badgeInfo, setBadgeInfo] = useState<{ icon: string; name: string; desc: string; player: string } | null>(null);
   return (
     <div className="view-scroll">
       <div className="card center">
-        <div style={{ fontSize: 44 }}>{isTie ? '🤝' : isTeamWin ? '🛡️' : '🏆'}</div>
-        <h2 style={{ margin: '8px 0', color: isTeamWin ? winningTeamColor : 'var(--text)' }}>{titleText}</h2>
-        {isTeamWin ? (
-          <div style={{ marginBottom: 10 }}>
-            <div className="muted small" style={{ marginBottom: 6 }}>Team {game.winningTeam! + 1} · {TEAM_NAMES[game.winningTeam! % TEAM_NAMES.length]}</div>
-            <div className="row wrap" style={{ justifyContent: 'center', gap: 8 }}>
-              {winningTeamPlayers.map(pl => (
-                <span key={pl.id} className="pill" style={{ background: pl.color, color: '#0b0e13' }}>
-                  <span className="avatar" style={{ width: 18, height: 18, fontSize: 9, background: 'rgba(0,0,0,.2)' }}>{initials(pl.name)}</span>{pl.name}
-                </span>
-              ))}
-            </div>
-          </div>
-        ) : isTie ? <div className="muted small" style={{ marginBottom: 8 }}>{tiedNames.join(' & ')}</div> : null}
-        {game.teamMode && game.teamLegsWon ? (
-          <div className="row" style={{ justifyContent: 'center', gap: 8, margin: '8px 0 14px' }}>
-            {game.teamLegsWon.map((legs, ti) => (
-              <span key={ti} className="pill" style={{ background: TEAM_COLORS[ti % TEAM_COLORS.length], color: '#04150a' }}>Team {ti + 1}: {legs}</span>
-            ))}
-          </div>
-        ) : null}
+        <div style={{ fontSize: 44 }}>{isTie ? '🤝' : isSolo ? '🎯' : '🏆'}</div>
+        <h2 style={{ margin: '8px 0' }}>{titleText}</h2>
+        {isTie ? <div className="muted small" style={{ marginBottom: 8 }}>{tiedNames.join(' & ')}</div> : null}
         <div className="grid grid-2" style={{ margin: '14px 0' }}>
           {game.players.map(pl => {
             const best = Math.max(0, ...pl.visits.filter((v: any) => !v.bust).map((v: any) => v.scored));
@@ -662,7 +505,7 @@ function GameOver({ game, onNewGame, onViewStats }: { game: Game; onNewGame: () 
 
 function runMilestones(p: GamePlayer, remaining: number, visitScore: number, settings: Settings, popups: PopupControls, setPlayers: (updater: any) => void, game: Game, players: Player[], games: GameRecord[]) {
   if (settings.popups.scores) {
-    for (const sp of SCORE_POPUPS) { if (visitScore >= sp.min) { popups.setMilestone({ emoji: sp.emoji, title: sp.title, sub: sp.sub }); Sound.play('milestone', {}, settings); break; } }
+    for (const sp of SCORE_POPUPS) { if (visitScore >= sp.min) { popups.setMilestone({ emoji: sp.emoji, title: sp.title, sub: sp.sub, record: sp.min >= 180 }); break; } }
   }
   if (settings.popups.milestones) {
     for (const ms of MILESTONES) { if (remaining < ms.threshold && p.score + visitScore >= ms.threshold) { setTimeout(() => popups.setMilestone({ emoji: ms.emoji, title: ms.title, sub: ms.sub }), 1800); break; } }
@@ -693,7 +536,7 @@ function awardXP(playerId: string, amount: number, reason: string, settings: Set
     const oldLevel = p.level || 1;
     const newXp = (p.xp || 0) + amount;
     const li = levelFromXP(newXp, settings);
-    if (li.level > oldLevel && settings.popups.xp) { popups.setLevelUp({ level: li.level, name: p.name, xpGained: amount, reason }); Sound.play('levelup', {}, settings); }
+    if (li.level > oldLevel && settings.popups.xp) { popups.setLevelUp({ level: li.level, name: p.name, xpGained: amount, reason }); }
     return { ...p, xp: newXp, level: li.level };
   }));
 }
@@ -707,11 +550,15 @@ function checkTitleUnlocks(pl: GamePlayer, settings: Settings, popups: PopupCont
     const unlocked = [...(player.unlockedTitles || [])];
 
     // Historical stats from prior completed games (excluding the current in-progress game).
+    // Solo games (playing against yourself) don't count toward competitive
+    // stats like wins — they're excluded from gamesWon and from the per-game
+    // winner check. Scoring stats (lifetimeVisits) still include them.
     const historyGames = games.filter(g => g.id !== game.id && g.players.some(p => p.id === pl.id));
     const historyVisits = allVisitsFor(pl.id, historyGames);
     const lifetimeVisits = [...historyVisits, ...(pl.visits || [])];
     const gamesPlayed = historyGames.length + (game.finished ? 1 : 0);
-    const gamesWon = historyGames.filter(g => g.winner === pl.id).length + (game.finished && game.winner === pl.id ? 1 : 0);
+    const isCompetitiveGame = game.players.length >= 2;
+    const gamesWon = historyGames.filter(g => g.players.length >= 2 && g.winner === pl.id).length + (game.finished && isCompetitiveGame && game.winner === pl.id ? 1 : 0);
     const ctx = { playerId: pl.id, games: historyGames, gamesPlayed, gamesWon, lifetimeVisits };
 
     titles.forEach(t => {
@@ -721,7 +568,6 @@ function checkTitleUnlocks(pl: GamePlayer, settings: Settings, popups: PopupCont
       if (met) {
         unlocked.push(t.id);
         popups.setTitleUnlock({ icon: t.icon || '🏅', name: t.name, player: pl.name, desc: t.desc || '' });
-        Sound.play('title', {}, settings);
       }
     });
     return prev.map(p => p.id === pl.id ? { ...p, unlockedTitles: unlocked } : p);
@@ -755,7 +601,7 @@ function finishSimpleGame(g: Game, winner: GamePlayer | null, settings: Settings
   Sound.play('win', {}, settings);
   music.startContext('setup', settings);
   setGames((prev: GameRecord[]) => [...prev, recordFromGame(finished)]);
-  if (winner) awardXP(winner.id, settings.xpConfig.win, 'Winning the game', settings, setPlayers, popups);
+  if (winner && g.players.length >= 2) awardXP(winner.id, settings.xpConfig.win, 'Winning the game', settings, setPlayers, popups);
   finished.players.forEach(pl => checkTitleUnlocks(pl, settings, popups, setPlayers, finished, players, games));
   awardBadges(finished, setPlayers);
   setGame(finished);
@@ -939,7 +785,7 @@ function HighScoreBoard({ game, setGame, settings, toast, music, onQuit, setGame
     Sound.play('enter', {}, settings);
 
     if (settings.popups.scores) {
-      for (const sp of SCORE_POPUPS) { if (scored >= sp.min) { popups.setMilestone({ emoji: sp.emoji, title: sp.title, sub: sp.sub }); Sound.play('milestone', {}, settings); break; } }
+      for (const sp of SCORE_POPUPS) { if (scored >= sp.min) { popups.setMilestone({ emoji: sp.emoji, title: sp.title, sub: sp.sub, record: sp.min >= 180 }); break; } }
     }
 
     const allDone = newPlayers.every(pl => pl.visits.length >= HIGH_SCORE_VISITS);
@@ -1016,71 +862,6 @@ function HighScoreBoard({ game, setGame, settings, toast, music, onQuit, setGame
         </div>
       </div>
       <button className="btn danger sm" style={{ alignSelf: 'flex-end' }} onClick={() => { if (confirm('Quit this game?')) onQuit(); }}>Quit</button>
-    </div>
-  );
-}
-
-// ── Showdown intro ────────────────────────────────────────────────────
-// Full-screen animated "VS" reveal of players (or teams) before a match.
-// Tap anywhere to dismiss and start playing. Supports up to 4 players/teams
-// in a dynamic grid with no scrolling.
-function Showdown({ game, players, settings, music, onClose }: {
-  game: Game; players: Player[]; settings: Settings; music: MusicEngine; onClose: () => void;
-}) {
-  const teamMode = !!game.teamMode;
-  const teamCount = game.teamCount || 2;
-
-  // Build the list of "sides" to display. In team mode each side is a team
-  // with its roster; in solo mode each side is a single player.
-  const sides = useMemo(() => {
-    if (!teamMode) {
-      return game.players.map((pl, i) => ({ kind: 'player' as const, idx: i, name: pl.name, color: pl.color, members: [{ id: pl.id, name: pl.name, color: pl.color }] }));
-    }
-    return Array.from({ length: teamCount }, (_, ti) => {
-      const members = game.players.filter(pl => pl.team === ti).map(pl => ({ id: pl.id, name: pl.name, color: pl.color }));
-      const name = `Team ${ti + 1}`;
-      return { kind: 'team' as const, idx: ti, name, color: TEAM_COLORS[ti % TEAM_COLORS.length], members };
-    });
-  }, [game.players, teamMode, teamCount]);
-
-  // Play the VS impact sound shortly after mount, after the initial swell.
-  useEffect(() => {
-    const t = setTimeout(() => Sound.play('vs', {}, settings), 700);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return (
-    <div className="showdown-bg" onClick={onClose}>
-      <div className="showdown-flash" />
-      <div className={`showdown-grid showdown-cols-${sides.length}`}>
-        {sides.map((s, i) => (
-          <div key={i} className="showdown-card" style={{ animationDelay: `${0.15 + i * 0.18}s`, borderColor: s.color }}>
-            <div className="sd-team-color" style={{ background: s.color }} />
-            <div className="sd-card-inner">
-              <div className="sd-name" style={{ color: s.color }}>{s.name}</div>
-              {teamMode && s.kind === 'team' ? (
-                <div className="sd-members">
-                  {s.members.map(m => (
-                    <div key={m.id} className="sd-member">
-                      <span className="avatar" style={{ width: 28, height: 28, fontSize: 13, background: m.color }}>{initials(m.name)}</span>
-                      <span className="sd-member-name">{m.name}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="sd-solo-avatar" style={{ background: s.color }}>
-                  {initials(s.name)}
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-      {sides.length >= 2 && Array.from({ length: Math.max(1, sides.length - 1) }, (_, i) => (
-        <div key={`vs-${i}`} className="showdown-vs" style={{ animationDelay: `${0.5 + i * 0.2}s` }}>VS</div>
-      ))}
-      <div className="showdown-tap" style={{ animationDelay: '1.2s' }}>Tap to start ▸</div>
     </div>
   );
 }

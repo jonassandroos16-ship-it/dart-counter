@@ -31,6 +31,9 @@ export default function App() {
 
   useEffect(() => { applyTheme(db.settings); }, [db.settings]);
 
+  // Preload the active voice pack whenever the user switches it.
+  useEffect(() => { void Sound.preload(db.settings); }, [db.settings.voicePack, db.settings.sound]);
+
   // One-shot retroactive title backfill so new lifetime titles unlock from
   // existing match history for players who already earned them.
   useEffect(() => {
@@ -45,6 +48,7 @@ export default function App() {
     const unlock = () => {
       musicRef.current.unlocked = true;
       Sound.unlock();
+      void Sound.preload(db.settings);
       if (view === 'play') musicRef.current.startContext('setup', db.settings);
       document.removeEventListener('pointerdown', unlock);
       document.removeEventListener('keydown', unlock);
@@ -88,10 +92,10 @@ export default function App() {
       </nav>
 
       <Toast msg={msg} />
-      {popups.milestone && <MilestonePopup {...popups.milestone} onDone={() => popups.setMilestone(null)} />}
-      {popups.levelUp && <LevelUpPopup {...popups.levelUp} onDone={() => popups.setLevelUp(null)} />}
-      {popups.titleUnlock && <TitleUnlockPopup {...popups.titleUnlock} onDone={() => popups.setTitleUnlock(null)} />}
-      {popups.kill && <KillPopup {...popups.kill} onDone={() => popups.setKill(null)} />}
+      {popups.milestone && <MilestonePopup {...popups.milestone} onDone={() => popups.setMilestone(null)} settings={db.settings} />}
+      {popups.levelUp && <LevelUpPopup {...popups.levelUp} onDone={() => popups.setLevelUp(null)} settings={db.settings} />}
+      {popups.titleUnlock && <TitleUnlockPopup {...popups.titleUnlock} onDone={() => popups.setTitleUnlock(null)} settings={db.settings} />}
+      {popups.kill && <KillPopup {...popups.kill} onDone={() => popups.setKill(null)} settings={db.settings} />}
     </div>
   );
 }

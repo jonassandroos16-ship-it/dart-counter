@@ -2,10 +2,6 @@ import type { CustomTitle, Settings } from './types';
 
 export const COLORS = ['#22c55e','#3b82f6','#f59e0b','#ef4444','#06b6d4','#ec4899','#a855f7','#84cc16'];
 
-// Team color palette — distinct, vibrant, and visible on dark/light backgrounds.
-export const TEAM_COLORS = ['#3b82f6','#ef4444','#22c55e','#f59e0b'];
-export const TEAM_NAMES = ['Alpha','Bravo','Delta','Echo'];
-
 export const CHECKOUTS: Record<number, string[]> = {
   170:['T20','T20','Bull'],167:['T20','T19','Bull'],164:['T20','T18','Bull'],161:['T20','T17','Bull'],
   160:['T20','T20','D20'],158:['T20','T20','D19'],157:['T20','T19','D20'],156:['T20','T20','D18'],
@@ -345,26 +341,6 @@ export const BUILTIN_TITLES: TitleDef[] = [
   { id: 'party_animal', name: 'Party Animal', desc: 'Play 5 party-mode games', icon: '🎉',
     check: (_v, _gv, _g, ctx) => (ctx?.games || []).filter((g:any) => g.mode === 'speed101' || g.mode === 'highscore').length >= 5,
     progress: (ctx) => ({ current: (ctx?.games || []).filter((g:any) => g.mode === 'speed101' || g.mode === 'highscore').length, target: 5 }) },
-
-  // ============ Team mode ============
-  { id: 'team_first_win', name: 'Team Player', desc: 'Win your first team match', icon: '🤝',
-    check: (_v, _gv, g, ctx) => {
-      if (g?.teamMode && g.winningTeam != null && g.players.some((p:any) => p.id === ctx?.playerId && p.team === g.winningTeam)) return true;
-      return (ctx?.games || []).some((gm:any) => gm.teamMode && gm.winningTeam != null && gm.players.some((p:any) => p.id === ctx?.playerId && p.team === gm.winningTeam));
-    },
-    progress: (ctx) => ({ current: (ctx?.games || []).filter((g:any) => g.teamMode && g.winningTeam != null && g.players.some((p:any) => p.id === ctx?.playerId && p.team === g.winningTeam)).length, target: 1 }) },
-  { id: 'team_5_wins', name: 'Squad Up', desc: 'Win 5 team matches', icon: '👥',
-    check: (_v, _gv, _g, ctx) => (ctx?.games || []).filter((g:any) => g.teamMode && g.winningTeam != null && g.players.some((p:any) => p.id === ctx?.playerId && p.team === g.winningTeam)).length >= 5,
-    progress: (ctx) => ({ current: (ctx?.games || []).filter((g:any) => g.teamMode && g.winningTeam != null && g.players.some((p:any) => p.id === ctx?.playerId && p.team === g.winningTeam)).length, target: 5 }) },
-  { id: 'team_25_wins', name: 'Dream Team', desc: 'Win 25 team matches', icon: '🌟',
-    check: (_v, _gv, _g, ctx) => (ctx?.games || []).filter((g:any) => g.teamMode && g.winningTeam != null && g.players.some((p:any) => p.id === ctx?.playerId && p.team === g.winningTeam)).length >= 25,
-    progress: (ctx) => ({ current: (ctx?.games || []).filter((g:any) => g.teamMode && g.winningTeam != null && g.players.some((p:any) => p.id === ctx?.playerId && p.team === g.winningTeam)).length, target: 25 }) },
-  { id: 'team_4stack', name: 'Four Stack', desc: 'Win a team match with 4 teams playing', icon: '🟦',
-    check: (_v, _gv, g) => !!(g?.teamMode && g.teamCount === 4 && g.winningTeam != null && g.players.some((p:any) => p.team === g.winningTeam)) },
-  { id: 'team_clutch', name: 'Clutch Team', desc: 'Win a best-of team match (3+ legs)', icon: '🛡️',
-    check: (_v, _gv, g) => !!(g?.teamMode && g.legsBestOf > 1 && g.winningTeam != null && g.players.some((p:any) => p.team === g.winningTeam)) },
-  { id: 'team_rivalry', name: 'Rivalry', desc: 'Play a team match against at least 2 other teams', icon: '⚔️',
-    check: (_v, _gv, g) => !!(g?.teamMode && (g.teamCount || 0) >= 2 && g.players.some((p:any) => p.id === (g.players.find((pp:any) => pp.team === g.winningTeam)?.id))) },
 ];
 
 
@@ -421,9 +397,19 @@ export function defaultSettings(): Settings {
   return {
     theme: 'dark', accent: '#22c55e', confirmReset: true, sound: true, music: true,
     musicSetupTrack: 'setup_calm', musicMatchTrack: 'match_drive',
-    voicePack: 'off', voiceVolume: 0.7, sfxVolume: 0.8,
+    voicePack: 'announcer', voiceVolume: 0.8, sfxVolume: 0.9,
     xpConfig: { win: 50, visit60: 5, visit80: 10, visit100: 15, visit120: 20, visit140: 25, visit180: 50, checkout: 10, perDart: 1, levelMult: 1.5, baseLevelXp: 100 },
     customTitles: [],
     popups: { scores: true, milestones: true, xp: true, titles: true },
   };
 }
+
+export const VOICE_PACKS: { id: import('./types').VoicePackId; label: string }[] = [
+  { id: 'off', label: 'None' },
+  { id: 'announcer', label: 'Announcer (Deep)' },
+  { id: 'cyborg', label: 'Cyborg (Robotic)' },
+  { id: 'hype', label: 'Hype (Energetic)' },
+  { id: 'female', label: 'Female (Clear)' },
+];
+
+export const VOICE_PACK_LIST = VOICE_PACKS;
