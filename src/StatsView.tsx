@@ -63,6 +63,7 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
   const [refDate, setRefDate] = useState<Date>(() => new Date());
   const [modeFilter, setModeFilter] = useState<string>('all');
   const [selectedBadge, setSelectedBadge] = useState<string | null>(null);
+  const [powerUpFilter, setPowerUpFilter] = useState<'all' | 'standard' | 'powerups'>('all');
 
   if (!players.length) return <div className="view-scroll"><div className="card empty">No players yet.</div></div>;
   const p = players.find(x => x.id === pid) || players[0];
@@ -71,21 +72,26 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
   const filter = period === 'Overall' ? null : filterForPeriod(period, refDate);
   const dateFiltered = useMemo(() => filterGamesByDate(games as any, filter), [games, filter]);
   const modeFiltered = useMemo(() => modeFilter === 'all' ? dateFiltered : dateFiltered.filter(g => g.mode === modeFilter), [dateFiltered, modeFilter]);
-  const s = playerStats(p.id, modeFiltered);
+  const puFiltered = useMemo(() => {
+    if (powerUpFilter === 'all') return modeFiltered;
+    if (powerUpFilter === 'powerups') return modeFiltered.filter(g => g.powerUpsEnabled);
+    return modeFiltered.filter(g => !g.powerUpsEnabled);
+  }, [modeFiltered, powerUpFilter]);
+  const s = playerStats(p.id, puFiltered);
   const xp = getPlayerXP(p);
   const li = levelFromXP(xp.xp, settings);
   const ti = getTitleInfo(xp.selectedTitle, settings.customTitles);
-  const visits = allVisitsFor(p.id, modeFiltered);
-  const cmpS = cmpPlayer ? playerStats(cmpPlayer.id, modeFiltered) : null;
+  const visits = allVisitsFor(p.id, puFiltered);
+  const cmpS = cmpPlayer ? playerStats(cmpPlayer.id, puFiltered) : null;
   const cmpXp = cmpPlayer ? getPlayerXP(cmpPlayer) : null;
   const cmpLi = cmpXp ? levelFromXP(cmpXp.xp, settings) : null;
   const badgeCounts = useMemo(() => {
     const stored = xp.badgeCounts || {};
-    const fromHistory = computeLifetimeBadgeCounts(p.id, modeFiltered as any);
+    const fromHistory = computeLifetimeBadgeCounts(p.id, puFiltered as any);
     const merged: Record<string, number> = { ...fromHistory };
     for (const [k, v] of Object.entries(stored)) merged[k] = Math.max(merged[k] || 0, v);
     return merged;
-  }, [xp.badgeCounts, p.id, modeFiltered]);
+  }, [xp.badgeCounts, p.id, puFiltered]);
   const totalBadgeEarns = Object.values(badgeCounts).reduce((a: number, b: number) => a + b, 0);
   const series = bucketAverages(visits.filter((v: any) => !v.practice && !v.atc), period);
   const buckets: Record<string, number> = { '0-39': 0, '40-59': 0, '60-79': 0, '80-99': 0, '100-139': 0, '140-179': 0, '180': 0 };
@@ -125,6 +131,12 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
         {MODE_KEYS.map(k => (
           <button key={k} className={`btn sm ${modeFilter === k ? 'primary' : 'ghost'}`} onClick={() => setModeFilter(k)}>{MODES[k].label}</button>
         ))}
+      </div>
+      <div className="row" style={{ gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <span className="muted small" style={{ alignSelf: 'center' }}>Power-ups:</span>
+        <button className={`btn sm ${powerUpFilter === 'all' ? 'primary' : 'ghost'}`} onClick={() => setPowerUpFilter('all')}>All games</button>
+        <button className={`btn sm ${powerUpFilter === 'standard' ? 'primary' : 'ghost'}`} onClick={() => setPowerUpFilter('standard')}>Standard only</button>
+        <button className={`btn sm ${powerUpFilter === 'powerups' ? 'primary' : 'ghost'}`} onClick={() => setPowerUpFilter('powerups')}>Power-up games</button>
       </div>
       <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
         <div style={{ position: 'relative', width: 80, height: 80, flexShrink: 0 }}>

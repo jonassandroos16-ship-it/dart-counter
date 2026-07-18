@@ -10,6 +10,7 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
   const [editingTitle, setEditingTitle] = useState(false);
   const cfg = settings.xpConfig;
   const [xpForm, setXpForm] = useState(cfg);
+  const [puForm, setPuForm] = useState(settings.powerUpScaling);
   const mergeInputRef = useRef<HTMLInputElement>(null);
 
   const update = (patch: Partial<Settings>) => setSettings((prev: Settings) => ({ ...prev, ...patch }));
@@ -126,6 +127,36 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
           ))}
         </div>
         <button className="btn primary block" style={{ marginTop: 10 }} onClick={() => { update({ xpConfig: xpForm }); toast('XP settings saved'); }}>Save XP Settings</button>
+      </div>
+
+      <div className="card">
+        <h3 style={{ marginBottom: 4 }}>Power-Ups & Attributes</h3>
+        <div className="muted small" style={{ marginBottom: 12 }}>Tune how power-ups charge, how many points players get, and attribute scaling</div>
+        <div className="muted small" style={{ marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Charge</div>
+        <div className="grid grid-2">
+          {([['Charge per double (%)', 'chargePerDouble'], ['Charge per triple (%)', 'chargePerTriple'], ['Charge per bull (%)', 'chargePerBull'], ['Charge per score point', 'chargePerScorePoint'], ['Charge cap', 'chargeMax']] as [string, keyof typeof puForm][]).map(([label, key]) => (
+            <label key={key} className="field"><span>{label}</span>
+              <input type="number" value={puForm[key] as number} min={0} step={key === 'chargePerScorePoint' ? 0.01 : 1} onChange={e => setPuForm({ ...puForm, [key]: +e.target.value || 0 })} />
+            </label>
+          ))}
+        </div>
+        <div className="muted small" style={{ margin: '14px 0 8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Points</div>
+        <div className="grid grid-2">
+          {([['Power-up points per level', 'pointsPerLevel'], ['Starting power-up points', 'startingPoints'], ['Attribute points per level', 'attributePointsPerLevel']] as [string, keyof typeof puForm][]).map(([label, key]) => (
+            <label key={key} className="field"><span>{label}</span>
+              <input type="number" value={puForm[key] as number} min={0} step={1} onChange={e => setPuForm({ ...puForm, [key]: +e.target.value || 0 })} />
+            </label>
+          ))}
+        </div>
+        <div className="muted small" style={{ margin: '14px 0 8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Attributes</div>
+        <div className="grid grid-2">
+          {([['Starting HP', 'attributeStartHealth'], ['Starting armor (%)', 'attributeStartArmor'], ['HP per point', 'healthPerPoint'], ['Armor per point (%)', 'armorPerPoint']] as [string, keyof typeof puForm][]).map(([label, key]) => (
+            <label key={key} className="field"><span>{label}</span>
+              <input type="number" value={puForm[key] as number} min={0} step={1} onChange={e => setPuForm({ ...puForm, [key]: +e.target.value || 0 })} />
+            </label>
+          ))}
+        </div>
+        <button className="btn primary block" style={{ marginTop: 10 }} onClick={() => { update({ powerUpScaling: puForm }); toast('Power-up & attribute settings saved'); }}>Save Power-Up Settings</button>
       </div>
 
       <div className="card">
