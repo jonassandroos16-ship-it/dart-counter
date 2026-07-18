@@ -138,8 +138,8 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
         </div>
         <div style={{ flex: 1 }}>
           <h3 style={{ margin: '0 0 4px' }}>Win Rate</h3>
-          <div className="muted small">{s.gamesWon} won out of {s.games} games</div>
-          <div className="muted small" style={{ marginTop: 2 }}>{s.legsWon} legs won</div>
+          <div className="muted small">{s.gamesWon} won out of {s.competitiveGames} competitive games</div>
+          <div className="muted small" style={{ marginTop: 2 }}>{s.legsWon} legs won · {s.games} total games played</div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <div className="xp-pill" style={{ marginBottom: 4 }}>Level {li.level}</div>
@@ -161,7 +161,7 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
         </div>
         <div style={{ flex: 1 }}>
           <h3 style={{ margin: '0 0 4px' }}>Tie Rate</h3>
-          <div className="muted small">{s.gamesTied} tied out of {s.games} games</div>
+          <div className="muted small">{s.gamesTied} tied out of {s.competitiveGames} competitive games</div>
         </div>
       </div>
       <div className="grid grid-3" style={{ marginBottom: 12 }}>
