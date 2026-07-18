@@ -117,14 +117,14 @@ function pickExtreme(game: any, score: (pl: any) => number, mode: 'max' | 'min')
   if (players.length < 2) return null;
   const scored = players.map((p: any) => ({ id: p.id, n: score(p) }));
   if (mode === 'max') {
-    const max = Math.max(...scored.map((s) => s.n));
+    const max = Math.max(...scored.map((s: { id: string; n: number }) => s.n));
     if (max <= 0) return null;
-    const winners = scored.filter((s) => s.n === max);
-    return winners.length === 1 ? winners[0].id : winners.map((w) => w.id);
+    const winners = scored.filter((s: { id: string; n: number }) => s.n === max);
+    return winners.length === 1 ? winners[0].id : winners.map((w: { id: string; n: number }) => w.id);
   }
-  const min = Math.min(...scored.map((s) => s.n));
-  const winners = scored.filter((s) => s.n === min);
-  return winners.length === 1 ? winners[0].id : winners.map((w) => w.id);
+  const min = Math.min(...scored.map((s: { id: string; n: number }) => s.n));
+  const winners = scored.filter((s: { id: string; n: number }) => s.n === min);
+  return winners.length === 1 ? winners[0].id : winners.map((w: { id: string; n: number }) => w.id);
 }
 
 export function getBadgeInfo(badgeId: string | null | undefined): BadgeDef | undefined {
