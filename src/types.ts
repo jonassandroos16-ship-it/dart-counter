@@ -52,7 +52,6 @@ export interface GamePlayer {
   killerNumber?: number;
   killerHits?: number;
   kills?: string[];
-  team?: number; // 0-indexed team id when team mode is active
 }
 
 export interface Game {
@@ -76,12 +75,6 @@ export interface Game {
   darts: Dart[];
   mult: number;
   atcDarts?: { hit: boolean; target: string }[];
-  teamMode?: boolean;            // true when playing team vs team
-  teamCount?: number;           // number of teams
-  teamLegsWon?: number[];       // legs won per team (parallel to team index)
-  teamTurn?: number;            // current team whose turn it is (0-indexed)
-  teamPlayerCursor?: number[];  // per-team index into its player rotation order
-  winningTeam?: number | null;  // team that won (for team mode)
 }
 
 export interface GameRecord {
@@ -95,9 +88,6 @@ export interface GameRecord {
   winner: string | null;
   tied: boolean;
   tiedPlayers: string[] | null;
-  teamMode?: boolean;
-  teamCount?: number;
-  winningTeam?: number | null;
   players: {
     id: string;
     name: string;
@@ -105,7 +95,6 @@ export interface GameRecord {
     legsWon: number;
     dartsThrown: number;
     visits: Visit[];
-    team?: number;
   }[];
 }
 
@@ -127,6 +116,8 @@ export interface XPConfig {
   checkout: number; perDart: number; levelMult: number; baseLevelXp: number;
 }
 
+export type VoicePackId = 'off' | 'announcer' | 'cyborg' | 'hype' | 'female';
+
 export interface Settings {
   theme: 'dark' | 'light';
   accent: string;
@@ -135,6 +126,9 @@ export interface Settings {
   music: boolean;
   musicSetupTrack: string;
   musicMatchTrack: string;
+  voicePack: VoicePackId;
+  voiceVolume: number;
+  sfxVolume: number;
   xpConfig: XPConfig;
   customTitles: CustomTitle[];
   popups: { scores: boolean; milestones: boolean; xp: boolean; titles: boolean };
