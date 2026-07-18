@@ -108,9 +108,10 @@ label.field span { display: block; font-size: 12px; color: var(--muted); margin-
 
 .play-others {
   display: flex; gap: 6px; overflow-x: auto; flex-shrink: 0; padding-bottom: 2px;
+  width: 100%;
 }
 .play-other {
-  flex: 1; min-width: 90px; max-width: 140px; background: var(--bg-2); border: 1px solid var(--border);
+  flex: 1 1 0; min-width: 0; background: var(--bg-2); border: 1px solid var(--border);
   border-radius: 12px; padding: 8px;
 }
 .po-name { font-weight: 700; font-size: 13px; }
@@ -175,7 +176,7 @@ canvas { width: 100%; display:block; }
 .levelup .lu-ring { width:100px; height:100px; border-radius:50%; background:color-mix(in srgb,var(--accent) 20%,var(--bg-2)); display:flex; align-items:center; justify-content:center; margin:0 auto 12px; border:3px solid var(--accent); }
 .levelup .lu-level { font-size:36px; font-weight:900; color:var(--accent); }
 .levelup .lu-title { font-size:22px; font-weight:900; }
-.levelup .lu-sub { font-size:14px; color:var(--muted); margin-top:4px; }
+.levelup .lu-sub { font-size:14px; color: var(--muted); margin-top:4px; }
 .levelup .lu-xp { font-size:13px; font-weight:700; color:var(--accent); margin-top:8px; }
 
 .calendar-picker { background: var(--bg-3); border-radius: 12px; padding: 10px; }

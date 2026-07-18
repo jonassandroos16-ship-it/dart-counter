@@ -133,7 +133,9 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
       cur.score += scored;
       cur.visits.push({ darts: [...game.darts], scored, remaining: cur.score, leg: 1, date: new Date().toISOString() });
       Sound.play('enter', {}, settings);
-      advanceTurn({ ...game, players: newPlayers, darts: [], mult: 1 });
+      const next = advanceTurn({ ...game, players: newPlayers, darts: [], mult: 1 });
+      setGame(next);
+      runMilestones(cur, cur.score, scored, settings, popups, setPlayers, { ...game, players: newPlayers }, players, games);
       return;
     }
 
@@ -152,7 +154,8 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
         if (playersLeft.length > 0) {
           toast(`${cur.name} checked out! ${playersLeft.length} player${playersLeft.length > 1 ? 's' : ''} left to tie.`);
           Sound.play('win', {}, settings);
-          advanceTurn({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, darts: [], mult: 1 });
+          const next = advanceTurn({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, darts: [], mult: 1 });
+          setGame(next);
           return;
         }
         if (checkedOut.length > 1) { finishGame({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, darts: [], mult: 1 }, null, checkedOut); return; }
@@ -172,18 +175,21 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
       cur.visits.push({ darts: [...game.darts], scored: 0, remaining: cur.score, leg: game.leg, bust: true, date: new Date().toISOString() });
       Sound.play('bust', {}, settings);
       toast('Bust!');
-      advanceTurn({ ...game, players: newPlayers, darts: [], mult: 1 });
+      const next = advanceTurn({ ...game, players: newPlayers, darts: [], mult: 1 });
+      setGame(next);
       return;
     }
 
     cur.score = remaining;
     cur.visits.push({ darts: [...game.darts], scored, remaining, leg: game.leg, date: new Date().toISOString() });
     Sound.play('enter', {}, settings);
-    checkMilestones(cur, remaining, scored, settings, popups, setPlayers, game, players, games);
-    advanceTurn({ ...game, players: newPlayers, darts: [], mult: 1 });
+    const next = advanceTurn({ ...game, players: newPlayers, darts: [], mult: 1 });
+    setGame(next);
+    runMilestones(cur, remaining, scored, settings, popups, setPlayers, { ...game, players: newPlayers }, players, games);
   };
 
-  const advanceTurn = (g: Game) => {
+  // Pure: computes the next game state with the turn advanced. Does NOT call setGame.
+  const advanceTurn = (g: Game): Game => {
     const turn = (g.turn + 1) % g.players.length;
     const checkedOutCount = g.checkedOutThisRound.length;
     if (checkedOutCount > 0) {
@@ -192,13 +198,13 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
       if (anyReached) {
         const playersLeftToThrow = g.players.filter(pl => !g.checkedOutThisRound.includes(pl.id) && pl.score > 0);
         if (playersLeftToThrow.length === 0) {
-          if (checkedOutCount > 1) { finishGame({ ...g, turn }, null, g.checkedOutThisRound); return; }
+          if (checkedOutCount > 1) { finishGame({ ...g, turn }, null, g.checkedOutThisRound); return { ...g, turn, finished: true }; }
           const winner = g.players.find(pl => g.checkedOutThisRound.includes(pl.id));
-          if (winner) { finishGame({ ...g, turn }, winner, null); return; }
+          if (winner) { finishGame({ ...g, turn }, winner, null); return { ...g, turn, finished: true }; }
         }
       }
     }
-    setGame({ ...g, turn });
+    return { ...g, turn };
   };
 
   const finishGame = (g: Game, winner: GamePlayer | null, tiedIds: string[] | null) => {
@@ -420,7 +426,7 @@ function GameOver({ game, onNewGame, onViewStats }: { game: Game; onNewGame: () 
   );
 }
 
-function checkMilestones(p: GamePlayer, remaining: number, visitScore: number, settings: Settings, popups: PopupControls, setPlayers: (updater: any) => void, game: Game, players: Player[], games: GameRecord[]) {
+function runMilestones(p: GamePlayer, remaining: number, visitScore: number, settings: Settings, popups: PopupControls, setPlayers: (updater: any) => void, game: Game, players: Player[], games: GameRecord[]) {
   if (settings.popups.scores) {
     for (const sp of SCORE_POPUPS) { if (visitScore >= sp.min) { popups.setMilestone({ emoji: sp.emoji, title: sp.title, sub: sp.sub }); Sound.play('milestone', {}, settings); break; } }
   }
