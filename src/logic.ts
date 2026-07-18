@@ -1,8 +1,8 @@
 import type { Game, GamePlayer, GameRecord, Player, Settings, Visit } from './types';
-import { MODES, CHECKOUTS, ATC_TARGETS, atcLabel } from './constants';
+import { MODES, CHECKOUTS, ATC_TARGETS, atcLabel, defaultSettings } from './constants';
 import { uid, todayKey } from './store';
 
-export function createGame(modeKey: string, playerIds: string[], players: Player[], doubleOut: boolean, legsBestOf: number, teamMode = false, teamAssignment: number[] = [], powerUpsEnabled = false): Game {
+export function createGame(modeKey: string, playerIds: string[], players: Player[], doubleOut: boolean, legsBestOf: number, teamMode = false, teamAssignment: number[] = [], powerUpsEnabled = false, settings: Settings | null = null): Game {
   const mode = MODES[modeKey];
   const meta = (id: string) => players.find(p => p.id === id)!;
   const special = !!(mode.practice || mode.atc || mode.killer || mode.party);
@@ -14,6 +14,19 @@ export function createGame(modeKey: string, playerIds: string[], players: Player
       gp.powerUpCharge = 0;
       gp.powerUpUsed = false;
       gp.powerUpId = src.powerUps?.active ?? null;
+    }
+    if (modeKey === 'battle') {
+      const s = settings as Settings | null;
+      const attrs = src.attributes || defaultAttributes(s || defaultSettings());
+      const cfg = s ? s.powerUpScaling : defaultSettings().powerUpScaling;
+      gp.hp = attrs.health;
+      gp.maxHp = attrs.health;
+      gp.armorPct = Math.min(cfg.armorMax, attrs.armor);
+      gp.powerPct = Math.min(cfg.powerMax, attrs.power);
+      gp.defeated = false;
+      gp.attacks = [];
+      gp.damageDealt = 0;
+      gp.damageTaken = 0;
     }
     return gp;
   });
@@ -128,6 +141,7 @@ export function defaultAttributes(settings: Settings) {
   return {
     health: settings.powerUpScaling.attributeStartHealth,
     armor: settings.powerUpScaling.attributeStartArmor,
+    power: settings.powerUpScaling.attributeStartPower,
     pointsAvailable: 0,
   };
 }
@@ -163,7 +177,8 @@ export function reconcilePlayerPoints(player: Player, settings: Settings): Playe
 
   const attrTotal = totalAttributePointsForLevel(level, settings);
   const attrSpent = Math.round((attrs.health - settings.powerUpScaling.attributeStartHealth) / settings.powerUpScaling.healthPerPoint)
-    + Math.round((attrs.armor - settings.powerUpScaling.attributeStartArmor) / settings.powerUpScaling.armorPerPoint);
+    + Math.round((attrs.armor - settings.powerUpScaling.attributeStartArmor) / settings.powerUpScaling.armorPerPoint)
+    + Math.round((attrs.power - settings.powerUpScaling.attributeStartPower) / settings.powerUpScaling.powerPerPoint);
   const attrAvail = Math.max(0, attrTotal - attrSpent);
 
   const pwrTotal = totalPowerUpPointsForLevel(level, settings);
@@ -186,6 +201,20 @@ export function reconcileAllPlayersPoints(players: Player[], settings: Settings)
     return updated;
   });
   return { players: next, changed };
+}
+
+// ── Battle mode helpers ──────────────────────────────────────────────
+// Compute attack damage for a visit in battle mode. Damage scales with
+// the visit score and the attacker's power %. Armor reduces incoming
+// damage by up to the armor cap (default 60%).
+export function computeBattleDamage(visitScore: number, attackerPowerPct: number, targetArmorPct: number, settings: Settings): number {
+  const cfg = settings.powerUpScaling;
+  const base = cfg.battleBaseDamage + visitScore * 0.5;
+  const powerMult = 1 + (attackerPowerPct / 100) * cfg.battlePowerBonus;
+  const raw = base * powerMult;
+  const armorReduction = Math.min(cfg.armorMax, targetArmorPct) / 100;
+  const final = Math.round(raw * (1 - armorReduction));
+  return Math.max(1, final);
 }
 
 export function getPlayerXPById(playerId: string, players: Player[]) {
