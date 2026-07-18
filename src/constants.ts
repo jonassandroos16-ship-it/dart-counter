@@ -126,6 +126,17 @@ export const MODES: Record<string, { start: number; label: string; atc?: boolean
       'Highest total wins.',
       'A party mode for finding out who can really pile on the points.',
     ] },
+  'battle': { start: 0, label: 'Battle', party: true,
+    desc: 'Use your attributes! Each visit deals damage to an opponent. Last one standing wins.',
+    rules: [
+      'Each player starts with HP equal to their Health attribute.',
+      'Armor % reduces incoming damage (max 60%).',
+      'Power % increases your attack damage.',
+      'Each visit you attack one opponent — in 1v1 it is automatic.',
+      'Damage = base + power bonus, reduced by target armor.',
+      'Reduce an opponent to 0 HP to defeat them.',
+      'Last player standing wins the battle.',
+    ] },
 };
 
 export const MODE_KEYS = Object.keys(MODES);
@@ -396,6 +407,35 @@ export const BUILTIN_TITLES: TitleDef[] = [
     check: (_v, _gv, _g, ctx) => (ctx?.games || []).filter((g:any) => g.mode === 'speed101' || g.mode === 'highscore').length >= 5,
     progress: (ctx) => ({ current: (ctx?.games || []).filter((g:any) => g.mode === 'speed101' || g.mode === 'highscore').length, target: 5 }) },
 
+  // ============ Battle mode ============
+  { id: 'battle_first_win', name: 'First Blood', desc: 'Win your first Battle match', icon: '🩸',
+    check: (_v, _gv, g, ctx) => {
+      if (g?.mode === 'battle' && g.players.length >= 2 && g.winner && g.players.some((p:any) => p.id === g.winner)) return true;
+      return (ctx?.games || []).some((gm:any) => gm.mode === 'battle' && gm.players.length >= 2 && gm.winner === ctx?.playerId);
+    },
+    progress: (ctx) => ({ current: (ctx?.games || []).filter((g:any) => g.mode === 'battle' && g.winner === ctx?.playerId).length, target: 1 }) },
+  { id: 'battle_5_wins', name: 'Brawler', desc: 'Win 5 Battle matches', icon: '🥊',
+    check: (_v, _gv, _g, ctx) => (ctx?.games || []).filter((g:any) => g.mode === 'battle' && g.winner === ctx?.playerId).length >= 5,
+    progress: (ctx) => ({ current: (ctx?.games || []).filter((g:any) => g.mode === 'battle' && g.winner === ctx?.playerId).length, target: 5 }) },
+  { id: 'battle_25_wins', name: 'Warlord', desc: 'Win 25 Battle matches', icon: '⚔️',
+    check: (_v, _gv, _g, ctx) => (ctx?.games || []).filter((g:any) => g.mode === 'battle' && g.winner === ctx?.playerId).length >= 25,
+    progress: (ctx) => ({ current: (ctx?.games || []).filter((g:any) => g.mode === 'battle' && g.winner === ctx?.playerId).length, target: 25 }) },
+  { id: 'battle_titan', name: 'Battle Titan', desc: 'Win 100 Battle matches', icon: '🌋',
+    check: (_v, _gv, _g, ctx) => (ctx?.games || []).filter((g:any) => g.mode === 'battle' && g.winner === ctx?.playerId).length >= 100,
+    progress: (ctx) => ({ current: (ctx?.games || []).filter((g:any) => g.mode === 'battle' && g.winner === ctx?.playerId).length, target: 100 }) },
+  { id: 'battle_knockout', name: 'Knockout', desc: 'Defeat an opponent in a Battle match', icon: '💀',
+    check: (_v, _gv, g) => g && g.mode === 'battle' && g.players.some((p:any) => (p.defeated || (p.hp ?? 0) <= 0)) },
+  { id: 'battle_flawless', name: 'Flawless Victory', desc: 'Win a Battle match without dropping below half HP', icon: '✨',
+    check: (_v, _gv, g) => g && g.mode === 'battle' && g.players.length >= 2 && g.winner && g.players.some((p:any) => p.id === g.winner && (p.hp ?? 0) >= (p.maxHp ?? 1) * 0.5) },
+  { id: 'battle_3v1', name: 'Last Stand', desc: 'Win a Battle match against 3+ opponents', icon: '🏰',
+    check: (_v, _gv, g) => g && g.mode === 'battle' && g.players.length >= 4 && g.winner && g.players.some((p:any) => p.id === g.winner) },
+  { id: 'battle_bruiser', name: 'Bruiser', desc: 'Deal 500+ total damage in a single Battle match', icon: '💥',
+    check: (_v, _gv, g) => g && g.mode === 'battle' && g.players.some((p:any) => (p.damageDealt || 0) >= 500) },
+  { id: 'battle_ironhide', name: 'Ironhide', desc: 'Have 60% armor equipped for a Battle match', icon: '🛡️',
+    check: (_v, _gv, g) => g && g.mode === 'battle' && g.players.some((p:any) => (p.armorPct || 0) >= 60) },
+  { id: 'battle_powerhouse', name: 'Powerhouse', desc: 'Have 100% power equipped for a Battle match', icon: '⚡',
+    check: (_v, _gv, g) => g && g.mode === 'battle' && g.players.some((p:any) => (p.powerPct || 0) >= 100) },
+
   // ============ Team mode ============
   { id: 'team_first_win', name: 'Team Player', desc: 'Win your first team match', icon: '🤝',
     check: (_v, _gv, g, ctx) => {
@@ -486,8 +526,14 @@ export function defaultSettings(): Settings {
       attributePointsPerLevel: 5,
       attributeStartHealth: 400,
       attributeStartArmor: 0,
+      attributeStartPower: 0,
       healthPerPoint: 25,
       armorPerPoint: 5,
+      powerPerPoint: 5,
+      armorMax: 60,
+      powerMax: 100,
+      battleBaseDamage: 40,
+      battlePowerBonus: 0.6,
     },
   };
 }
