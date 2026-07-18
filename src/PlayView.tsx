@@ -255,7 +255,7 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
     Sound.play('win', {}, settings);
     music.startContext('setup', settings);
     setGames((prev: GameRecord[]) => [...prev, recordFromGame(finished)]);
-    if (!finished.practice) {
+    if (!finished.practice && finished.players.length >= 2) {
       if (winner) awardXP(winner.id, settings.xpConfig.win, 'Winning the game', settings, setPlayers, popups);
       if (isTie && tiedIds) tiedIds.forEach(pid => awardXP(pid, Math.round(settings.xpConfig.win / 2), 'Tied the game', settings, setPlayers, popups));
     }
@@ -448,14 +448,15 @@ function GameOver({ game, onNewGame, onViewStats }: { game: Game; onNewGame: () 
   const w = game.players.find(pl => pl.id === game.winner);
   const isTie = !!game.tied && !!game.tiedPlayers && game.tiedPlayers.length > 1;
   const tiedNames = isTie ? (game.tiedPlayers || []).map(id => game.players.find(pl => pl.id === id)?.name || '').filter(Boolean) : [];
-  const titleText = game.practice ? 'Practice complete' : isTie ? "It's a tie!" : (w ? `${w.name} wins!` : 'Game over');
+  const isSolo = game.players.length < 2;
+  const titleText = game.practice ? 'Practice complete' : isSolo ? 'Solo session complete' : isTie ? "It's a tie!" : (w ? `${w.name} wins!` : 'Game over');
   const badgeMap = useMemo(() => computeGameBadges(game), [game]);
   const anyBadges = Object.values(badgeMap).some((arr) => arr.length > 0);
   const [badgeInfo, setBadgeInfo] = useState<{ icon: string; name: string; desc: string; player: string } | null>(null);
   return (
     <div className="view-scroll">
       <div className="card center">
-        <div style={{ fontSize: 44 }}>{isTie ? '🤝' : '🏆'}</div>
+        <div style={{ fontSize: 44 }}>{isTie ? '🤝' : isSolo ? '🎯' : '🏆'}</div>
         <h2 style={{ margin: '8px 0' }}>{titleText}</h2>
         {isTie ? <div className="muted small" style={{ marginBottom: 8 }}>{tiedNames.join(' & ')}</div> : null}
         <div className="grid grid-2" style={{ margin: '14px 0' }}>
@@ -549,11 +550,15 @@ function checkTitleUnlocks(pl: GamePlayer, settings: Settings, popups: PopupCont
     const unlocked = [...(player.unlockedTitles || [])];
 
     // Historical stats from prior completed games (excluding the current in-progress game).
+    // Solo games (playing against yourself) don't count toward competitive
+    // stats like wins — they're excluded from gamesWon and from the per-game
+    // winner check. Scoring stats (lifetimeVisits) still include them.
     const historyGames = games.filter(g => g.id !== game.id && g.players.some(p => p.id === pl.id));
     const historyVisits = allVisitsFor(pl.id, historyGames);
     const lifetimeVisits = [...historyVisits, ...(pl.visits || [])];
     const gamesPlayed = historyGames.length + (game.finished ? 1 : 0);
-    const gamesWon = historyGames.filter(g => g.winner === pl.id).length + (game.finished && game.winner === pl.id ? 1 : 0);
+    const isCompetitiveGame = game.players.length >= 2;
+    const gamesWon = historyGames.filter(g => g.players.length >= 2 && g.winner === pl.id).length + (game.finished && isCompetitiveGame && game.winner === pl.id ? 1 : 0);
     const ctx = { playerId: pl.id, games: historyGames, gamesPlayed, gamesWon, lifetimeVisits };
 
     titles.forEach(t => {
@@ -597,7 +602,7 @@ function finishSimpleGame(g: Game, winner: GamePlayer | null, settings: Settings
   Sound.play('win', {}, settings);
   music.startContext('setup', settings);
   setGames((prev: GameRecord[]) => [...prev, recordFromGame(finished)]);
-  if (winner) awardXP(winner.id, settings.xpConfig.win, 'Winning the game', settings, setPlayers, popups);
+  if (winner && g.players.length >= 2) awardXP(winner.id, settings.xpConfig.win, 'Winning the game', settings, setPlayers, popups);
   finished.players.forEach(pl => checkTitleUnlocks(pl, settings, popups, setPlayers, finished, players, games));
   awardBadges(finished, setPlayers);
   setGame(finished);
