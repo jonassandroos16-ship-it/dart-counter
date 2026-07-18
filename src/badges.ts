@@ -52,8 +52,11 @@ export const BADGES: BadgeDef[] = [
   { id: 'b_shark', name: 'Shark', desc: 'Hit 5+ triples in the game', icon: '🦈', kind: 'in-game',
     check: (v) => dartsOf(v).filter((d: any) => d.mult === 3).length >= 5 },
   { id: 'b_first_blood', name: 'First Blood', desc: 'Be the first player to check out a leg', icon: '🩸', kind: 'in-game',
-    check: (_v, game) => {
+    check: (v, game) => {
       if (!game || game.practice || game.atc) return false;
+      // Only meaningful in multi-leg matches — a single-leg match has no
+      // "first" checkout distinct from the only one.
+      if (!game.legsBestOf || game.legsBestOf <= 1) return false;
       let earliest: { pid: string; date: number } | null = null;
       for (const pl of game.players || []) {
         for (const visit of pl.visits || []) {
@@ -63,7 +66,10 @@ export const BADGES: BadgeDef[] = [
           }
         }
       }
-      return !!earliest;
+      if (!earliest) return false;
+      // Award only the player who actually checked out first.
+      return v.some((visit: any) => visit.remaining === 0 && !visit.bust &&
+        new Date(visit.date || 0).getTime() === earliest!.date);
     } },
 
   // ============ Post-game (comparative — one winner per badge) ============
