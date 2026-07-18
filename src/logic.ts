@@ -5,15 +5,23 @@ import { uid, todayKey } from './store';
 export function createGame(modeKey: string, playerIds: string[], players: Player[], doubleOut: boolean, legsBestOf: number): Game {
   const mode = MODES[modeKey];
   const meta = (id: string) => players.find(p => p.id === id)!;
+  const special = !!(mode.practice || mode.atc || mode.killer || mode.party);
+  const basePlayers = playerIds.map((id, i) => {
+    const gp: GamePlayer = { id, name: meta(id).name, color: meta(id).color, score: mode.start, legsWon: 0, visits: [], idx: 0, dartsThrown: 0, done: false };
+    if (mode.killer) { gp.lives = 3; gp.eliminated = false; gp.killerNumber = KILLER_NUMBERS[i % KILLER_NUMBERS.length]; gp.killerHits = 0; gp.kills = []; }
+    return gp;
+  });
   return {
     id: uid(), mode: modeKey, date: new Date().toISOString(),
-    doubleOut: (mode.practice || mode.atc) ? false : doubleOut,
+    doubleOut: special ? false : doubleOut,
     practice: !!mode.practice, atc: !!mode.atc,
-    legsBestOf: (mode.practice || mode.atc) ? 1 : legsBestOf,
-    players: playerIds.map(id => ({ id, name: meta(id).name, color: meta(id).color, score: mode.start, legsWon: 0, visits: [], idx: 0, dartsThrown: 0, done: false })),
+    legsBestOf: special ? 1 : legsBestOf,
+    players: basePlayers,
     turn: 0, leg: 1, finished: false, winner: null, checkedOutThisRound: [], roundStartTurn: 0, darts: [], mult: 1,
   };
 }
+
+const KILLER_NUMBERS = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
 
 export function recordFromGame(game: Game): GameRecord {
   return {
@@ -28,11 +36,18 @@ export function checkoutHint(remaining: number | null, doubleOut: boolean, pract
   if (remaining == null || practice) return '';
   if (remaining < 0) return 'Bust!';
   if (remaining === 0) return 'Checked out!';
-  if (remaining === 1) return doubleOut ? 'No checkout — bust risk' : 'Checkout: 1';
+  if (remaining === 1) return doubleOut ? 'No checkout — bust risk' : 'Checkout: S1';
   if (remaining > 170) return 'No 3-dart checkout — score to get ≤ 170';
+  // Straight out: any number finishes. Show the simplest single-dart route.
+  if (!doubleOut) {
+    if (remaining <= 20) return `Checkout: S${remaining}`;
+    if (remaining === 25) return 'Checkout: 25 (outer bull)';
+    if (remaining === 50) return 'Checkout: Bull';
+    if (remaining <= 40) { const d = Math.ceil(remaining / 2); return `Checkout: S${remaining} or D${d}`; }
+    return `Checkout: ${remaining}`;
+  }
   const co = CHECKOUTS[remaining];
   if (co) return 'Checkout: ' + co.join('  ');
-  if (!doubleOut) return 'Checkout: ' + remaining;
   return 'No checkout from ' + remaining;
 }
 

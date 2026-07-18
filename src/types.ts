@@ -44,6 +44,11 @@ export interface GamePlayer {
   idx: number;
   dartsThrown: number;
   done: boolean;
+  lives?: number;
+  eliminated?: boolean;
+  killerNumber?: number;
+  killerHits?: number;
+  kills?: string[];
 }
 
 export interface Game {

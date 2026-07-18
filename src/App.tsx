@@ -9,7 +9,7 @@ import { PlayersView } from './PlayersView';
 import { StatsView } from './StatsView';
 import { HistoryView } from './HistoryView';
 import { SettingsView } from './SettingsView';
-import { Toast, MilestonePopup, LevelUpPopup, TitleUnlockPopup, usePopupState } from './Popups';
+import { Toast, MilestonePopup, LevelUpPopup, TitleUnlockPopup, KillPopup, usePopupState } from './Popups';
 
 type View = 'play' | 'players' | 'stats' | 'history' | 'settings';
 
@@ -91,6 +91,7 @@ export default function App() {
       {popups.milestone && <MilestonePopup {...popups.milestone} onDone={() => popups.setMilestone(null)} />}
       {popups.levelUp && <LevelUpPopup {...popups.levelUp} onDone={() => popups.setLevelUp(null)} />}
       {popups.titleUnlock && <TitleUnlockPopup {...popups.titleUnlock} onDone={() => popups.setTitleUnlock(null)} />}
+      {popups.kill && <KillPopup {...popups.kill} onDone={() => popups.setKill(null)} />}
     </div>
   );
 }

@@ -25,13 +25,16 @@ export const CHECKOUTS: Record<number, string[]> = {
   22:['D11'],20:['D10'],18:['D9'],16:['D8'],14:['D7'],12:['D6'],10:['D5'],8:['D4'],6:['D3'],4:['D2'],2:['D1'],
 };
 
-export const MODES: Record<string, { start: number; label: string; atc?: boolean; practice?: boolean }> = {
+export const MODES: Record<string, { start: number; label: string; atc?: boolean; practice?: boolean; killer?: boolean; party?: boolean; desc?: string }> = {
   '501': { start: 501, label: '501' },
   '301': { start: 301, label: '301' },
   '701': { start: 701, label: '701' },
   '101': { start: 101, label: '101' },
   'atc': { start: 0, label: 'Around the Clock', atc: true },
   'practice': { start: 0, label: 'Practice', practice: true },
+  'killer': { start: 0, label: 'Killer', killer: true, desc: 'Hit your number 5 times to become a Killer, then knock out opponents by hitting their number.' },
+  'speed101': { start: 101, label: 'Speed 101', party: true, desc: 'Race to zero from 101 — fastest checkout wins. No double-out.' },
+  'highscore': { start: 0, label: 'High Score', party: true, desc: 'Score as much as you can in 7 visits. Highest total wins!' },
 };
 
 export const ATC_TARGETS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,'Bull'];
@@ -205,6 +208,30 @@ export const BUILTIN_TITLES: TitleDef[] = [
     check: (_v, _gv, _g, ctx) => (ctx?.gamesWon || 0) >= 25 },
   { id: 'life_wins_100', name: 'Dart Legend', desc: 'Win 100 games', icon: '🌠',
     check: (_v, _gv, _g, ctx) => (ctx?.gamesWon || 0) >= 100 },
+
+  // ============ Killer mode ============
+  { id: 'killer_first', name: 'First Kill', desc: 'Eliminate a player in Killer', icon: '💀',
+    check: (_v, _gv, g) => g && g.mode === 'killer' && g.players.some((p:any) => (p.kills||[]).length >= 1) },
+  { id: 'killer_3', name: 'Killing Spree', desc: 'Eliminate 3 players in one Killer game', icon: '🔫',
+    check: (_v, _gv, g) => g && g.mode === 'killer' && g.players.some((p:any) => (p.kills||[]).length >= 3) },
+  { id: 'killer_survivor', name: 'Last One Standing', desc: 'Win a Killer game', icon: '🥇',
+    check: (_v, _gv, g) => g && g.mode === 'killer' && g.winner && g.players.some((p:any) => p.id === g.winner) },
+  { id: 'killer_marked', name: 'Marked for Death', desc: 'Become a Killer (5 hits on your number)', icon: '🔪',
+    check: (_v, _gv, g) => g && g.mode === 'killer' && g.players.some((p:any) => (p.killerHits||0) >= 5) },
+  { id: 'killer_flawless', name: 'Flawless Victory', desc: 'Win Killer without losing a life', icon: '✨',
+    check: (_v, _gv, g) => g && g.mode === 'killer' && g.winner && g.players.some((p:any) => p.id === g.winner && (p.lives||0) >= 3) },
+
+  // ============ Party modes ============
+  { id: 'speed_demon', name: 'Speed Demon', desc: 'Win a Speed 101 game', icon: '⚡',
+    check: (_v, _gv, g) => g && g.mode === 'speed101' && g.winner && g.players.some((p:any) => p.id === g.winner) },
+  { id: 'speed_blur', name: 'Blur', desc: 'Checkout 101 in a single visit', icon: '💨',
+    check: (_v, gv) => gv.some((v:any) => v.mode === 'speed101' && v.remaining === 0 && (v.darts||[]).length <= 3) },
+  { id: 'high_roller', name: 'High Roller', desc: 'Win a High Score game', icon: '🎰',
+    check: (_v, _gv, g) => g && g.mode === 'highscore' && g.winner && g.players.some((p:any) => p.id === g.winner) },
+  { id: 'jackpot', name: 'Jackpot', desc: 'Score 400+ in a High Score game', icon: '💰',
+    check: (_v, gv, g) => g && g.mode === 'highscore' && gv.filter((v:any) => v.mode === 'highscore').reduce((a:number,v:any) => a + (v.scored||0), 0) >= 400 },
+  { id: 'party_animal', name: 'Party Animal', desc: 'Play 5 party-mode games', icon: '🎉',
+    check: (_v, _gv, _g, ctx) => (ctx?.games || []).filter((g:any) => g.mode === 'speed101' || g.mode === 'highscore').length >= 5 },
 ];
 
 

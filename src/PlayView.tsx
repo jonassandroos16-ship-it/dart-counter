@@ -51,7 +51,7 @@ function SetupView({ players, onStart }: { players: Player[]; onStart: (mode: st
 
   if (!players.length) return <div className="view-scroll"><div className="card empty">Add a player before starting a game.</div></div>;
   const m = MODES[mode];
-  const noX01 = !!(m.practice || m.atc);
+  const noX01 = !!(m.practice || m.atc || m.killer || m.party);
 
   return (
     <div className="view-scroll">
@@ -62,6 +62,9 @@ function SetupView({ players, onStart }: { players: Player[]; onStart: (mode: st
             <option value="501">501</option><option value="301">301</option>
             <option value="701">701</option><option value="101">101</option>
             <option value="atc">Around the Clock</option><option value="practice">Practice (free scoring)</option>
+            <option value="killer">Killer (elimination)</option>
+            <option value="speed101">Speed 101 (party)</option>
+            <option value="highscore">High Score (party)</option>
           </select>
         </label>
         {!noX01 && <label className="field"><span>Finish</span>
@@ -88,6 +91,7 @@ function SetupView({ players, onStart }: { players: Player[]; onStart: (mode: st
             );
           })}
         </div>
+        {m.desc && <div className="muted small" style={{ marginBottom: 10, fontStyle: 'italic' }}>{m.desc}</div>}
         <div className="muted small" style={{ marginBottom: 16 }}>
           {picked.length ? 'Order: ' + picked.map(id => players.find(p => p.id === id)!.name).join(' → ') : 'Select at least one player'}
         </div>
@@ -103,6 +107,8 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
   music: MusicEngine; onQuit: () => void; onGameOver: () => void; popups: PopupControls;
 }) {
   if (game.atc) return <AtcBoard game={game} setGame={setGame} settings={settings} toast={toast} music={music} onQuit={onQuit} setGames={setGames} />;
+  if (game.mode === 'killer') return <KillerBoard game={game} setGame={setGame} settings={settings} toast={toast} music={music} onQuit={onQuit} setGames={setGames} setPlayers={setPlayers} popups={popups} onGameOver={onGameOver} />;
+  if (game.mode === 'highscore') return <HighScoreBoard game={game} setGame={setGame} settings={settings} toast={toast} music={music} onQuit={onQuit} setGames={setGames} setPlayers={setPlayers} popups={popups} onGameOver={onGameOver} />;
   if (game.finished) return <GameOver game={game} onNewGame={() => { setGame(null); onGameOver(); music.startContext('setup', settings); }} onViewStats={() => { setGame(null); onGameOver(); }} />;
 
   const p = game.players[game.turn];
@@ -143,7 +149,7 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
 
     const remaining = cur.score - scored;
     const lastDart = game.darts[game.darts.length - 1];
-    const bust = remaining < 0 || remaining === 1 || (remaining === 0 && game.doubleOut && !lastDart.isDouble);
+    const bust = remaining < 0 || (remaining === 1 && game.doubleOut) || (remaining === 0 && game.doubleOut && !lastDart.isDouble);
 
     if (remaining === 0 && (!game.doubleOut || lastDart.isDouble)) {
       cur.visits.push({ darts: [...game.darts], scored, remaining: 0, leg: game.leg, checkout: scored, date: new Date().toISOString() });
@@ -494,4 +500,273 @@ function checkTitleUnlocks(pl: GamePlayer, settings: Settings, popups: PopupCont
     });
     return prev.map(p => p.id === pl.id ? { ...p, unlockedTitles: unlocked } : p);
   });
+}
+
+function finishSimpleGame(g: Game, winner: GamePlayer | null, settings: Settings, setGame: (g: Game | null) => void, setGames: (updater: any) => void, setPlayers: (updater: any) => void, popups: PopupControls, music: MusicEngine, players: Player[], games: GameRecord[]) {
+  const finished: Game = { ...g, finished: true, winner: winner ? winner.id : null, tied: false, tiedPlayers: null };
+  Sound.play('win', {}, settings);
+  music.startContext('setup', settings);
+  setGames((prev: GameRecord[]) => [...prev, recordFromGame(finished)]);
+  if (winner) awardXP(winner.id, settings.xpConfig.win, 'Winning the game', settings, setPlayers, popups);
+  finished.players.forEach(pl => checkTitleUnlocks(pl, settings, popups, setPlayers, finished, players, games));
+  setGame(finished);
+}
+
+// ── Killer mode ──────────────────────────────────────────────────────
+// Each player has an assigned number. Hit it 5 times to become a Killer.
+// Killers hit other players' numbers to remove lives. Last alive wins.
+
+function KillerBoard({ game, setGame, settings, toast, music, onQuit, setGames, setPlayers, popups, onGameOver }: {
+  game: Game; setGame: (g: Game | null) => void; settings: Settings; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void;
+}) {
+  const p = game.players[game.turn];
+  const others = [...game.players.slice(game.turn + 1), ...game.players.slice(0, game.turn)];
+  const alive = game.players.filter(pl => !pl.eliminated);
+
+  const addDart = (base: number, mult: number, labelOverride?: string, isBull?: boolean) => {
+    if (game.darts.length >= 3) { toast('3 darts already'); return; }
+    let value: number, label: string;
+    if (isBull) { value = 50; label = 'Bull'; }
+    else if (base === 25) { value = mult === 2 ? 50 : 25; label = mult === 2 ? 'Bull' : '25'; }
+    else if (base === 0) { value = 0; label = 'Miss'; }
+    else { value = base * mult; label = (mult === 2 ? 'D' : mult === 3 ? 'T' : '') + base; }
+    const dart = { value, label: labelOverride || label, base, mult: isBull ? 2 : (base === 25 && value === 50 ? 2 : mult), isDouble: !!(isBull || (base === 25 && value === 50) || mult === 2), isOuter: false };
+    Sound.play('dart', { score: value }, settings);
+    setGame({ ...game, darts: [...game.darts, dart], mult: 1 });
+  };
+
+  const undoDart = () => { if (game.darts.length) setGame({ ...game, darts: game.darts.slice(0, -1) }); };
+
+  const enterVisit = () => {
+    if (!game.darts.length) { toast('Add at least one dart'); return; }
+    const newPlayers = game.players.map(pl => ({ ...pl }));
+    const cur = newPlayers[game.turn];
+    const isKiller = (cur.killerHits || 0) >= 5;
+    let killedThisVisit: { killer: string; victim: string } | null = null;
+    const dartsLog: any[] = [];
+
+    for (const dart of game.darts) {
+      dartsLog.push(dart);
+      if (dart.base === 0) continue; // miss
+      if (!isKiller) {
+        if (dart.base === cur.killerNumber) {
+          cur.killerHits = Math.min(5, (cur.killerHits || 0) + 1);
+          if (cur.killerHits === 5) toast(`${cur.name} is now a KILLER!`);
+        }
+      } else {
+        const victim = newPlayers.find(pl => pl.id !== cur.id && !pl.eliminated && pl.killerNumber === dart.base);
+        if (victim) {
+          victim.lives = Math.max(0, (victim.lives || 0) - 1);
+          cur.kills = [...(cur.kills || []), victim.id];
+          if (victim.lives === 0 && !victim.eliminated) {
+            victim.eliminated = true;
+            killedThisVisit = { killer: cur.name, victim: victim.name };
+          }
+        }
+      }
+    }
+
+    const scored = game.darts.reduce((a, d) => a + d.value, 0);
+    cur.visits.push({ darts: [...game.darts], scored, remaining: cur.lives, leg: 1, mode: 'killer', date: new Date().toISOString(), hits: (cur.kills || []).length });
+    cur.dartsThrown += game.darts.length;
+
+    const remainingAlive = newPlayers.filter(pl => !pl.eliminated);
+    const finishedState = { ...game, players: newPlayers, darts: [], mult: 1 };
+    if (remainingAlive.length <= 1) {
+      const winner = remainingAlive[0] || null;
+      if (killedThisVisit) popups.setKill(killedThisVisit);
+      setTimeout(() => finishSimpleGame(finishedState, winner, settings, setGame, setGames, setPlayers, popups, music, [], []), killedThisVisit ? 2200 : 0);
+      return;
+    }
+    Sound.play('enter', {}, settings);
+    if (killedThisVisit) popups.setKill(killedThisVisit);
+    let nextTurn = (game.turn + 1) % game.players.length;
+    while (newPlayers[nextTurn].eliminated) nextTurn = (nextTurn + 1) % game.players.length;
+    setGame({ ...finishedState, turn: nextTurn });
+  };
+
+  if (game.finished) return <GameOver game={game} onNewGame={() => { setGame(null); onGameOver(); music.startContext('setup', settings); }} onViewStats={() => { setGame(null); onGameOver(); }} />;
+
+  return (
+    <div className="view-noscroll">
+      <div className="play-current">
+        <div className="pc-header">
+          <div className="row" style={{ gap: 8 }}>
+            <span className="avatar" style={{ width: 32, height: 32, fontSize: 13, background: p.color }}>{initials(p.name)}</span>
+            <span className="pc-name">{p.name}</span>
+            {(p.killerHits || 0) >= 5 && <span className="pill" style={{ background: '#ef4444', color: '#fff', fontSize: 10 }}>KILLER</span>}
+          </div>
+          <span className="muted small">KILLER · {alive.length} ALIVE</span>
+        </div>
+        <div className="pc-remaining" style={{ fontSize: 28 }}>
+          {(p.killerHits || 0) >= 5 ? '🎯 Aim at opponents' : `Hit ${p.killerNumber}`}
+        </div>
+        <div className="checkout-hint center">
+          {(p.killerHits || 0) < 5 ? `Become a Killer: ${p.killerHits || 0}/5 hits on ${p.killerNumber}` : 'Hit opponent numbers to eliminate them'}
+        </div>
+        <div className="pc-slots">
+          {[0, 1, 2].map(i => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
+        </div>
+        <div className="muted small">Lives: <b style={{ color: 'var(--text)' }}>{'❤️'.repeat(p.lives || 0) || 'none'}</b></div>
+      </div>
+
+      <div className="play-others">
+        {others.filter(pl => !pl.eliminated).map(pl => (
+          <div key={pl.id} className="play-other">
+            <div className="row between">
+              <div className="row" style={{ gap: 6 }}>
+                <span className="avatar" style={{ width: 22, height: 22, fontSize: 10, background: pl.color }}>{initials(pl.name)}</span>
+                <span className="po-name">{pl.name}</span>
+                {(pl.killerHits || 0) >= 5 && <span className="pill" style={{ background: '#ef4444', color: '#fff', fontSize: 9 }}>KILLER</span>}
+              </div>
+              <span className="pill" style={{ fontSize: 10 }}>{'❤️'.repeat(pl.lives || 0) || '💀'}</span>
+            </div>
+            <div className="po-score">#{pl.killerNumber}</div>
+            <div className="po-sub">{(pl.killerHits || 0) >= 5 ? 'Killer' : `${pl.killerHits || 0}/5 to kill`} · {pl.kills?.length || 0} kills</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="play-input">
+        <div className="pad-card">
+          <div className="mult">
+            <button className={game.mult === 1 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 1 })}>Single</button>
+            <button className={game.mult === 2 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 2 })}>Double</button>
+            <button className={game.mult === 3 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 3 })}>Triple</button>
+          </div>
+          <div className="keypad">
+            {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20].map(n => (
+              <button key={n} className={`key${n === p.killerNumber ? ' killer-target' : ''}`} onClick={() => addDart(n, game.mult)}>{n}</button>
+            ))}
+            <button className="key" style={{ background: 'color-mix(in srgb,var(--accent) 20%,var(--bg-3))' }} onClick={() => addDart(25, game.mult === 2 ? 2 : 1)}>25</button>
+            <button className="key" style={{ gridColumn: 'span 2', background: 'color-mix(in srgb,var(--accent) 30%,var(--bg-3))' }} onClick={() => addDart(50, 1, 'Bull', true)}>Bull<br /><small>50</small></button>
+            <button className="key" style={{ gridColumn: 'span 2', color: 'var(--muted)' }} onClick={() => addDart(0, 1, '0')}>Miss</button>
+          </div>
+          <div className="row" style={{ gap: 8, marginTop: 8 }}>
+            <button className="btn block ghost" onClick={undoDart}>↶ Undo dart</button>
+            <button className="btn block primary" onClick={enterVisit}>Enter visit</button>
+          </div>
+        </div>
+      </div>
+      <button className="btn danger sm" style={{ alignSelf: 'flex-end' }} onClick={() => { if (confirm('Quit this game?')) onQuit(); }}>Quit</button>
+    </div>
+  );
+}
+
+// ── High Score (party) ───────────────────────────────────────────────
+// 7 visits each. Highest total score wins. Pure scoring, no checkout.
+
+const HIGH_SCORE_VISITS = 7;
+
+function HighScoreBoard({ game, setGame, settings, toast, music, onQuit, setGames, setPlayers, popups, onGameOver }: {
+  game: Game; setGame: (g: Game | null) => void; settings: Settings; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void;
+}) {
+  const p = game.players[game.turn];
+  const others = [...game.players.slice(game.turn + 1), ...game.players.slice(0, game.turn)];
+  const visitNum = p.visits.length + 1;
+
+  const addDart = (base: number, mult: number, labelOverride?: string, isBull?: boolean) => {
+    if (game.darts.length >= 3) { toast('3 darts already'); return; }
+    let value: number, label: string;
+    if (isBull) { value = 50; label = 'Bull'; }
+    else if (base === 25) { value = mult === 2 ? 50 : 25; label = mult === 2 ? 'Bull' : '25'; }
+    else if (base === 0) { value = 0; label = 'Miss'; }
+    else { value = base * mult; label = (mult === 2 ? 'D' : mult === 3 ? 'T' : '') + base; }
+    const dart = { value, label: labelOverride || label, base, mult: isBull ? 2 : (base === 25 && value === 50 ? 2 : mult), isDouble: !!(isBull || (base === 25 && value === 50) || mult === 2), isOuter: false };
+    Sound.play('dart', { score: value }, settings);
+    setGame({ ...game, darts: [...game.darts, dart], mult: 1 });
+  };
+
+  const undoDart = () => { if (game.darts.length) setGame({ ...game, darts: game.darts.slice(0, -1) }); };
+
+  const enterVisit = () => {
+    if (!game.darts.length) { toast('Add at least one dart'); return; }
+    const scored = game.darts.reduce((a, d) => a + d.value, 0);
+    const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
+    const cur = newPlayers[game.turn];
+    cur.score += scored;
+    cur.visits.push({ darts: [...game.darts], scored, remaining: cur.score, leg: 1, mode: 'highscore', date: new Date().toISOString() });
+    cur.dartsThrown += game.darts.length;
+    Sound.play('enter', {}, settings);
+
+    if (settings.popups.scores) {
+      for (const sp of SCORE_POPUPS) { if (scored >= sp.min) { popups.setMilestone({ emoji: sp.emoji, title: sp.title, sub: sp.sub }); Sound.play('milestone', {}, settings); break; } }
+    }
+
+    const allDone = newPlayers.every(pl => pl.visits.length >= HIGH_SCORE_VISITS);
+    const finishedState = { ...game, players: newPlayers, darts: [], mult: 1 };
+    if (allDone) {
+      const maxScore = Math.max(...newPlayers.map(pl => pl.score));
+      const winners = newPlayers.filter(pl => pl.score === maxScore);
+      const winner = winners.length === 1 ? winners[0] : null;
+      finishSimpleGame(finishedState, winner, settings, setGame, setGames, setPlayers, popups, music, [], []);
+      return;
+    }
+    let nextTurn = (game.turn + 1) % game.players.length;
+    while (newPlayers[nextTurn].visits.length >= HIGH_SCORE_VISITS) nextTurn = (nextTurn + 1) % game.players.length;
+    setGame({ ...finishedState, turn: nextTurn });
+  };
+
+  if (game.finished) return <GameOver game={game} onNewGame={() => { setGame(null); onGameOver(); music.startContext('setup', settings); }} onViewStats={() => { setGame(null); onGameOver(); }} />;
+
+  return (
+    <div className="view-noscroll">
+      <div className="play-current">
+        <div className="pc-header">
+          <div className="row" style={{ gap: 8 }}>
+            <span className="avatar" style={{ width: 32, height: 32, fontSize: 13, background: p.color }}>{initials(p.name)}</span>
+            <span className="pc-name">{p.name}</span>
+          </div>
+          <span className="muted small">HIGH SCORE · VISIT {visitNum}/{HIGH_SCORE_VISITS}</span>
+        </div>
+        <div className="pc-remaining">{p.score}</div>
+        <div className="checkout-hint center">{visitNum >= HIGH_SCORE_VISITS ? 'Final visit — go big!' : 'Score as high as you can!'}</div>
+        <div className="pc-slots">
+          {[0, 1, 2].map(i => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
+        </div>
+        <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{game.darts.reduce((a, d) => a + d.value, 0)}</b></div>
+      </div>
+
+      {game.players.length > 1 && (
+        <div className="play-others">
+          {others.map(pl => (
+            <div key={pl.id} className="play-other">
+              <div className="row between">
+                <div className="row" style={{ gap: 6 }}>
+                  <span className="avatar" style={{ width: 22, height: 22, fontSize: 10, background: pl.color }}>{initials(pl.name)}</span>
+                  <span className="po-name">{pl.name}</span>
+                </div>
+                <span className="pill" style={{ fontSize: 10 }}>{pl.visits.length}/{HIGH_SCORE_VISITS}</span>
+              </div>
+              <div className="po-score">{pl.score}</div>
+              <div className="po-sub">avg {visitAvg(pl).toFixed(1)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="play-input">
+        <div className="pad-card">
+          <div className="mult">
+            <button className={game.mult === 1 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 1 })}>Single</button>
+            <button className={game.mult === 2 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 2 })}>Double</button>
+            <button className={game.mult === 3 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 3 })}>Triple</button>
+          </div>
+          <div className="keypad">
+            {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20].map(n => (
+              <button key={n} className="key" onClick={() => addDart(n, game.mult)}>{n}</button>
+            ))}
+            <button className="key" style={{ background: 'color-mix(in srgb,var(--accent) 20%,var(--bg-3))' }} onClick={() => addDart(25, game.mult === 2 ? 2 : 1)}>25</button>
+            <button className="key" style={{ gridColumn: 'span 2', background: 'color-mix(in srgb,var(--accent) 30%,var(--bg-3))' }} onClick={() => addDart(50, 1, 'Bull', true)}>Bull<br /><small>50</small></button>
+            <button className="key" style={{ gridColumn: 'span 2', color: 'var(--muted)' }} onClick={() => addDart(0, 1, '0')}>Miss</button>
+          </div>
+          <div className="row" style={{ gap: 8, marginTop: 8 }}>
+            <button className="btn block ghost" onClick={undoDart}>↶ Undo dart</button>
+            <button className="btn block primary" onClick={enterVisit}>Enter visit</button>
+          </div>
+        </div>
+      </div>
+      <button className="btn danger sm" style={{ alignSelf: 'flex-end' }} onClick={() => { if (confirm('Quit this game?')) onQuit(); }}>Quit</button>
+    </div>
+  );
 }
