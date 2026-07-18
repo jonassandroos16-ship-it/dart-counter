@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Player, Settings, CustomTitle } from './types';
 import { COLORS, allTitles, getTitleInfo, conditionLabel, titleProgressInfo, type TitleCtx } from './constants';
 import { levelFromXP, getPlayerXP, playerStats, allVisitsFor } from './logic';
 import { initials, uid } from './store';
 import { Modal } from './Popups';
-import { BADGES, getBadgeInfo } from './badges';
+import { BADGES, getBadgeInfo, computeLifetimeBadgeCounts } from './badges';
 
 export function PlayersView({ players, games, settings, setPlayers, toast }: {
   players: Player[]; games: any[]; settings: Settings;
@@ -29,6 +29,7 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
         const ti = getTitleInfo(xp.selectedTitle, settings.customTitles);
         const bi = getBadgeInfo(xp.selectedBadge);
         const avatarContent = bi ? bi.icon : initials(p.name);
+        const totalBadgeEarns = Object.values(xp.badgeCounts || {}).reduce((a: number, b: number) => a + b, 0);
         return (
           <div key={p.id} className="card" style={{ padding: 12 }}>
             <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
@@ -40,7 +41,7 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
                   {ti ? <span className="title-badge">{ti.icon || ''} {ti.name}</span> : null}
                   {bi ? <span className="title-badge" title={bi.desc}>{bi.icon} {bi.name}</span> : null}
                 </div>
-                <div className="muted small">{s.games} games · {s.avg.toFixed(1)} avg · {s.n180} × 180 · {xp.xp} XP · {(xp.unlockedBadges || []).length} badges</div>
+                <div className="muted small">{s.games} games · {s.avg.toFixed(1)} avg · {s.n180} × 180 · {xp.xp} XP · {(xp.unlockedBadges || []).length} badges · {totalBadgeEarns} earned</div>
                 <div className="xp-bar" style={{ width: '100%', maxWidth: 240 }}><div style={{ width: `${Math.round(li.xpIntoLevel / li.xpNeeded * 100)}%` }} /></div>
               </div>
             </div>
@@ -59,17 +60,25 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
         setEditing(null); toast(isNew ? 'Player added' : 'Saved');
       }} />}
       {titlesFor && <TitlesModal player={players.find(p => p.id === titlesFor.id) || titlesFor} games={games} settings={settings} setPlayers={setPlayers} onClose={() => setTitlesFor(null)} toast={toast} />}
-      {badgesFor && <BadgesModal player={players.find(p => p.id === badgesFor.id) || badgesFor} setPlayers={setPlayers} onClose={() => setBadgesFor(null)} toast={toast} />}
+      {badgesFor && <BadgesModal player={players.find(p => p.id === badgesFor.id) || badgesFor} games={games} setPlayers={setPlayers} onClose={() => setBadgesFor(null)} toast={toast} />}
     </div>
   );
 }
 
-function BadgesModal({ player, setPlayers, onClose, toast }: { player: Player; setPlayers: (updater: any) => void; onClose: () => void; toast: (m: string) => void }) {
+function BadgesModal({ player, games, setPlayers, onClose, toast }: { player: Player; games: any[]; setPlayers: (updater: any) => void; onClose: () => void; toast: (m: string) => void }) {
   const xp = getPlayerXP(player);
   const unlocked = xp.unlockedBadges || [];
   const [equipped, setEquipped] = useState<string | null>(xp.selectedBadge);
   const [selectedId, setSelectedId] = useState<string | null>(xp.selectedBadge);
   const selected = BADGES.find(b => b.id === selectedId) || null;
+  const badgeCounts = useMemo(() => {
+    const stored = xp.badgeCounts || {};
+    const fromHistory = computeLifetimeBadgeCounts(player.id, games as any);
+    const merged: Record<string, number> = { ...fromHistory };
+    for (const [k, v] of Object.entries(stored)) merged[k] = Math.max(merged[k] || 0, v);
+    return merged;
+  }, [xp.badgeCounts, player.id, games]);
+  const totalEarns = Object.values(badgeCounts).reduce((a: number, b: number) => a + b, 0);
 
   const equip = (id: string | null) => {
     setEquipped(id);
@@ -81,7 +90,7 @@ function BadgesModal({ player, setPlayers, onClose, toast }: { player: Player; s
   return (
     <Modal onClose={onClose}>
       <h3 style={{ marginBottom: 4 }}>Badges — {player.name}</h3>
-      <div className="muted small" style={{ marginBottom: 14 }}>Tap a badge to select it, then Equip. {unlocked.length} / {BADGES.length} unlocked.</div>
+      <div className="muted small" style={{ marginBottom: 14 }}>Tap a badge to select it, then Equip. {unlocked.length} / {BADGES.length} unlocked · {totalEarns} earned.</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 8, maxHeight: '44vh', overflow: 'auto' }}>
         <button
           onClick={() => setSelectedId(null)}
@@ -100,12 +109,14 @@ function BadgesModal({ player, setPlayers, onClose, toast }: { player: Player; s
           const isUnlocked = unlocked.includes(b.id);
           const isEquipped = equipped === b.id;
           const isSelected = selectedId === b.id;
+          const count = badgeCounts[b.id] || 0;
           return (
             <button
               key={b.id}
               onClick={() => setSelectedId(b.id)}
-              title={b.desc}
+              title={`${b.desc}${count > 0 ? ` (earned ${count}×)` : ''}`}
               style={{
+                position: 'relative',
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: 10, borderRadius: 10,
                 background: isSelected ? 'color-mix(in srgb,var(--accent) 22%,var(--bg-3))' : 'var(--bg-3)',
                 border: `1px solid ${isEquipped ? 'var(--accent)' : isSelected ? 'color-mix(in srgb,var(--accent) 50%,var(--border))' : 'var(--border)'}`,
@@ -116,6 +127,9 @@ function BadgesModal({ player, setPlayers, onClose, toast }: { player: Player; s
               <div style={{ fontSize: 24 }}>{isUnlocked ? b.icon : '🔒'}</div>
               <div style={{ fontSize: 11, fontWeight: 700, textAlign: 'center', lineHeight: 1.1 }}>{b.name}</div>
               {isEquipped ? <span className="xp-pill" style={{ fontSize: 9 }}>Equipped</span> : null}
+              {count > 1 ? (
+                <span style={{ position: 'absolute', top: 4, right: 4, minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, background: 'var(--accent)', color: '#04150a', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{count}</span>
+              ) : null}
             </button>
           );
         })}
@@ -129,7 +143,7 @@ function BadgesModal({ player, setPlayers, onClose, toast }: { player: Player; s
               <div style={{ fontWeight: 700, fontSize: 15 }}>{selected.name}</div>
               <div className="muted" style={{ fontSize: 12, marginTop: 2, lineHeight: 1.3 }}>{selected.desc}</div>
               <div className="muted small" style={{ marginTop: 4 }}>
-                {unlocked.includes(selected.id) ? 'Unlocked — equip to show it as your icon.' : 'Locked — earn it in a future game to unlock.'}
+                {unlocked.includes(selected.id) ? `Earned ${badgeCounts[selected.id] || 0}× — equip to show it as your icon.` : 'Locked — earn it in a future game to unlock.'}
               </div>
             </div>
           </div>

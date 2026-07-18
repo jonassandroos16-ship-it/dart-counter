@@ -4,7 +4,7 @@ import { getTitleInfo, MODES, MODE_KEYS } from './constants';
 import { playerStats, levelFromXP, getPlayerXP, bucketAverages, allVisitsFor, filterGamesByDate } from './logic';
 import { LineChart, BarChart, DartboardHeatmap } from './Charts';
 import { CalendarPicker, filterForPeriod, describeFilter, type Period } from './CalendarPicker';
-import { BADGES } from './badges';
+import { BADGES, computeLifetimeBadgeCounts } from './badges';
 
 export function StatsView({ players, games, settings }: { players: Player[]; games: any[]; settings: Settings }) {
   const [pid, setPid] = useState<string>(players[0]?.id || '');
@@ -24,6 +24,14 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
   const li = levelFromXP(xp.xp, settings);
   const ti = getTitleInfo(xp.selectedTitle, settings.customTitles);
   const visits = allVisitsFor(p.id, modeFiltered);
+  const badgeCounts = useMemo(() => {
+    const stored = xp.badgeCounts || {};
+    const fromHistory = computeLifetimeBadgeCounts(p.id, modeFiltered as any);
+    const merged: Record<string, number> = { ...fromHistory };
+    for (const [k, v] of Object.entries(stored)) merged[k] = Math.max(merged[k] || 0, v);
+    return merged;
+  }, [xp.badgeCounts, p.id, modeFiltered]);
+  const totalBadgeEarns = Object.values(badgeCounts).reduce((a: number, b: number) => a + b, 0);
   const series = bucketAverages(visits.filter((v: any) => !v.practice && !v.atc), period);
   const buckets: Record<string, number> = { '0-39': 0, '40-59': 0, '60-79': 0, '80-99': 0, '100-139': 0, '140-179': 0, '180': 0 };
   visits.filter((v: any) => !v.bust && !v.atc).forEach((v: any) => {
@@ -107,32 +115,32 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="row between" style={{ marginBottom: 8 }}>
           <h3 style={{ margin: 0 }}>Badges</h3>
-          <span className="muted small">{(xp.unlockedBadges || []).length} / {BADGES.length} unlocked</span>
+          <span className="muted small">{(xp.unlockedBadges || []).length} / {BADGES.length} unlocked · {totalBadgeEarns} earned</span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 8 }}>
           {BADGES.map((b) => {
             const unlocked = (xp.unlockedBadges || []).includes(b.id);
+            const count = badgeCounts[b.id] || 0;
             const isSelected = selectedBadge === b.id;
-            const count = (xp.badgeCounts || {})[b.id] || 0;
             return (
               <button
                 key={b.id}
                 onClick={() => setSelectedBadge(isSelected ? null : b.id)}
-                title={`${b.name} — ${b.desc}`}
+                title={`${b.name} — ${b.desc}${count > 0 ? ` (earned ${count}×)` : ''}`}
                 style={{
+                  position: 'relative',
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
                   padding: '8px 4px', borderRadius: 10, textAlign: 'center',
                   background: isSelected ? 'color-mix(in srgb,var(--accent) 22%,var(--bg-3))' : unlocked ? 'color-mix(in srgb,var(--accent) 14%,var(--bg-3))' : 'var(--bg-3)',
                   border: `1px solid ${isSelected ? 'var(--accent)' : unlocked ? 'color-mix(in srgb,var(--accent) 40%,var(--bg-3))' : 'var(--border)'}`,
                   opacity: unlocked ? 1 : 0.5,
                   cursor: 'pointer', color: 'inherit',
-                  position: 'relative',
                 }}
               >
                 <div style={{ fontSize: 22 }}>{unlocked ? b.icon : '🔒'}</div>
                 <div style={{ fontSize: 10, fontWeight: 700, lineHeight: 1.1 }}>{b.name}</div>
-                {unlocked && count > 0 ? (
-                  <span style={{ position: 'absolute', top: 4, right: 4, fontSize: 10, fontWeight: 800, minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, background: 'var(--accent)', color: '#04150a', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{count}</span>
+                {count > 1 ? (
+                  <span style={{ position: 'absolute', top: 4, right: 4, minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, background: 'var(--accent)', color: '#04150a', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{count}</span>
                 ) : null}
               </button>
             );
@@ -142,7 +150,6 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
           const b = BADGES.find(x => x.id === selectedBadge);
           if (!b) return null;
           const unlocked = (xp.unlockedBadges || []).includes(b.id);
-          const count = (xp.badgeCounts || {})[b.id] || 0;
           return (
             <div style={{ marginTop: 12, padding: 12, borderRadius: 12, background: 'var(--bg-3)', border: '1px solid var(--border)' }}>
               <div className="row" style={{ gap: 10, alignItems: 'center' }}>
@@ -151,7 +158,7 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
                   <div style={{ fontWeight: 700, fontSize: 15 }}>{b.name}</div>
                   <div className="muted" style={{ fontSize: 12, marginTop: 2, lineHeight: 1.3 }}>{b.desc}</div>
                   <div className="muted small" style={{ marginTop: 4 }}>
-                    {unlocked ? `Earned ${count} time${count === 1 ? '' : 's'} — equip it from the Players screen to show it as your icon.` : 'Locked — earn it in a future game to unlock.'}
+                    {unlocked ? `Earned ${badgeCounts[b.id] || 0}× — equip it from the Players screen to show it as your icon.` : 'Locked — earn it in a future game to unlock.'}
                   </div>
                 </div>
               </div>
