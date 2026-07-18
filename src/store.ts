@@ -41,6 +41,8 @@ function loadActiveGame(): Game | null {
 }
 
 // ── Server sync helpers ──────────────────────────────────────────────
+// All helpers THROW on network/permission errors (so callers can mark the
+// connection offline) and return null/empty on legitimate no-data cases.
 
 async function fetchAppState(): Promise<{ players: Player[]; settings: Settings } | null> {
   if (!supabase) return null;
@@ -49,43 +51,78 @@ async function fetchAppState(): Promise<{ players: Player[]; settings: Settings 
     .select('players, settings')
     .eq('id', 'main')
     .maybeSingle();
-  if (error || !data) return null;
+  if (error) throw error;
+  if (!data) return null;
   return {
     players: (data.players as Player[]) || [],
     settings: { ...defaultSettings(), ...((data.settings as Partial<Settings>) || {}) },
   };
 }
 
-async function upsertAppState(players: Player[], settings: Settings): Promise<void> {
-  if (!supabase) return;
-  const { error } = await supabase
-    .from('app_state')
-    .upsert({ id: 'main', players, settings, updated_at: new Date().toISOString() }, { onConflict: 'id' });
-  if (error) console.warn('[sync] app_state upsert failed:', error.message);
-}
-
 async function fetchAllGames(): Promise<GameRecord[]> {
   if (!supabase) return [];
   const { data, error } = await supabase.from('games').select('data');
-  if (error || !data) return [];
-  return data.map((row: any) => row.data as GameRecord);
+  if (error) throw error;
+  return (data || []).map((row: any) => row.data as GameRecord);
 }
 
-async function upsertGame(record: GameRecord): Promise<void> {
-  if (!supabase) return;
+async function pushAppState(players: Player[], settings: Settings): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase
+    .from('app_state')
+    .upsert({ id: 'main', players, settings, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+  if (error) { console.warn('[sync] app_state upsert failed:', error.message); return false; }
+  return true;
+}
+
+async function pushAllGames(games: GameRecord[]): Promise<boolean> {
+  if (!supabase) return false;
+  if (!games.length) return true;
+  const rows = games.map(g => ({ id: g.id, data: g }));
+  const { error } = await supabase.from('games').upsert(rows, { onConflict: 'id' });
+  if (error) { console.warn('[sync] games upsert failed:', error.message); return false; }
+  return true;
+}
+
+async function upsertGame(record: GameRecord): Promise<boolean> {
+  if (!supabase) return false;
   const { error } = await supabase
     .from('games')
     .upsert({ id: record.id, data: record }, { onConflict: 'id' });
-  if (error) console.warn('[sync] game upsert failed:', error.message);
+  if (error) { console.warn('[sync] game upsert failed:', error.message); return false; }
+  return true;
 }
 
-async function deleteGame(id: string): Promise<void> {
-  if (!supabase) return;
+async function deleteGame(id: string): Promise<boolean> {
+  if (!supabase) return false;
   const { error } = await supabase.from('games').delete().eq('id', id);
-  if (error) console.warn('[sync] game delete failed:', error.message);
+  if (error) { console.warn('[sync] game delete failed:', error.message); return false; }
+  return true;
+}
+
+// Pull everything from the server. Returns null when there is no database
+// configured OR the server is unreachable — callers distinguish those two
+// cases via the stable `hasDatabase` flag.
+async function pullAll(): Promise<{ players: Player[]; settings: Settings; games: GameRecord[] } | null> {
+  if (!supabase) return null;
+  try {
+    const [state, games] = await Promise.all([fetchAppState(), fetchAllGames()]);
+    return { players: state?.players || [], settings: state?.settings || defaultSettings(), games };
+  } catch (e: any) {
+    console.warn('[sync] pull failed:', e?.message);
+    return null;
+  }
+}
+
+async function pushAll(players: Player[], settings: Settings, games: GameRecord[]): Promise<boolean> {
+  const okState = await pushAppState(players, settings);
+  const okGames = await pushAllGames(games);
+  return okState && okGames;
 }
 
 // ── DB hook ──────────────────────────────────────────────────────────
+
+export interface SyncResult { ok: boolean; message: string }
 
 export interface DBAPI {
   players: Player[];
@@ -96,6 +133,12 @@ export interface DBAPI {
   setGames: (updater: GameRecord[] | ((prev: GameRecord[]) => GameRecord[])) => void;
   setSettings: (updater: Settings | ((prev: Settings) => Settings)) => void;
   setActiveGame: (updater: Game | null | ((prev: Game | null) => Game | null)) => void;
+  hasDatabase: boolean;
+  connected: boolean;
+  upToDate: boolean;
+  lastSync: number | null;
+  syncing: boolean;
+  manualSync: () => Promise<SyncResult>;
 }
 
 export function useDB(): DBAPI {
@@ -104,12 +147,27 @@ export function useDB(): DBAPI {
   const [settings, setSettingsState] = useState<Settings>(loadSettings);
   const [activeGame, setActiveGameState] = useState<Game | null>(loadActiveGame);
 
+  // Sync status. `hasDatabase` is stable for the lifetime of the app; the
+  // others update as server round-trips succeed or fail.
+  const hasDatabase = !!supabase;
+  const [connected, setConnected] = useState(false);
+  const [upToDate, setUpToDate] = useState(false);
+  const [lastSync, setLastSync] = useState<number | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
   // Track whether the initial server pull has completed so we don't push
   // stale local state before the merge.
   const syncedRef = useRef(false);
   // Debounce timers for players/settings upserts.
   const playersSyncTimer = useRef<ReturnType<typeof setTimeout>>();
   const settingsSyncTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  const playersRef = useRef(players);
+  playersRef.current = players;
+  const gamesRef = useRef(games);
+  gamesRef.current = games;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
 
   const doMerge = useCallback((remoteState: { players: Player[]; settings: Settings } | null, remoteGames: GameRecord[]) => {
     const localPlayers = JSON.parse(localStorage.getItem(KEYS.players) || '[]') as Player[];
@@ -132,11 +190,19 @@ export function useDB(): DBAPI {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [remoteState, remoteGames] = await Promise.all([fetchAppState(), fetchAllGames()]);
+      if (!supabase) { syncedRef.current = true; return; } // local-only mode
+      const remote = await pullAll();
       if (cancelled) return;
-      const merged = doMerge(remoteState, remoteGames);
+      if (!remote) { setConnected(false); syncedRef.current = true; return; }
+      const merged = doMerge({ players: remote.players, settings: remote.settings }, remote.games);
       syncedRef.current = true;
-      void upsertAppState(merged.players, merged.settings);
+      setConnected(true);
+      setUpToDate(true);
+      setLastSync(Date.now());
+      // Push the merged result back so the server reflects the union.
+      const pushOk = await pushAll(merged.players, merged.settings, merged.games);
+      setConnected(pushOk);
+      if (pushOk) { setUpToDate(true); setLastSync(Date.now()); }
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -146,11 +212,15 @@ export function useDB(): DBAPI {
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
+      if (!supabase) return;
       (async () => {
-        const [remoteState, remoteGames] = await Promise.all([fetchAppState(), fetchAllGames()]);
-        if (!remoteState && !remoteGames.length) return;
-        const merged = doMerge(remoteState, remoteGames);
-        void upsertAppState(merged.players, merged.settings);
+        const remote = await pullAll();
+        if (!remote) { setConnected(false); return; }
+        const merged = doMerge({ players: remote.players, settings: remote.settings }, remote.games);
+        setConnected(true);
+        setUpToDate(true);
+        setLastSync(Date.now());
+        void pushAll(merged.players, merged.settings, merged.games);
       })();
     };
     document.addEventListener('visibilitychange', onVisible);
@@ -162,56 +232,65 @@ export function useDB(): DBAPI {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const settingsRef = useRef(settings);
-  settingsRef.current = settings;
-
-  const playersRef = useRef(players);
-  playersRef.current = players;
+  // Mark a server write's outcome on sync status.
+  const afterPush = useCallback((ok: boolean) => {
+    setConnected(ok);
+    if (ok) { setUpToDate(true); setLastSync(Date.now()); }
+    else setUpToDate(false);
+  }, []);
 
   const setPlayers = useCallback((updater: Player[] | ((prev: Player[]) => Player[])) => {
-    setPlayersState(prev => {
-      const next = typeof updater === 'function' ? (updater as any)(prev) : updater;
-      localStorage.setItem(KEYS.players, JSON.stringify(next));
-      if (syncedRef.current) {
-        if (playersSyncTimer.current) clearTimeout(playersSyncTimer.current);
-        playersSyncTimer.current = setTimeout(() => void upsertAppState(next, settingsRef.current), 800);
-      }
-      return next;
-    });
-  }, []);
+    const prev = playersRef.current;
+    const next = typeof updater === 'function' ? (updater as any)(prev) : updater;
+    playersRef.current = next;
+    localStorage.setItem(KEYS.players, JSON.stringify(next));
+    setUpToDate(false);
+    setPlayersState(next);
+    if (syncedRef.current && supabase) {
+      if (playersSyncTimer.current) clearTimeout(playersSyncTimer.current);
+      playersSyncTimer.current = setTimeout(() => {
+        void pushAppState(next, settingsRef.current).then(afterPush);
+      }, 800);
+    }
+  }, [afterPush]);
 
   const setSettings = useCallback((updater: Settings | ((prev: Settings) => Settings)) => {
-    setSettingsState(prev => {
-      const next = typeof updater === 'function' ? (updater as any)(prev) : updater;
-      localStorage.setItem(KEYS.settings, JSON.stringify(next));
-      settingsRef.current = next;
-      if (syncedRef.current) {
-        if (settingsSyncTimer.current) clearTimeout(settingsSyncTimer.current);
-        settingsSyncTimer.current = setTimeout(() => void upsertAppState(playersRef.current, next), 800);
-      }
-      return next;
-    });
-  }, []);
+    const prev = settingsRef.current;
+    const next = typeof updater === 'function' ? (updater as any)(prev) : updater;
+    settingsRef.current = next;
+    localStorage.setItem(KEYS.settings, JSON.stringify(next));
+    setUpToDate(false);
+    setSettingsState(next);
+    if (syncedRef.current && supabase) {
+      if (settingsSyncTimer.current) clearTimeout(settingsSyncTimer.current);
+      settingsSyncTimer.current = setTimeout(() => {
+        void pushAppState(playersRef.current, next).then(afterPush);
+      }, 800);
+    }
+  }, [afterPush]);
 
   const setGames = useCallback((updater: GameRecord[] | ((prev: GameRecord[]) => GameRecord[])) => {
-    setGamesState(prev => {
-      const next = typeof updater === 'function' ? (updater as any)(prev) : updater;
-      localStorage.setItem(KEYS.games, JSON.stringify(next));
-
-      if (syncedRef.current) {
-        // Diff: find added/removed game IDs vs prev.
-        const prevIds = new Set(prev.map((g: GameRecord) => g.id));
-        const nextIds = new Set(next.map((g: GameRecord) => g.id));
-        for (const g of next as GameRecord[]) {
-          if (!prevIds.has(g.id)) void upsertGame(g); // newly added
-        }
-        for (const g of prev) {
-          if (!nextIds.has(g.id)) void deleteGame(g.id); // removed
-        }
+    const prev = gamesRef.current;
+    const next = typeof updater === 'function' ? (updater as any)(prev) : updater;
+    gamesRef.current = next;
+    localStorage.setItem(KEYS.games, JSON.stringify(next));
+    setUpToDate(false);
+    setGamesState(next);
+    if (syncedRef.current && supabase) {
+      // Diff: find added/removed game IDs vs prev.
+      const prevIds = new Set(prev.map((g: GameRecord) => g.id));
+      const nextIds = new Set((next as GameRecord[]).map((g: GameRecord) => g.id));
+      const tasks: Promise<boolean>[] = [];
+      for (const g of next as GameRecord[]) {
+        if (!prevIds.has(g.id)) tasks.push(upsertGame(g)); // newly added
       }
-      return next;
-    });
-  }, []);
+      for (const g of prev) {
+        if (!nextIds.has(g.id)) tasks.push(deleteGame(g.id)); // removed
+      }
+      if (tasks.length) void Promise.all(tasks).then(oks => afterPush(oks.every(Boolean)));
+      else afterPush(true); // no server-side change — local already matches
+    }
+  }, [afterPush]);
 
   const setActiveGame = useCallback((updater: Game | null | ((prev: Game | null) => Game | null)) => {
     setActiveGameState(prev => {
@@ -223,7 +302,43 @@ export function useDB(): DBAPI {
     });
   }, []);
 
-  return { players, games, settings, activeGame, setPlayers, setGames, setSettings, setActiveGame };
+  // Manual sync: pull remote, merge with local, persist merged to both
+  // localStorage and the server, and report the outcome for UI feedback.
+  const manualSync = useCallback(async (): Promise<SyncResult> => {
+    if (!supabase) return { ok: false, message: 'No database configured' };
+    setSyncing(true);
+    setUpToDate(false);
+    try {
+      const remote = await pullAll();
+      if (!remote) { setConnected(false); return { ok: false, message: 'Could not reach database' }; }
+      const localPlayers = JSON.parse(localStorage.getItem(KEYS.players) || '[]') as Player[];
+      const localGames = JSON.parse(localStorage.getItem(KEYS.games) || '[]') as GameRecord[];
+      const localSettings = { ...defaultSettings(), ...JSON.parse(localStorage.getItem(KEYS.settings) || '{}') } as Settings;
+      const merged = mergeBackup(
+        { players: localPlayers, games: localGames, settings: localSettings },
+        { players: remote.players, games: remote.games, settings: remote.settings },
+      );
+      localStorage.setItem(KEYS.players, JSON.stringify(merged.players));
+      localStorage.setItem(KEYS.games, JSON.stringify(merged.games));
+      localStorage.setItem(KEYS.settings, JSON.stringify(merged.settings));
+      setPlayersState(merged.players);
+      setGamesState(merged.games);
+      setSettingsState(merged.settings);
+      const ok = await pushAll(merged.players, merged.settings, merged.games);
+      setConnected(ok);
+      if (ok) { setUpToDate(true); setLastSync(Date.now()); }
+      return ok
+        ? { ok: true, message: `Synced — ${merged.players.length} players, ${merged.games.length} games` }
+        : { ok: false, message: 'Database write failed' };
+    } catch {
+      setConnected(false);
+      return { ok: false, message: 'Sync failed' };
+    } finally {
+      setSyncing(false);
+    }
+  }, []);
+
+  return { players, games, settings, activeGame, setPlayers, setGames, setSettings, setActiveGame, hasDatabase, connected, upToDate, lastSync, syncing, manualSync };
 }
 
 // ── Merge logic (unchanged from original) ────────────────────────────

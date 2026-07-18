@@ -81,6 +81,13 @@ label.field span { display: block; font-size: 12px; color: var(--muted); margin-
 .pill { display:inline-flex; align-items:center; gap:6px; padding: 4px 10px; border-radius: 999px; background: var(--bg-3); font-size: 12px; font-weight: 700; }
 .avatar { width: 34px; height: 34px; border-radius: 50%; display:flex; align-items:center; justify-content:center; font-weight:800; color:#0b0e13; flex: 0 0 auto; font-size: 14px; }
 
+.sync-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; transition: background .2s ease; }
+.sync-dot.online { background: #22c55e; box-shadow: 0 0 0 3px color-mix(in srgb, #22c55e 25%, transparent); }
+.sync-dot.offline { background: #ef4444; box-shadow: 0 0 0 3px color-mix(in srgb, #ef4444 22%, transparent); }
+.sync-dot.pending { background: #f59e0b; box-shadow: 0 0 0 3px color-mix(in srgb, #f59e0b 22%, transparent); animation: syncPulse 1.2s ease-in-out infinite; }
+@keyframes syncPulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+.btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
 .grid { display: grid; gap: 10px; }
 .grid-2 { grid-template-columns: 1fr 1fr; }
 .grid-3 { grid-template-columns: repeat(3,1fr); }

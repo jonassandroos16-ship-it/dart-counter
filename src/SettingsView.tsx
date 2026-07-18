@@ -2,10 +2,10 @@ import { useRef, useState } from 'react';
 import type { Player, GameRecord, Settings, CustomTitle } from './types';
 import { COLORS, conditionLabel } from './constants';
 import { tracksFor } from './music';
-import { uid, todayKey, mergeBackup, type BackupShape } from './store';
+import { uid, todayKey, mergeBackup, type BackupShape, type SyncResult } from './store';
 import { Modal } from './Popups';
 
-export function SettingsView({ players, games, settings, setSettings, setPlayers, setGames, toast }: { players: Player[]; games: GameRecord[]; settings: Settings; setSettings: (updater: any) => void; setPlayers: (updater: any) => void; setGames: (updater: any) => void; toast: (m: string) => void }) {
+export function SettingsView({ players, games, settings, setSettings, setPlayers, setGames, toast, hasDatabase, connected, upToDate, lastSync, syncing, onSync }: { players: Player[]; games: GameRecord[]; settings: Settings; setSettings: (updater: any) => void; setPlayers: (updater: any) => void; setGames: (updater: any) => void; toast: (m: string) => void; hasDatabase: boolean; connected: boolean; upToDate: boolean; lastSync: number | null; syncing: boolean; onSync: () => Promise<SyncResult> }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const cfg = settings.xpConfig;
   const [xpForm, setXpForm] = useState(cfg);
@@ -13,9 +13,44 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
 
   const update = (patch: Partial<Settings>) => setSettings((prev: Settings) => ({ ...prev, ...patch }));
 
+  const statusLabel = !hasDatabase ? 'Local storage only'
+    : syncing ? 'Syncing…'
+    : !connected ? 'Offline · local storage'
+    : upToDate ? 'Cloud sync up to date'
+    : 'Local changes pending sync';
+  const dotClass = !hasDatabase || !connected ? 'sync-dot offline' : upToDate ? 'sync-dot online' : 'sync-dot pending';
+
+  const handleSync = async () => {
+    const res = await onSync();
+    toast(res.message);
+  };
+
+  const lastSyncLabel = lastSync ? `Last sync ${new Date(lastSync).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : '';
+
   return (
     <div className="view-scroll">
       <h2 style={{ marginBottom: 12 }}>Settings</h2>
+      <div className="card">
+        <div className="row between" style={{ marginBottom: 6 }}>
+          <div className="row" style={{ gap: 8 }}>
+            <span className={dotClass} />
+            <b>Cloud Sync</b>
+          </div>
+          <span className="muted small">{statusLabel}</span>
+        </div>
+        <div className="muted small" style={{ marginBottom: 10 }}>
+          {hasDatabase
+            ? (connected
+                ? (upToDate ? 'Your data is backed up to the cloud and up to date.' : 'Local changes will sync shortly, or press Sync now.')
+                : 'Database unreachable — changes are saved locally and will sync when reconnected.')
+            : 'No database configured. Your data is saved on this device only.'}
+        </div>
+        <button className="btn block primary" disabled={!hasDatabase || syncing} onClick={handleSync} style={{ marginBottom: 8 }}>
+          {syncing ? 'Syncing…' : 'Sync now'}
+        </button>
+        {(upToDate && hasDatabase && connected) && <div className="muted small center">Up to date{lastSyncLabel ? ` · ${lastSyncLabel}` : ''}</div>}
+      </div>
+
       <div className="card">
         <div className="row between" style={{ marginBottom: 16 }}><b>Theme</b>
           <div className="tabbar" style={{ width: 'auto', margin: 0 }}>
