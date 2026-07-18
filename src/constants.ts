@@ -151,6 +151,7 @@ export interface TitleDef {
   icon?: string;
   custom?: boolean;
   check: (allVisits: any[], gameVisits: any[], game: any, ctx?: TitleCtx) => boolean;
+  progress?: (ctx?: TitleCtx) => { current: number; target: number } | null;
 }
 
 // ---------- helpers for title checks ----------
@@ -225,68 +226,96 @@ export const BUILTIN_TITLES: TitleDef[] = [
 
   // ============ Lifetime / global (match history) ============
   { id: 'life_score_1k', name: 'Rookie Scorer', desc: 'Score 1,000 points across all games', icon: '🥉',
-    check: (_v, _gv, _g, ctx) => lifetimeScoreSum(ctx?.lifetimeVisits || []) >= 1000 },
+    check: (_v, _gv, _g, ctx) => lifetimeScoreSum(ctx?.lifetimeVisits || []) >= 1000,
+    progress: (ctx) => ({ current: lifetimeScoreSum(ctx?.lifetimeVisits || []), target: 1000 }) },
   { id: 'life_score_5k', name: 'Regular Scorer', desc: 'Score 5,000 points across all games', icon: '🥈',
-    check: (_v, _gv, _g, ctx) => lifetimeScoreSum(ctx?.lifetimeVisits || []) >= 5000 },
+    check: (_v, _gv, _g, ctx) => lifetimeScoreSum(ctx?.lifetimeVisits || []) >= 5000,
+    progress: (ctx) => ({ current: lifetimeScoreSum(ctx?.lifetimeVisits || []), target: 5000 }) },
   { id: 'life_score_10k', name: 'Serious Scorer', desc: 'Score 10,000 points across all games', icon: '🥇',
-    check: (_v, _gv, _g, ctx) => lifetimeScoreSum(ctx?.lifetimeVisits || []) >= 10000 },
+    check: (_v, _gv, _g, ctx) => lifetimeScoreSum(ctx?.lifetimeVisits || []) >= 10000,
+    progress: (ctx) => ({ current: lifetimeScoreSum(ctx?.lifetimeVisits || []), target: 10000 }) },
   { id: 'life_score_25k', name: 'Score Grinder', desc: 'Score 25,000 points across all games', icon: '⚔️',
-    check: (_v, _gv, _g, ctx) => lifetimeScoreSum(ctx?.lifetimeVisits || []) >= 25000 },
+    check: (_v, _gv, _g, ctx) => lifetimeScoreSum(ctx?.lifetimeVisits || []) >= 25000,
+    progress: (ctx) => ({ current: lifetimeScoreSum(ctx?.lifetimeVisits || []), target: 25000 }) },
   { id: 'life_score_50k', name: 'Score Legend', desc: 'Score 50,000 points across all games', icon: '🌟',
-    check: (_v, _gv, _g, ctx) => lifetimeScoreSum(ctx?.lifetimeVisits || []) >= 50000 },
+    check: (_v, _gv, _g, ctx) => lifetimeScoreSum(ctx?.lifetimeVisits || []) >= 50000,
+    progress: (ctx) => ({ current: lifetimeScoreSum(ctx?.lifetimeVisits || []), target: 50000 }) },
   { id: 'life_score_100k', name: 'Score Titan', desc: 'Score 100,000 points across all games', icon: '💎',
-    check: (_v, _gv, _g, ctx) => lifetimeScoreSum(ctx?.lifetimeVisits || []) >= 100000 },
+    check: (_v, _gv, _g, ctx) => lifetimeScoreSum(ctx?.lifetimeVisits || []) >= 100000,
+    progress: (ctx) => ({ current: lifetimeScoreSum(ctx?.lifetimeVisits || []), target: 100000 }) },
 
   { id: 'life_t20_25', name: 'T20 Hunter', desc: 'Hit 25 triple 20s in a lifetime', icon: '🎯',
-    check: (_v, _gv, _g, ctx) => countHits(ctx?.lifetimeVisits || [], 20, 3) >= 25 },
+    check: (_v, _gv, _g, ctx) => countHits(ctx?.lifetimeVisits || [], 20, 3) >= 25,
+    progress: (ctx) => ({ current: countHits(ctx?.lifetimeVisits || [], 20, 3), target: 25 }) },
   { id: 'life_t20_100', name: 'T20 Sniper', desc: 'Hit 100 triple 20s in a lifetime', icon: '🏹',
-    check: (_v, _gv, _g, ctx) => countHits(ctx?.lifetimeVisits || [], 20, 3) >= 100 },
+    check: (_v, _gv, _g, ctx) => countHits(ctx?.lifetimeVisits || [], 20, 3) >= 100,
+    progress: (ctx) => ({ current: countHits(ctx?.lifetimeVisits || [], 20, 3), target: 100 }) },
   { id: 'life_t20_500', name: 'T20 Machine', desc: 'Hit 500 triple 20s in a lifetime', icon: '🤖',
-    check: (_v, _gv, _g, ctx) => countHits(ctx?.lifetimeVisits || [], 20, 3) >= 500 },
+    check: (_v, _gv, _g, ctx) => countHits(ctx?.lifetimeVisits || [], 20, 3) >= 500,
+    progress: (ctx) => ({ current: countHits(ctx?.lifetimeVisits || [], 20, 3), target: 500 }) },
 
   { id: 'life_180_1', name: 'First 180', desc: 'Score your first 180', icon: '💥',
-    check: (_v, _gv, _g, ctx) => count180s(ctx?.lifetimeVisits || []) >= 1 },
+    check: (_v, _gv, _g, ctx) => count180s(ctx?.lifetimeVisits || []) >= 1,
+    progress: (ctx) => ({ current: count180s(ctx?.lifetimeVisits || []), target: 1 }) },
   { id: 'life_180_10', name: '180 Collector', desc: 'Score ten 180s in a lifetime', icon: '🧨',
-    check: (_v, _gv, _g, ctx) => count180s(ctx?.lifetimeVisits || []) >= 10 },
+    check: (_v, _gv, _g, ctx) => count180s(ctx?.lifetimeVisits || []) >= 10,
+    progress: (ctx) => ({ current: count180s(ctx?.lifetimeVisits || []), target: 10 }) },
   { id: 'life_180_50', name: '180 Maestro', desc: 'Score fifty 180s in a lifetime', icon: '🎼',
-    check: (_v, _gv, _g, ctx) => count180s(ctx?.lifetimeVisits || []) >= 50 },
+    check: (_v, _gv, _g, ctx) => count180s(ctx?.lifetimeVisits || []) >= 50,
+    progress: (ctx) => ({ current: count180s(ctx?.lifetimeVisits || []), target: 50 }) },
 
   { id: 'life_bulls_10', name: 'Bull Wrangler', desc: 'Hit 10 bullseyes (50) in a lifetime', icon: '🐃',
-    check: (_v, _gv, _g, ctx) => countBulls(ctx?.lifetimeVisits || []) >= 10 },
+    check: (_v, _gv, _g, ctx) => countBulls(ctx?.lifetimeVisits || []) >= 10,
+    progress: (ctx) => ({ current: countBulls(ctx?.lifetimeVisits || []), target: 10 }) },
   { id: 'life_bulls_50', name: 'Bull Master', desc: 'Hit 50 bullseyes (50) in a lifetime', icon: '👑',
-    check: (_v, _gv, _g, ctx) => countBulls(ctx?.lifetimeVisits || []) >= 50 },
+    check: (_v, _gv, _g, ctx) => countBulls(ctx?.lifetimeVisits || []) >= 50,
+    progress: (ctx) => ({ current: countBulls(ctx?.lifetimeVisits || []), target: 50 }) },
   { id: 'life_bulls_100', name: 'Bull Legend', desc: 'Hit 100 bullseyes (50) in a lifetime', icon: '🏅',
-    check: (_v, _gv, _g, ctx) => countBulls(ctx?.lifetimeVisits || []) >= 100 },
+    check: (_v, _gv, _g, ctx) => countBulls(ctx?.lifetimeVisits || []) >= 100,
+    progress: (ctx) => ({ current: countBulls(ctx?.lifetimeVisits || []), target: 100 }) },
 
   { id: 'life_triples_50', name: 'Triple Threat', desc: 'Hit 50 triples in a lifetime', icon: '3️⃣',
-    check: (_v, _gv, _g, ctx) => countTriples(ctx?.lifetimeVisits || []) >= 50 },
+    check: (_v, _gv, _g, ctx) => countTriples(ctx?.lifetimeVisits || []) >= 50,
+    progress: (ctx) => ({ current: countTriples(ctx?.lifetimeVisits || []), target: 50 }) },
   { id: 'life_triples_500', name: 'Triple Titan', desc: 'Hit 500 triples in a lifetime', icon: '🔱',
-    check: (_v, _gv, _g, ctx) => countTriples(ctx?.lifetimeVisits || []) >= 500 },
+    check: (_v, _gv, _g, ctx) => countTriples(ctx?.lifetimeVisits || []) >= 500,
+    progress: (ctx) => ({ current: countTriples(ctx?.lifetimeVisits || []), target: 500 }) },
   { id: 'life_doubles_50', name: 'Double Down', desc: 'Hit 50 doubles in a lifetime', icon: '2️⃣',
-    check: (_v, _gv, _g, ctx) => countDoubles(ctx?.lifetimeVisits || []) >= 50 },
+    check: (_v, _gv, _g, ctx) => countDoubles(ctx?.lifetimeVisits || []) >= 50,
+    progress: (ctx) => ({ current: countDoubles(ctx?.lifetimeVisits || []), target: 50 }) },
   { id: 'life_doubles_500', name: 'Double Dynasty', desc: 'Hit 500 doubles in a lifetime', icon: '♊',
-    check: (_v, _gv, _g, ctx) => countDoubles(ctx?.lifetimeVisits || []) >= 500 },
+    check: (_v, _gv, _g, ctx) => countDoubles(ctx?.lifetimeVisits || []) >= 500,
+    progress: (ctx) => ({ current: countDoubles(ctx?.lifetimeVisits || []), target: 500 }) },
 
   { id: 'life_checkouts_10', name: 'Finisher', desc: 'Complete 10 checkouts in a lifetime', icon: '✅',
-    check: (_v, _gv, _g, ctx) => countCheckouts(ctx?.lifetimeVisits || []) >= 10 },
+    check: (_v, _gv, _g, ctx) => countCheckouts(ctx?.lifetimeVisits || []) >= 10,
+    progress: (ctx) => ({ current: countCheckouts(ctx?.lifetimeVisits || []), target: 10 }) },
   { id: 'life_checkouts_100', name: 'Closer', desc: 'Complete 100 checkouts in a lifetime', icon: '🚪',
-    check: (_v, _gv, _g, ctx) => countCheckouts(ctx?.lifetimeVisits || []) >= 100 },
+    check: (_v, _gv, _g, ctx) => countCheckouts(ctx?.lifetimeVisits || []) >= 100,
+    progress: (ctx) => ({ current: countCheckouts(ctx?.lifetimeVisits || []), target: 100 }) },
 
   { id: 'life_games_10', name: 'Getting Started', desc: 'Play 10 games', icon: '🎮',
-    check: (_v, _gv, _g, ctx) => (ctx?.gamesPlayed || 0) >= 10 },
+    check: (_v, _gv, _g, ctx) => (ctx?.gamesPlayed || 0) >= 10,
+    progress: (ctx) => ({ current: ctx?.gamesPlayed || 0, target: 10 }) },
   { id: 'life_games_50', name: 'Regular Player', desc: 'Play 50 games', icon: '📅',
-    check: (_v, _gv, _g, ctx) => (ctx?.gamesPlayed || 0) >= 50 },
+    check: (_v, _gv, _g, ctx) => (ctx?.gamesPlayed || 0) >= 50,
+    progress: (ctx) => ({ current: ctx?.gamesPlayed || 0, target: 50 }) },
   { id: 'life_games_250', name: 'Veteran', desc: 'Play 250 games', icon: '🎖️',
-    check: (_v, _gv, _g, ctx) => (ctx?.gamesPlayed || 0) >= 250 },
+    check: (_v, _gv, _g, ctx) => (ctx?.gamesPlayed || 0) >= 250,
+    progress: (ctx) => ({ current: ctx?.gamesPlayed || 0, target: 250 }) },
 
   { id: 'life_wins_1', name: 'First Win', desc: 'Win your first game', icon: '🏆',
-    check: (_v, _gv, _g, ctx) => (ctx?.gamesWon || 0) >= 1 },
+    check: (_v, _gv, _g, ctx) => (ctx?.gamesWon || 0) >= 1,
+    progress: (ctx) => ({ current: ctx?.gamesWon || 0, target: 1 }) },
   { id: 'life_wins_5', name: 'Winner', desc: 'Win 5 games', icon: '🏆',
-    check: (_v, _gv, _g, ctx) => (ctx?.gamesWon || 0) >= 5 },
+    check: (_v, _gv, _g, ctx) => (ctx?.gamesWon || 0) >= 5,
+    progress: (ctx) => ({ current: ctx?.gamesWon || 0, target: 5 }) },
   { id: 'life_wins_25', name: 'Champion', desc: 'Win 25 games', icon: '🏆',
-    check: (_v, _gv, _g, ctx) => (ctx?.gamesWon || 0) >= 25 },
+    check: (_v, _gv, _g, ctx) => (ctx?.gamesWon || 0) >= 25,
+    progress: (ctx) => ({ current: ctx?.gamesWon || 0, target: 25 }) },
   { id: 'life_wins_100', name: 'Dart Legend', desc: 'Win 100 games', icon: '🌠',
-    check: (_v, _gv, _g, ctx) => (ctx?.gamesWon || 0) >= 100 },
+    check: (_v, _gv, _g, ctx) => (ctx?.gamesWon || 0) >= 100,
+    progress: (ctx) => ({ current: ctx?.gamesWon || 0, target: 100 }) },
 
   // ============ Killer mode ============
   { id: 'killer_first', name: 'First Kill', desc: 'Eliminate a player in Killer', icon: '💀',
@@ -310,7 +339,8 @@ export const BUILTIN_TITLES: TitleDef[] = [
   { id: 'jackpot', name: 'Jackpot', desc: 'Score 400+ in a High Score game', icon: '💰',
     check: (_v, gv, g) => g && g.mode === 'highscore' && gv.filter((v:any) => v.mode === 'highscore').reduce((a:number,v:any) => a + (v.scored||0), 0) >= 400 },
   { id: 'party_animal', name: 'Party Animal', desc: 'Play 5 party-mode games', icon: '🎉',
-    check: (_v, _gv, _g, ctx) => (ctx?.games || []).filter((g:any) => g.mode === 'speed101' || g.mode === 'highscore').length >= 5 },
+    check: (_v, _gv, _g, ctx) => (ctx?.games || []).filter((g:any) => g.mode === 'speed101' || g.mode === 'highscore').length >= 5,
+    progress: (ctx) => ({ current: (ctx?.games || []).filter((g:any) => g.mode === 'speed101' || g.mode === 'highscore').length, target: 5 }) },
 ];
 
 
@@ -351,6 +381,16 @@ export function allTitles(customTitles: CustomTitle[]): TitleDef[] {
 
 export function getTitleInfo(titleId: string | null, customTitles: CustomTitle[]): TitleDef | undefined {
   return allTitles(customTitles).find(t => t.id === titleId);
+}
+
+export function titleProgressInfo(t: TitleDef, ctx: TitleCtx): { current: number; target: number; pct: number } | null {
+  if (!t.progress) return null;
+  try {
+    const r = t.progress(ctx);
+    if (!r || r.target <= 0) return null;
+    const current = Math.max(0, Math.min(r.current, r.target));
+    return { current, target: r.target, pct: Math.max(0, Math.min(100, (current / r.target) * 100)) };
+  } catch { return null; }
 }
 
 export function defaultSettings(): Settings {

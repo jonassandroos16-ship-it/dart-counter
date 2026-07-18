@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Player, Settings, CustomTitle } from './types';
-import { COLORS, allTitles, getTitleInfo, conditionLabel } from './constants';
-import { levelFromXP, getPlayerXP, playerStats } from './logic';
+import { COLORS, allTitles, getTitleInfo, conditionLabel, titleProgressInfo, type TitleCtx } from './constants';
+import { levelFromXP, getPlayerXP, playerStats, allVisitsFor } from './logic';
 import { initials, uid } from './store';
 import { Modal } from './Popups';
 
@@ -54,7 +54,7 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
         else setPlayers((prev: Player[]) => prev.map(x => x.id === p.id ? p : x));
         setEditing(null); toast(isNew ? 'Player added' : 'Saved');
       }} />}
-      {titlesFor && <TitlesModal player={titlesFor} settings={settings} setPlayers={setPlayers} onClose={() => setTitlesFor(null)} toast={toast} />}
+      {titlesFor && <TitlesModal player={titlesFor} games={games} settings={settings} setPlayers={setPlayers} onClose={() => setTitlesFor(null)} toast={toast} />}
     </div>
   );
 }
@@ -78,29 +78,82 @@ function EditPlayerModal({ player, isNew, onClose, onSave }: { player: Player; i
   );
 }
 
-function TitlesModal({ player, settings, setPlayers, onClose, toast }: { player: Player; settings: Settings; setPlayers: (updater: any) => void; onClose: () => void; toast: (m: string) => void }) {
+function TitlesModal({ player, games, settings, setPlayers, onClose, toast }: { player: Player; games: any[]; settings: Settings; setPlayers: (updater: any) => void; onClose: () => void; toast: (m: string) => void }) {
   const xp = getPlayerXP(player);
   const titles = allTitles(settings.customTitles);
+
+  const playerGames = (games as any[]).filter(g => g.players.some((p: any) => p.id === player.id));
+  const gamesWon = playerGames.filter(g => g.winner === player.id).length;
+  const ctx: TitleCtx = {
+    playerId: player.id,
+    games: playerGames,
+    gamesPlayed: playerGames.length,
+    gamesWon,
+    lifetimeVisits: allVisitsFor(player.id, games as any[]),
+  };
+
+  const sorted = [...titles].map(t => {
+    const unlocked = xp.unlockedTitles.includes(t.id);
+    const prog = titleProgressInfo(t, ctx);
+    return { t, unlocked, prog };
+  }).sort((a, b) => {
+    if (a.unlocked !== b.unlocked) return a.unlocked ? -1 : 1;
+    const ap = a.prog ? a.prog.pct : -1;
+    const bp = b.prog ? b.prog.pct : -1;
+    if (bp !== ap) return bp - ap;
+    return a.t.name.localeCompare(b.t.name);
+  });
+
   return (
     <Modal onClose={onClose}>
       <h3 style={{ marginBottom: 4 }}>Titles — {player.name}</h3>
       <div className="muted small" style={{ marginBottom: 14 }}>Tap to equip. Locked titles are earned through play.</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '50vh', overflow: 'auto' }}>
-        {titles.map(t => {
-          const unlocked = xp.unlockedTitles.includes(t.id);
+        {sorted.map(({ t, unlocked, prog }) => {
           const equipped = xp.selectedTitle === t.id;
+          const pct = prog ? prog.pct : 0;
+          const fillBg = unlocked
+            ? 'color-mix(in srgb,var(--accent) 28%,var(--bg-3))'
+            : 'color-mix(in srgb,var(--accent) 18%,var(--bg-3))';
           return (
-            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, borderRadius: 12, background: equipped ? 'color-mix(in srgb,var(--accent) 15%,var(--bg-3))' : 'var(--bg-3)', border: `1px solid ${equipped ? 'var(--accent)' : 'var(--border)'}`, opacity: unlocked ? 1 : 0.5 }}>
-              <div style={{ fontSize: 24 }}>{unlocked ? (t.icon || '🏅') : '🔒'}</div>
-              <div style={{ flex: 1 }}>
+            <div key={t.id} style={{
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: 10,
+              borderRadius: 12,
+              background: 'var(--bg-3)',
+              border: `1px solid ${equipped ? 'var(--accent)' : 'var(--border)'}`,
+              opacity: unlocked ? 1 : 0.65,
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                position: 'absolute',
+                inset: 0,
+                width: `${pct}%`,
+                background: fillBg,
+                transition: 'width .4s ease',
+                pointerEvents: 'none',
+                zIndex: 0,
+              }} />
+              <div style={{ position: 'relative', zIndex: 1, fontSize: 24 }}>{unlocked ? (t.icon || '🏅') : '🔒'}</div>
+              <div style={{ position: 'relative', zIndex: 1, flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700 }}>{t.name}{t.custom ? <span className="pill" style={{ fontSize: 9, marginLeft: 4 }}>CUSTOM</span> : null}</div>
                 <div className="muted small">{t.desc || ''}</div>
+                {prog && !unlocked ? (
+                  <div className="muted small" style={{ fontSize: 11, marginTop: 2 }}>
+                    {prog.current.toLocaleString()} / {prog.target.toLocaleString()}
+                  </div>
+                ) : null}
               </div>
-              {equipped
-                ? <span className="xp-pill">Equipped</span>
-                : unlocked
-                  ? <button className="btn sm ghost" onClick={() => { setPlayers((prev: Player[]) => prev.map(p => p.id === player.id ? { ...p, selectedTitle: t.id } : p)); toast('Title equipped'); }}>Equip</button>
-                  : <span className="muted small">Locked</span>}
+              <div style={{ position: 'relative', zIndex: 1 }}>
+                {equipped
+                  ? <span className="xp-pill">Equipped</span>
+                  : unlocked
+                    ? <button className="btn sm ghost" onClick={() => { setPlayers((prev: Player[]) => prev.map(p => p.id === player.id ? { ...p, selectedTitle: t.id } : p)); toast('Title equipped'); }}>Equip</button>
+                    : <span className="muted small">Locked</span>}
+              </div>
             </div>
           );
         })}
