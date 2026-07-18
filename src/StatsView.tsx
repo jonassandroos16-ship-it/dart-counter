@@ -113,6 +113,7 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
           {BADGES.map((b) => {
             const unlocked = (xp.unlockedBadges || []).includes(b.id);
             const isSelected = selectedBadge === b.id;
+            const count = (xp.badgeCounts || {})[b.id] || 0;
             return (
               <button
                 key={b.id}
@@ -125,10 +126,14 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
                   border: `1px solid ${isSelected ? 'var(--accent)' : unlocked ? 'color-mix(in srgb,var(--accent) 40%,var(--bg-3))' : 'var(--border)'}`,
                   opacity: unlocked ? 1 : 0.5,
                   cursor: 'pointer', color: 'inherit',
+                  position: 'relative',
                 }}
               >
                 <div style={{ fontSize: 22 }}>{unlocked ? b.icon : '🔒'}</div>
                 <div style={{ fontSize: 10, fontWeight: 700, lineHeight: 1.1 }}>{b.name}</div>
+                {unlocked && count > 0 ? (
+                  <span style={{ position: 'absolute', top: 4, right: 4, fontSize: 10, fontWeight: 800, minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, background: 'var(--accent)', color: '#04150a', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{count}</span>
+                ) : null}
               </button>
             );
           })}
@@ -137,6 +142,7 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
           const b = BADGES.find(x => x.id === selectedBadge);
           if (!b) return null;
           const unlocked = (xp.unlockedBadges || []).includes(b.id);
+          const count = (xp.badgeCounts || {})[b.id] || 0;
           return (
             <div style={{ marginTop: 12, padding: 12, borderRadius: 12, background: 'var(--bg-3)', border: '1px solid var(--border)' }}>
               <div className="row" style={{ gap: 10, alignItems: 'center' }}>
@@ -145,7 +151,7 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
                   <div style={{ fontWeight: 700, fontSize: 15 }}>{b.name}</div>
                   <div className="muted" style={{ fontSize: 12, marginTop: 2, lineHeight: 1.3 }}>{b.desc}</div>
                   <div className="muted small" style={{ marginTop: 4 }}>
-                    {unlocked ? 'Unlocked — equip it from the Players screen to show it as your icon.' : 'Locked — earn it in a future game to unlock.'}
+                    {unlocked ? `Earned ${count} time${count === 1 ? '' : 's'} — equip it from the Players screen to show it as your icon.` : 'Locked — earn it in a future game to unlock.'}
                   </div>
                 </div>
               </div>
