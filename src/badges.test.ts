@@ -91,19 +91,16 @@ describe('getBadgeContext', () => {
   });
 
   it('returns the lifetime kill count for Slayer', () => {
-    // Killer-mode games store kills on the player object (not part of the
-    // GameRecord type), so we use an untyped array here.
-    const games: any[] = [
-      {
-        id: 'g1', date: '2026-01-01T00:00:00.000Z', mode: 'killer',
-        practice: false, atc: false, doubleOut: false, legsBestOf: 1,
-        winner: null, tied: false, tiedPlayers: null,
-        players: [
-          { id: 'p1', name: 'P1', color: '#000', legsWon: 0, dartsThrown: 0, visits: [], kills: ['p2', 'p3'] },
-          { id: 'p2', name: 'P2', color: '#000', legsWon: 0, dartsThrown: 0, visits: [], kills: ['p1'] },
-        ],
-      },
+    const games: GameRecord[] = [
+      makeGameRecord('g1', [
+        { id: 'p1', name: 'P1', color: '#000', legsWon: 0, dartsThrown: 0, visits: [], team: undefined } as any,
+        { id: 'p2', name: 'P2', color: '#000', legsWon: 0, dartsThrown: 0, visits: [] },
+      ], { mode: 'killer' }),
     ];
+    // Simulate kills stored on the player — GameRecord.players don't carry
+    // kills, so we cast to inject them for the test.
+    (games[0].players[0] as any).kills = ['p2', 'p3'];
+    (games[0].players[1] as any).kills = ['p1'];
     const ctx = getBadgeContext('b_slayer', 'p1', games);
     expect(ctx).toEqual({ value: 2, label: 'kills' });
   });

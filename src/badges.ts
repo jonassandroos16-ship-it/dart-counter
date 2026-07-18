@@ -28,12 +28,12 @@ const isBull = (d: any) => d.value === 50 || d.value === 25;
 const isMiss = (d: any) => d.value === 0;
 
 // Aggregate a numeric stat across all of a player's competitive games.
-// `selector` returns the per-game number; we sum (sum=true) or take the
+// `gameSelector` returns the per-game number; we sum (sum=true) or take the
 // max (sum=false) across games.
 function aggregate(
   playerId: string,
   games: any[],
-  selector: (playerVisits: any[]) => number,
+  gameSelector: (game: any, playerVisits: any[]) => number,
   sum = false,
 ): number {
   let acc = 0;
@@ -41,7 +41,7 @@ function aggregate(
     if (!g || !g.players) continue;
     const pl = (g.players as any[]).find((p) => p.id === playerId);
     if (!pl) continue;
-    const v = selector(pl.visits || []);
+    const v = gameSelector(g, pl.visits || []);
     if (sum) acc += v;
     else acc = Math.max(acc, v);
   }
@@ -59,42 +59,42 @@ export function lifetimeKills(playerId: string, games: any[]): number {
 
 // Lifetime high score (best single visit) across all competitive games.
 export function lifetimeHighScore(playerId: string, games: any[]): number {
-  return aggregate(playerId, games, (visits) =>
+  return aggregate(playerId, games, (_g, visits) =>
     Math.max(0, ...visits.filter((v: any) => !v.bust && !v.atc).map((v: any) => v.scored || 0)),
   );
 }
 
 // Lifetime total busts.
 export function lifetimeBusts(playerId: string, games: any[]): number {
-  return aggregate(playerId, games, (visits) =>
+  return aggregate(playerId, games, (_g, visits) =>
     visits.filter((v: any) => v.bust).length, true,
   );
 }
 
 // Lifetime total missed darts (value === 0).
 export function lifetimeMisses(playerId: string, games: any[]): number {
-  return aggregate(playerId, games, (visits) =>
+  return aggregate(playerId, games, (_g, visits) =>
     dartsOf(visits).filter(isMiss).length, true,
   );
 }
 
 // Lifetime total 180s.
 export function lifetime180s(playerId: string, games: any[]): number {
-  return aggregate(playerId, games, (visits) =>
+  return aggregate(playerId, games, (_g, visits) =>
     visits.filter((v: any) => !v.bust && !v.atc && v.scored === 180).length, true,
   );
 }
 
 // Lifetime total triples landed.
 export function lifetimeTriples(playerId: string, games: any[]): number {
-  return aggregate(playerId, games, (visits) =>
+  return aggregate(playerId, games, (_g, visits) =>
     dartsOf(visits).filter((d: any) => d.mult === 3).length, true,
   );
 }
 
 // Lifetime high checkout.
 export function lifetimeHighCheckout(playerId: string, games: any[]): number {
-  return aggregate(playerId, games, (visits) => {
+  return aggregate(playerId, games, (_g, visits) => {
     const checkouts = visits.filter((v: any) => v.remaining === 0 && !v.bust);
     return Math.max(0, ...checkouts.map((v: any) => v.scored || 0));
   });
@@ -102,7 +102,7 @@ export function lifetimeHighCheckout(playerId: string, games: any[]): number {
 
 // Lifetime total darts thrown.
 export function lifetimeDartsThrown(playerId: string, games: any[]): number {
-  return aggregate(playerId, games, (visits) => dartsOf(visits).length, true);
+  return aggregate(playerId, games, (_g, visits) => dartsOf(visits).length, true);
 }
 
 export const BADGES: BadgeDef[] = [
@@ -184,7 +184,7 @@ export const BADGES: BadgeDef[] = [
       const totals: Record<string, number> = {};
       players.forEach((p: any) => (totals[p.id] = 0));
       const timeline: { pid: string; date: number; scored: number; bust: boolean; atc: boolean }[] = [];
-      players.forEach((p: any) => (p.visits || []).forEach((v: any) => timeline.push({ pid: p.id, date: new Date(v.date || 0).getTime(), scored: v.scored || 0, bust: !!v.bust, atc: !!v.atc }))));
+      players.forEach((p: any) => (p.visits || []).forEach((v: any) => timeline.push({ pid: p.id, date: new Date(v.date || 0).getTime(), scored: v.scored || 0, bust: !!v.bust, atc: !!v.atc })));
       timeline.sort((a, b) => a.date - b.date);
       let winnerScored = 0;
       for (const ev of timeline) {
