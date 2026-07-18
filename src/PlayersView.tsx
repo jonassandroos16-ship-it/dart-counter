@@ -60,7 +60,7 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
                   {activePu ? <span className="title-badge" title={activePu.desc}>{activePu.icon} {activePu.name}</span> : null}
                 </div>
                 <div className="muted small">{s.games} games ({s.competitiveGames} competitive) · {s.avg.toFixed(1)} avg · {s.n180} × 180 · {xp.xp} XP · {(xp.unlockedBadges || []).length} badges · {totalBadgeEarns} earned</div>
-                <div className="muted small" style={{ marginTop: 2 }}>❤️ {attrs.health} HP · 🛡️ {attrs.armor}% armor · {pwr.unlocked.length} power-ups · {pwr.pointsAvailable} PU pts · {attrs.pointsAvailable} attr pts</div>
+                <div className="muted small" style={{ marginTop: 2 }}>❤️ {attrs.health} HP · 🛡️ {attrs.armor}% armor · ⚡ {attrs.power}% power · {pwr.unlocked.length} power-ups · {pwr.pointsAvailable} PU pts · {attrs.pointsAvailable} attr pts</div>
                 <div className="xp-bar" style={{ width: '100%', maxWidth: 240 }}><div style={{ width: `${Math.round(li.xpIntoLevel / li.xpNeeded * 100)}%` }} /></div>
               </div>
             </div>
@@ -86,9 +86,6 @@ function EditPlayerModal({ player, isNew, games, settings, onClose, onSave, setP
   const [color, setColor] = useState(player.color || COLORS[0]);
   const [sound, setSound] = useState<PlayerSoundId>(player.sound || 'none');
 
-  // Live state for titles/badges — these mutate the player immediately via setPlayers
-  // so the modal reflects the latest unlocked state. We keep a working copy of the
-  // player for the basic-tab fields and apply them on Save.
   const livePlayer = isNew ? player : { ...player };
 
   const save = () => {
@@ -327,16 +324,25 @@ function AttributesTab({ player, settings, setPlayers, toast }: { player: Player
   const attrs = player.attributes || defaultAttributes(settings);
   const level = player.level ?? 1;
   const totalPoints = totalAttributePointsForLevel(level, settings);
-  const spent = Math.round((attrs.health - cfg.attributeStartHealth) / cfg.healthPerPoint) + Math.round((attrs.armor - cfg.attributeStartArmor) / cfg.armorPerPoint);
+  const spent = Math.round((attrs.health - cfg.attributeStartHealth) / cfg.healthPerPoint)
+    + Math.round((attrs.armor - cfg.attributeStartArmor) / cfg.armorPerPoint)
+    + Math.round((attrs.power - cfg.attributeStartPower) / cfg.powerPerPoint);
   const available = Math.max(0, totalPoints - spent);
+  const armorAtCap = attrs.armor >= cfg.armorMax;
+  const powerAtCap = attrs.power >= cfg.powerMax;
 
-  const spend = (kind: 'health' | 'armor') => {
+  const spend = (kind: 'health' | 'armor' | 'power') => {
     if (available <= 0) { toast('No attribute points available'); return; }
     setPlayers((prev: Player[]) => prev.map(p => {
       if (p.id !== player.id) return p;
       const a = p.attributes || defaultAttributes(settings);
       if (kind === 'health') return { ...p, attributes: { ...a, health: a.health + cfg.healthPerPoint, pointsAvailable: Math.max(0, available - 1) } };
-      return { ...p, attributes: { ...a, armor: a.armor + cfg.armorPerPoint, pointsAvailable: Math.max(0, available - 1) } };
+      if (kind === 'armor') {
+        if (a.armor >= cfg.armorMax) { toast(`Armor capped at ${cfg.armorMax}%`); return p; }
+        return { ...p, attributes: { ...a, armor: Math.min(cfg.armorMax, a.armor + cfg.armorPerPoint), pointsAvailable: Math.max(0, available - 1) } };
+      }
+      if (a.power >= cfg.powerMax) { toast(`Power capped at ${cfg.powerMax}%`); return p; }
+      return { ...p, attributes: { ...a, power: Math.min(cfg.powerMax, a.power + cfg.powerPerPoint), pointsAvailable: Math.max(0, available - 1) } };
     }));
   };
 
@@ -347,7 +353,7 @@ function AttributesTab({ player, settings, setPlayers, toast }: { player: Player
 
   return (
     <>
-      <div className="muted small" style={{ marginBottom: 10 }}>Players start with {cfg.attributeStartHealth} HP and {cfg.attributeStartArmor}% armor. Each level grants {cfg.attributePointsPerLevel} attribute points. Spend them below.</div>
+      <div className="muted small" style={{ marginBottom: 10 }}>Players start with {cfg.attributeStartHealth} HP, {cfg.attributeStartArmor}% armor and {cfg.attributeStartPower}% power. Each level grants {cfg.attributePointsPerLevel} attribute points. Armor caps at {cfg.armorMax}% and power at {cfg.powerMax}%.</div>
       <div className="card" style={{ padding: 12, marginBottom: 10 }}>
         <div className="row between"><b>Level</b><span className="xp-pill">Lvl {level}</span></div>
         <div className="row between" style={{ marginTop: 6 }}><span className="muted small">Total points earned</span><span className="small"><b>{totalPoints}</b></span></div>
@@ -360,9 +366,14 @@ function AttributesTab({ player, settings, setPlayers, toast }: { player: Player
         <button className="btn primary block" style={{ marginTop: 8 }} disabled={available <= 0} onClick={() => spend('health')}>+ Spend 1 point on Health</button>
       </div>
       <div className="card" style={{ padding: 12, marginBottom: 10 }}>
-        <div className="row between"><b>🛡️ Armor</b><span style={{ fontWeight: 800, fontSize: 18 }}>{attrs.armor}%</span></div>
-        <div className="muted small" style={{ marginTop: 4 }}>Each point adds +{cfg.armorPerPoint}% armor.</div>
-        <button className="btn primary block" style={{ marginTop: 8 }} disabled={available <= 0} onClick={() => spend('armor')}>+ Spend 1 point on Armor</button>
+        <div className="row between"><b>🛡️ Armor</b><span style={{ fontWeight: 800, fontSize: 18 }}>{attrs.armor}%{armorAtCap ? <span className="muted small" style={{ marginLeft: 6 }}>MAX</span> : null}</span></div>
+        <div className="muted small" style={{ marginTop: 4 }}>Each point adds +{cfg.armorPerPoint}% armor (max {cfg.armorMax}%). Reduces incoming damage in Battle.</div>
+        <button className="btn primary block" style={{ marginTop: 8 }} disabled={available <= 0 || armorAtCap} onClick={() => spend('armor')}>{armorAtCap ? 'Armor at cap' : '+ Spend 1 point on Armor'}</button>
+      </div>
+      <div className="card" style={{ padding: 12, marginBottom: 10 }}>
+        <div className="row between"><b>⚡ Power</b><span style={{ fontWeight: 800, fontSize: 18 }}>{attrs.power}%{powerAtCap ? <span className="muted small" style={{ marginLeft: 6 }}>MAX</span> : null}</span></div>
+        <div className="muted small" style={{ marginTop: 4 }}>Each point adds +{cfg.powerPerPoint}% power (max {cfg.powerMax}%). Boosts attack damage in Battle.</div>
+        <button className="btn primary block" style={{ marginTop: 8 }} disabled={available <= 0 || powerAtCap} onClick={() => spend('power')}>{powerAtCap ? 'Power at cap' : '+ Spend 1 point on Power'}</button>
       </div>
       <button className="btn ghost sm block" onClick={reset}>Reset attributes</button>
     </>
