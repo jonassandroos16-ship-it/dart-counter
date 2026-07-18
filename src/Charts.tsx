@@ -1,9 +1,32 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { DARTBOARD_NUMBERS } from './constants';
 
 function cssVar(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
+
+// Canvas fillStyle can't parse var() or color-mix(), so resolve a CSS color to
+// concrete [r,g,b] by letting the browser compute it on a hidden element.
+function toRGB(cssVal: string): [number, number, number] {
+  const probe = document.createElement('span');
+  probe.style.color = cssVal;
+  probe.style.display = 'none';
+  document.body.appendChild(probe);
+  const computed = getComputedStyle(probe).color;
+  document.body.removeChild(probe);
+  const m = computed.match(/\d+(?:\.\d+)?/g);
+  return m ? [+m[0], +m[1], +m[2]] : [128, 128, 128];
+}
+
+function dartLabel(base: number, mult: number): string {
+  if (base === 50) return 'Bull';
+  if (base === 25) return '25';
+  if (mult === 3) return 'T' + base;
+  if (mult === 2) return 'D' + base;
+  return String(base);
+}
+
+interface HitEntry { key: string; label: string; base: number; mult: number; hits: number; }
 
 function dpiSetup(canvas: HTMLCanvasElement, h: number) {
   const ratio = window.devicePixelRatio || 1;
@@ -78,6 +101,28 @@ function drawSegment(ctx: CanvasRenderingContext2D, cx: number, cy: number, rInn
 
 export function DartboardHeatmap({ visits }: { visits: any[] }) {
   const ref = useRef<HTMLCanvasElement>(null);
+
+  const { entries, colorFor } = useMemo(() => {
+    const hitMap: Record<string, number> = {};
+    visits.forEach(v => { (v.darts || []).forEach((d: any) => { const key = `${d.base || 0}-${d.mult || 1}`; hitMap[key] = (hitMap[key] || 0) + 1; }); });
+    const maxHits = Math.max(1, ...Object.values(hitMap));
+    const accent = toRGB(cssVar('--accent'));
+    const bg3 = toRGB(cssVar('--bg-3'));
+    const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
+    // Ease the curve so low hit counts are still visibly tinted, not grey.
+    const colorFor = (hits: number): string => {
+      if (hits <= 0) return `rgb(${bg3[0]}, ${bg3[1]}, ${bg3[2]})`;
+      const t = Math.min(1, hits / maxHits);
+      const eased = Math.pow(t, 0.55);
+      return `rgb(${lerp(bg3[0], accent[0], eased)}, ${lerp(bg3[1], accent[1], eased)}, ${lerp(bg3[2], accent[2], eased)})`;
+    };
+    const entries: HitEntry[] = Object.entries(hitMap)
+      .map(([k, hits]) => { const [base, mult] = k.split('-').map(Number); return { key: k, label: dartLabel(base, mult), base, mult, hits }; })
+      .filter(e => e.hits > 0)
+      .sort((a, b) => b.hits - a.hits || a.label.localeCompare(b.label));
+    return { entries, colorFor };
+  }, [visits]);
+
   useEffect(() => {
     const canvas = ref.current; if (!canvas) return;
     const size = 340; const ratio = window.devicePixelRatio || 1;
@@ -87,36 +132,52 @@ export function DartboardHeatmap({ visits }: { visits: any[] }) {
     const cx = size / 2, cy = size / 2, R = size / 2 - 20;
     const rBull = R * 0.05, rBullOuter = R * 0.11, rTripleInner = R * 0.58, rTripleOuter = R * 0.63, rDoubleInner = R * 0.94, rDoubleOuter = R * 1.0;
     const segAngle = (Math.PI * 2) / 20;
-    const hitMap: Record<string, number> = {};
-    visits.forEach(v => { (v.darts || []).forEach((d: any) => { const key = `${d.base || 0}-${d.mult || 1}`; hitMap[key] = (hitMap[key] || 0) + 1; }); });
-    const maxHits = Math.max(1, ...Object.values(hitMap));
-    const heatColor = (intensity: number): string | null => {
-      if (intensity <= 0) return null;
-      const t = Math.min(1, intensity / maxHits);
-      if (t < 0.25) return `color-mix(in srgb, var(--accent) ${t * 4 * 25}%, var(--bg-3))`;
-      if (t < 0.5) return `color-mix(in srgb, var(--accent) ${t * 2 * 50}%, var(--bg-3))`;
-      if (t < 0.75) return `color-mix(in srgb, var(--accent) ${t * 100}%, var(--bg-3))`;
-      return 'var(--accent)';
-    };
     for (let i = 0; i < 20; i++) {
       const num = DARTBOARD_NUMBERS[i];
       const startAngle = -Math.PI / 2 - segAngle / 2 + i * segAngle;
       const endAngle = startAngle + segAngle;
-      const singleHits = hitMap[`${num}-1`] || 0, doubleHits = hitMap[`${num}-2`] || 0, tripleHits = hitMap[`${num}-3`] || 0;
-      drawSegment(ctx, cx, cy, rBullOuter, rTripleInner, startAngle, endAngle, heatColor(singleHits) || cssVar('--bg-3'));
-      drawSegment(ctx, cx, cy, rTripleOuter, rDoubleInner, startAngle, endAngle, heatColor(singleHits) || cssVar('--bg-3'));
-      drawSegment(ctx, cx, cy, rTripleInner, rTripleOuter, startAngle, endAngle, heatColor(tripleHits) || cssVar('--bg-3'));
-      drawSegment(ctx, cx, cy, rDoubleInner, rDoubleOuter, startAngle, endAngle, heatColor(doubleHits) || cssVar('--bg-3'));
+      const singleHits = (hitMapFor(visits, `${num}-1`));
+      const doubleHits = (hitMapFor(visits, `${num}-2`));
+      const tripleHits = (hitMapFor(visits, `${num}-3`));
+      drawSegment(ctx, cx, cy, rBullOuter, rTripleInner, startAngle, endAngle, colorFor(singleHits));
+      drawSegment(ctx, cx, cy, rTripleOuter, rDoubleInner, startAngle, endAngle, colorFor(singleHits));
+      drawSegment(ctx, cx, cy, rTripleInner, rTripleOuter, startAngle, endAngle, colorFor(tripleHits));
+      drawSegment(ctx, cx, cy, rDoubleInner, rDoubleOuter, startAngle, endAngle, colorFor(doubleHits));
       const labelAngle = startAngle + segAngle / 2;
       const lx = cx + Math.cos(labelAngle) * R * 1.1, ly = cy + Math.sin(labelAngle) * R * 1.1;
       ctx.fillStyle = cssVar('--muted'); ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(String(num), lx, ly);
     }
-    ctx.beginPath(); ctx.arc(cx, cy, rBullOuter, 0, Math.PI * 2); ctx.fillStyle = heatColor(hitMap['25-1'] || 0) || cssVar('--bg-3'); ctx.fill();
-    ctx.beginPath(); ctx.arc(cx, cy, rBull, 0, Math.PI * 2); ctx.fillStyle = heatColor(hitMap['50-1'] || 0) || cssVar('--bg-3'); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx, cy, rBullOuter, 0, Math.PI * 2); ctx.fillStyle = colorFor(hitMapFor(visits, '25-1')); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx, cy, rBull, 0, Math.PI * 2); ctx.fillStyle = colorFor(hitMapFor(visits, '50-1')); ctx.fill();
     ctx.strokeStyle = cssVar('--border'); ctx.lineWidth = 0.5;
     for (let i = 0; i < 20; i++) { const a = -Math.PI / 2 - segAngle / 2 + i * segAngle; ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * rBullOuter, cy + Math.sin(a) * rBullOuter); ctx.lineTo(cx + Math.cos(a) * rDoubleOuter, cy + Math.sin(a) * rDoubleOuter); ctx.stroke(); }
     [rBull, rBullOuter, rTripleInner, rTripleOuter, rDoubleInner, rDoubleOuter].forEach(r => { ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke(); });
-  }, [visits]);
-  return <canvas ref={ref} height={340} />;
+  }, [visits, colorFor]);
+
+  return (
+    <>
+      <canvas ref={ref} height={340} />
+      {entries.length > 0 ? (
+        <div style={{ marginTop: 14 }}>
+          <div className="muted small" style={{ marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Hit counts · most first</div>
+          <div className="row wrap" style={{ gap: 6 }}>
+            {entries.map(e => (
+              <span key={e.key} className="pill" style={{ background: 'var(--bg-3)', borderLeft: `3px solid ${colorFor(e.hits)}`, paddingLeft: 8 }}>
+                <b>{e.label}</b> <span className="muted">{e.hits}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="muted small" style={{ marginTop: 12 }}>No hits recorded yet.</div>
+      )}
+    </>
+  );
+}
+
+function hitMapFor(visits: any[], key: string): number {
+  let n = 0;
+  visits.forEach(v => { (v.darts || []).forEach((d: any) => { if (`${d.base || 0}-${d.mult || 1}` === key) n++; }); });
+  return n;
 }
