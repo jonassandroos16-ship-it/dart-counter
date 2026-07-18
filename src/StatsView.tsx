@@ -6,8 +6,59 @@ import { LineChart, BarChart, DartboardHeatmap } from './Charts';
 import { CalendarPicker, filterForPeriod, describeFilter, type Period } from './CalendarPicker';
 import { BADGES, computeLifetimeBadgeCounts } from './badges';
 
+// For each stat: which direction is "better"? higher = bigger is better, lower = smaller is better.
+// null = neutral (no comparison). Used to color the comparison value red/green.
+type StatKey =
+  | 'avg' | 'first9' | 'games' | 'n180' | 'n140' | 'tons'
+  | 'highScore' | 'highCheckout' | 'legsWon' | 'dartsThrown'
+  | 'finishMin' | 'finishMax' | 'finishAvg' | 'legsFinished'
+  | 'level' | 'xp' | 'titles';
+
+const STAT_META: { key: StatKey; label: string; better: 'higher' | 'lower' | null; format: (v: number) => string; empty?: string }[] = [
+  { key: 'avg', label: '3-dart avg', better: 'higher', format: v => v.toFixed(1) },
+  { key: 'first9', label: 'First 9', better: 'higher', format: v => v.toFixed(1) },
+  { key: 'games', label: 'Games', better: null, format: v => String(v) },
+  { key: 'n180', label: '180s', better: 'higher', format: v => String(v) },
+  { key: 'n140', label: '140+', better: 'higher', format: v => String(v) },
+  { key: 'tons', label: '100+', better: 'higher', format: v => String(v) },
+  { key: 'highScore', label: 'High score', better: 'higher', format: v => String(v) },
+  { key: 'highCheckout', label: 'High checkout', better: 'higher', format: v => String(v) },
+  { key: 'legsWon', label: 'Legs won', better: 'higher', format: v => String(v) },
+  { key: 'dartsThrown', label: 'Darts thrown', better: null, format: v => String(v) },
+  { key: 'finishMin', label: 'Best finish', better: 'lower', format: v => String(v), empty: '—' },
+  { key: 'finishMax', label: 'Worst finish', better: 'higher', format: v => String(v), empty: '—' },
+  { key: 'finishAvg', label: 'Avg finish', better: 'lower', format: v => v.toFixed(1), empty: '—' },
+  { key: 'legsFinished', label: 'Legs finished', better: 'higher', format: v => String(v) },
+  { key: 'level', label: 'Level', better: 'higher', format: v => String(v) },
+  { key: 'xp', label: 'Total XP', better: 'higher', format: v => String(v) },
+  { key: 'titles', label: 'Titles', better: 'higher', format: v => String(v) },
+];
+
+function statValue(meta: typeof STAT_META[number], s: ReturnType<typeof playerStats>, li: { level: number }, xp: ReturnType<typeof getPlayerXP>): number {
+  switch (meta.key) {
+    case 'avg': return s.avg;
+    case 'first9': return s.first9;
+    case 'games': return s.games;
+    case 'n180': return s.n180;
+    case 'n140': return s.n140;
+    case 'tons': return s.tons;
+    case 'highScore': return s.highScore;
+    case 'highCheckout': return s.highCheckout;
+    case 'legsWon': return s.legsWon;
+    case 'dartsThrown': return s.dartsThrown;
+    case 'finishMin': return s.finishMin;
+    case 'finishMax': return s.finishMax;
+    case 'finishAvg': return s.finishAvg;
+    case 'legsFinished': return s.legsFinished;
+    case 'level': return li.level;
+    case 'xp': return xp.xp || 0;
+    case 'titles': return xp.unlockedTitles.length;
+  }
+}
+
 export function StatsView({ players, games, settings }: { players: Player[]; games: any[]; settings: Settings }) {
   const [pid, setPid] = useState<string>(players[0]?.id || '');
+  const [compareId, setCompareId] = useState<string>('none');
   const [period, setPeriod] = useState<Period>('Overall');
   const [refDate, setRefDate] = useState<Date>(() => new Date());
   const [modeFilter, setModeFilter] = useState<string>('all');
@@ -15,6 +66,7 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
 
   if (!players.length) return <div className="view-scroll"><div className="card empty">No players yet.</div></div>;
   const p = players.find(x => x.id === pid) || players[0];
+  const cmpPlayer = compareId !== 'none' ? players.find(x => x.id === compareId) : null;
 
   const filter = period === 'Overall' ? null : filterForPeriod(period, refDate);
   const dateFiltered = useMemo(() => filterGamesByDate(games as any, filter), [games, filter]);
@@ -24,6 +76,9 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
   const li = levelFromXP(xp.xp, settings);
   const ti = getTitleInfo(xp.selectedTitle, settings.customTitles);
   const visits = allVisitsFor(p.id, modeFiltered);
+  const cmpS = cmpPlayer ? playerStats(cmpPlayer.id, modeFiltered) : null;
+  const cmpXp = cmpPlayer ? getPlayerXP(cmpPlayer) : null;
+  const cmpLi = cmpXp ? levelFromXP(cmpXp.xp, settings) : null;
   const badgeCounts = useMemo(() => {
     const stored = xp.badgeCounts || {};
     const fromHistory = computeLifetimeBadgeCounts(p.id, modeFiltered as any);
@@ -45,26 +100,26 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
     else buckets['0-39']++;
   });
 
-  const cells: [string, string | number][] = [
-    ['3-dart avg', s.avg.toFixed(1)], ['First 9', s.first9.toFixed(1)], ['Games', s.games],
-    ['180s', s.n180], ['140+', s.n140], ['100+', s.tons],
-    ['High score', s.highScore], ['High checkout', s.highCheckout], ['Legs won', s.legsWon],
-    ['Darts thrown', s.dartsThrown],
-    ['Best finish', s.finishMin || '—'],
-    ['Worst finish', s.finishMax || '—'],
-    ['Avg finish', s.legsFinished ? s.finishAvg.toFixed(1) : '—'],
-    ['Legs finished', s.legsFinished],
-    ['Level', li.level], ['Total XP', xp.xp || 0], ['Titles', xp.unlockedTitles.length],
-  ];
-
   const filterActive = period !== 'Overall';
   const modeLabel = modeFilter === 'all' ? '' : ` · ${MODES[modeFilter].label}`;
 
   return (
     <div className="view-scroll">
-      <select value={pid} onChange={e => setPid(e.target.value)} style={{ marginBottom: 12 }}>
-        {players.map(pl => <option key={pl.id} value={pl.id}>{pl.name}</option>)}
-      </select>
+      <div className="row" style={{ gap: 8, marginBottom: 12, alignItems: 'stretch' }}>
+        <label className="field" style={{ flex: 1, marginBottom: 0 }}>
+          <span>Player</span>
+          <select value={pid} onChange={e => setPid(e.target.value)}>
+            {players.map(pl => <option key={pl.id} value={pl.id}>{pl.name}</option>)}
+          </select>
+        </label>
+        <label className="field" style={{ flex: 1, marginBottom: 0 }}>
+          <span>Compare with</span>
+          <select value={compareId} onChange={e => setCompareId(e.target.value)}>
+            <option value="none">— None —</option>
+            {players.filter(pl => pl.id !== pid).map(pl => <option key={pl.id} value={pl.id}>{pl.name}</option>)}
+          </select>
+        </label>
+      </div>
       <div className="row" style={{ gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <button className={`btn sm ${modeFilter === 'all' ? 'primary' : 'ghost'}`} onClick={() => setModeFilter('all')}>All modes</button>
         {MODE_KEYS.map(k => (
@@ -110,7 +165,34 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
         </div>
       </div>
       <div className="grid grid-3" style={{ marginBottom: 12 }}>
-        {cells.map(([l, v]) => <div key={l} className="stat"><div className="v">{v}</div><div className="l">{l}</div></div>)}
+        {STAT_META.map(meta => {
+          const val = statValue(meta, s, li, xp);
+          const hasVal = meta.empty ? (val > 0) : true;
+          const display = hasVal ? meta.format(val) : (meta.empty || '—');
+          let cmpDisplay: string | null = null;
+          let cmpClass: 'better' | 'worse' | 'neutral' = 'neutral';
+          if (cmpPlayer && cmpS && cmpXp && cmpLi) {
+            const cmpVal = statValue(meta, cmpS, cmpLi, cmpXp);
+            const cmpHasVal = meta.empty ? (cmpVal > 0) : true;
+            if (cmpHasVal) {
+              cmpDisplay = meta.format(cmpVal);
+              if (meta.better === 'higher') cmpClass = cmpVal > val ? 'worse' : cmpVal < val ? 'better' : 'neutral';
+              else if (meta.better === 'lower') cmpClass = cmpVal < val ? 'worse' : cmpVal > val ? 'better' : 'neutral';
+            }
+          }
+          return (
+            <div key={meta.key} className={`stat${cmpPlayer && cmpDisplay ? ' stat-cmp' : ''}`}>
+              <div className="v">{display}</div>
+              {cmpPlayer && cmpDisplay ? (
+                <div className={`stat-cmp-val ${cmpClass}`} title={`vs ${cmpPlayer.name}`}>
+                  <span className="stat-cmp-arrow">{cmpClass === 'better' ? '▲' : cmpClass === 'worse' ? '▼' : '='}</span>
+                  {cmpDisplay}
+                </div>
+              ) : null}
+              <div className="l">{meta.label}</div>
+            </div>
+          );
+        })}
       </div>
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="row between" style={{ marginBottom: 8 }}>
