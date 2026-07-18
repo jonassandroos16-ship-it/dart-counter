@@ -4,13 +4,14 @@ import { getTitleInfo, MODES, MODE_KEYS } from './constants';
 import { playerStats, levelFromXP, getPlayerXP, bucketAverages, allVisitsFor, filterGamesByDate } from './logic';
 import { LineChart, BarChart, DartboardHeatmap } from './Charts';
 import { CalendarPicker, filterForPeriod, describeFilter, type Period } from './CalendarPicker';
-import { BADGES, getBadgeInfo } from './badges';
+import { BADGES } from './badges';
 
 export function StatsView({ players, games, settings }: { players: Player[]; games: any[]; settings: Settings }) {
   const [pid, setPid] = useState<string>(players[0]?.id || '');
   const [period, setPeriod] = useState<Period>('Overall');
   const [refDate, setRefDate] = useState<Date>(() => new Date());
   const [modeFilter, setModeFilter] = useState<string>('all');
+  const [selectedBadge, setSelectedBadge] = useState<string | null>(null);
 
   if (!players.length) return <div className="view-scroll"><div className="card empty">No players yet.</div></div>;
   const p = players.find(x => x.id === pid) || players[0];
@@ -111,20 +112,46 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 8 }}>
           {BADGES.map((b) => {
             const unlocked = (xp.unlockedBadges || []).includes(b.id);
+            const isSelected = selectedBadge === b.id;
             return (
-              <div key={b.id} title={`${b.name} — ${b.desc}`} style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-                padding: '8px 4px', borderRadius: 10, textAlign: 'center',
-                background: unlocked ? 'color-mix(in srgb,var(--accent) 14%,var(--bg-3))' : 'var(--bg-3)',
-                border: `1px solid ${unlocked ? 'color-mix(in srgb,var(--accent) 40%,var(--bg-3))' : 'var(--border)'}`,
-                opacity: unlocked ? 1 : 0.5,
-              }}>
+              <button
+                key={b.id}
+                onClick={() => setSelectedBadge(isSelected ? null : b.id)}
+                title={`${b.name} — ${b.desc}`}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                  padding: '8px 4px', borderRadius: 10, textAlign: 'center',
+                  background: isSelected ? 'color-mix(in srgb,var(--accent) 22%,var(--bg-3))' : unlocked ? 'color-mix(in srgb,var(--accent) 14%,var(--bg-3))' : 'var(--bg-3)',
+                  border: `1px solid ${isSelected ? 'var(--accent)' : unlocked ? 'color-mix(in srgb,var(--accent) 40%,var(--bg-3))' : 'var(--border)'}`,
+                  opacity: unlocked ? 1 : 0.5,
+                  cursor: 'pointer', color: 'inherit',
+                }}
+              >
                 <div style={{ fontSize: 22 }}>{unlocked ? b.icon : '🔒'}</div>
                 <div style={{ fontSize: 10, fontWeight: 700, lineHeight: 1.1 }}>{b.name}</div>
-              </div>
+              </button>
             );
           })}
         </div>
+        {selectedBadge ? (() => {
+          const b = BADGES.find(x => x.id === selectedBadge);
+          if (!b) return null;
+          const unlocked = (xp.unlockedBadges || []).includes(b.id);
+          return (
+            <div style={{ marginTop: 12, padding: 12, borderRadius: 12, background: 'var(--bg-3)', border: '1px solid var(--border)' }}>
+              <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+                <div style={{ fontSize: 28 }}>{unlocked ? b.icon : '🔒'}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>{b.name}</div>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 2, lineHeight: 1.3 }}>{b.desc}</div>
+                  <div className="muted small" style={{ marginTop: 4 }}>
+                    {unlocked ? 'Unlocked — equip it from the Players screen to show it as your icon.' : 'Locked — earn it in a future game to unlock.'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })() : null}
       </div>
       <div className="tabbar">
         {(['Overall', 'Daily', 'Weekly', 'Monthly', 'Yearly'] as Period[]).map(t => (
