@@ -1,80 +1,78 @@
-import type { CustomTitle, Game, GameRecord, Player, Settings, Visit } from './types';
-import { ATC_TARGETS } from './constants';
+import type { Game, GamePlayer, GameRecord, Player, Settings, Visit } from './types';
+import { MODES, CHECKOUTS, ATC_TARGETS, atcLabel } from './constants';
+import { uid, todayKey } from './store';
 
 export function createGame(modeKey: string, playerIds: string[], players: Player[], doubleOut: boolean, legsBestOf: number): Game {
-  const mode = MODES_MAP[modeKey] || { start: 501 };
+  const mode = MODES[modeKey];
   const meta = (id: string) => players.find(p => p.id === id)!;
-  const g: Game = {
+  return {
     id: uid(), mode: modeKey, date: new Date().toISOString(),
-    doubleOut, practice: !!mode.practice, atc: !!mode.atc, legsBestOf,
-    players: playerIds.map((id, i) => {
-      const p = meta(id);
-      return { id, name: p.name, color: p.color, score: mode.start, legsWon: 0, visits: [], idx: i, dartsThrown: 0, done: false };
-    }),
-    turn: 0, leg: 1, finished: false, winner: null, tiedPlayers: null, tied: false,
-    checkedOutThisRound: [], roundStartTurn: 0, darts: [], mult: 1,
+    doubleOut: (mode.practice || mode.atc) ? false : doubleOut,
+    practice: !!mode.practice, atc: !!mode.atc,
+    legsBestOf: (mode.practice || mode.atc) ? 1 : legsBestOf,
+    players: playerIds.map(id => ({ id, name: meta(id).name, color: meta(id).color, score: mode.start, legsWon: 0, visits: [], idx: 0, dartsThrown: 0, done: false })),
+    turn: 0, leg: 1, finished: false, winner: null, checkedOutThisRound: [], roundStartTurn: 0, darts: [], mult: 1,
   };
-  return g;
 }
-
-const MODES_MAP: Record<string, { start: number; practice?: boolean; atc?: boolean }> = {
-  '501': { start: 501 }, '301': { start: 301 }, '701': { start: 701 }, '101': { start: 101 },
-  'atc': { start: 0, atc: true }, 'practice': { start: 0, practice: true },
-};
 
 export function recordFromGame(game: Game): GameRecord {
   return {
     id: game.id, date: game.date, mode: game.mode, practice: game.practice, atc: game.atc,
-    doubleOut: game.doubleOut, legsBestOf: game.legsBestOf, winner: game.winner, tied: game.tied,
-    tiedPlayers: game.tiedPlayers, players: game.players.map(p => ({
-      id: p.id, name: p.name, color: p.color, legsWon: p.legsWon, dartsThrown: p.dartsThrown, visits: p.visits,
-    })),
+    doubleOut: game.doubleOut, legsBestOf: game.legsBestOf, winner: game.winner,
+    tied: !!game.tied, tiedPlayers: game.tiedPlayers ?? null,
+    players: game.players.map(pl => ({ id: pl.id, name: pl.name, color: pl.color, legsWon: pl.legsWon, dartsThrown: pl.dartsThrown || 0, visits: pl.visits })),
   };
 }
 
 export function checkoutHint(remaining: number | null, doubleOut: boolean, practice?: boolean): string {
-  if (remaining == null || remaining < 0 || (doubleOut && remaining === 1)) return '';
-  if (!doubleOut && !practice) return '';
-  if (remaining <= 170) {
-    const c = CHECKOUTS[remaining];
-    if (c) return c.join(' ');
-  }
-  return '';
+  if (remaining == null || practice) return '';
+  if (remaining < 0) return 'Bust!';
+  if (remaining === 0) return 'Checked out!';
+  if (remaining === 1) return doubleOut ? 'No checkout — bust risk' : 'Checkout: 1';
+  if (remaining > 170) return 'No 3-dart checkout — score to get ≤ 170';
+  const co = CHECKOUTS[remaining];
+  if (co) return 'Checkout: ' + co.join('  ');
+  if (!doubleOut) return 'Checkout: ' + remaining;
+  return 'No checkout from ' + remaining;
 }
 
-import { CHECKOUTS, MODES } from './constants';
-import { uid } from './store';
-
 export function leadTrailBadge(pl: GamePlayer, game: Game): string {
-  const scores = game.players.map(p => p.score).sort((a, b) => b - a);
-  const top = scores[0]; const bot = scores[scores.length - 1];
-  if (pl.score === top && top !== bot) return 'lead';
-  if (pl.score === bot && top !== bot) return 'trail';
-  return '';
+  if (game.practice || game.players.length < 2) return '';
+  const scores = game.players.map(p => p.score);
+  const leaderScore = Math.min(...scores);
+  if (pl.score === leaderScore) {
+    const next = scores.filter(s => s !== leaderScore).sort((a, b) => a - b)[0];
+    const ahead = next != null ? next - leaderScore : 0;
+    return ahead > 0 ? `+${ahead}` : '';
+  }
+  const behind = pl.score - leaderScore;
+  return behind > 0 ? `-${behind}` : '';
 }
 
 export function visitAvg(pl: GamePlayer): number {
-  const visits = pl.visits.filter(v => !v.bust && !v.atc);
-  if (!visits.length) return 0;
-  return visits.reduce((a, v) => a + v.scored, 0) / visits.length;
+  if (!pl.visits.length) return 0;
+  const total = pl.visits.reduce((a, v) => a + v.scored, 0);
+  const darts = pl.visits.reduce((a, v) => a + v.darts.length, 0);
+  return darts ? total / darts * 3 : 0;
 }
 
 export function visitAvgStatic(pl: { visits: Visit[] }): number {
-  const visits = pl.visits.filter(v => !v.bust && !v.atc);
-  if (!visits.length) return 0;
-  return visits.reduce((a, v) => a + v.scored, 0) / visits.length;
+  const s = (pl.visits || []).filter(v => !v.bust);
+  const t = s.reduce((a, v) => a + v.scored, 0);
+  const d = s.reduce((a, v) => a + v.darts.length, 0);
+  return d ? t / d * 3 : 0;
 }
 
 export function levelFromXP(totalXP: number, settings: Settings) {
-  const { baseLevelXp, levelMult } = settings.xpConfig;
-  let level = 1; let need = baseLevelXp; let remaining = totalXP;
-  while (remaining >= need && level < 999) { remaining -= need; level++; need = Math.round(need * levelMult); }
-  return { level, xpIntoLevel: remaining, xpForNext: need };
+  const xpForLevel = (level: number) => Math.round(settings.xpConfig.baseLevelXp * Math.pow(settings.xpConfig.levelMult, level - 1));
+  let level = 1, remaining = totalXP;
+  while (remaining >= xpForLevel(level)) { remaining -= xpForLevel(level); level++; }
+  return { level, xpIntoLevel: remaining, xpNeeded: xpForLevel(level) };
 }
 
 export function getPlayerXP(player: Player | undefined) {
-  if (!player) return 0;
-  return player.xp || 0;
+  if (!player) return { xp: 0, level: 1, unlockedTitles: [] as string[], selectedTitle: null as string | null };
+  return { xp: player.xp ?? 0, level: player.level ?? 1, unlockedTitles: player.unlockedTitles ?? [], selectedTitle: player.selectedTitle ?? null };
 }
 
 export function getPlayerXPById(playerId: string, players: Player[]) {
@@ -83,12 +81,17 @@ export function getPlayerXPById(playerId: string, players: Player[]) {
 
 export function allVisitsFor(playerId: string, games: GameRecord[]): any[] {
   const out: any[] = [];
-  for (const g of games) {
+  games.forEach(g => {
     const pl = g.players.find(p => p.id === playerId);
-    if (!pl) continue;
+    if (!pl) return;
     pl.visits.forEach(v => out.push({ ...v, mode: g.mode, gameId: g.id, gameDate: g.date, practice: g.practice }));
-  }
+  });
   return out;
+}
+
+export interface DateFilter {
+  start: string; // inclusive ISO
+  end: string;   // exclusive ISO
 }
 
 export function filterGamesByDate(games: GameRecord[], filter: DateFilter | null): GameRecord[] {
@@ -101,76 +104,154 @@ export function filterGamesByDate(games: GameRecord[], filter: DateFilter | null
   });
 }
 
-import type { GamePlayer } from './types';
-import type { DateFilter } from './CalendarPicker';
-
 export function playerStats(playerId: string, games: GameRecord[]) {
+  const visits = allVisitsFor(playerId, games);
+  const scoring = visits.filter((v: any) => !v.bust && !v.atc);
+  const totalScore = scoring.reduce((a: number, v: any) => a + v.scored, 0);
+  const totalDarts = scoring.reduce((a: number, v: any) => a + v.darts.length, 0);
   const playerGames = games.filter(g => g.players.some(p => p.id === playerId));
-  const gamesPlayed = playerGames.length;
-  const gamesWon = playerGames.filter(g => g.winner === playerId).length;
   const legsWon = playerGames.reduce((a, g) => a + (g.players.find(p => p.id === playerId)?.legsWon || 0), 0);
-  const legsPlayed = playerGames.reduce((a, g) => a + g.legsBestOf, 0);
-
-  const visits: any[] = [];
-  let dartsThrown = 0;
-  let highCheckout = 0;
-  let first9Total = 0; let first9Count = 0;
-  let maxScore = 0;
-
-  for (const g of playerGames) {
-    const pl = g.players.find(p => p.id === playerId); if (!pl) continue;
-    dartsThrown += pl.dartsThrown;
-    const scoringVisits = pl.visits.filter(v => !v.bust && !v.atc);
-    const legs: Record<number, any[]> = {};
-    scoringVisits.forEach(v => { (legs[v.leg] = legs[v.leg] || []).push(v); });
-    Object.values(legs).forEach(arr => {
-      if (arr.length >= 3) { first9Total += arr.slice(0, 3).reduce((a, v) => a + v.scored, 0); first9Count++; }
+  const gamesWon = playerGames.filter(g => g.winner === playerId).length;
+  const gamesTied = playerGames.filter(g => g.tied && g.tiedPlayers && g.tiedPlayers.includes(playerId)).length;
+  const checkouts = scoring.filter((v: any) => v.remaining === 0);
+  const highCheckout = Math.max(0, ...checkouts.map((v: any) => v.scored));
+  const highScore = Math.max(0, ...scoring.map((v: any) => v.scored));
+  const n180 = scoring.filter((v: any) => v.scored === 180).length;
+  const n140 = scoring.filter((v: any) => v.scored >= 140 && v.scored < 180).length;
+  const tons = scoring.filter((v: any) => v.scored >= 100 && v.scored < 140).length;
+  const first9 = (() => {
+    let s = 0, c = 0;
+    playerGames.forEach(g => {
+      const pl = g.players.find(p => p.id === playerId); if (!pl) return;
+      const byLeg: Record<number, any[]> = {};
+      pl.visits.forEach(v => { if (v.bust || v.atc) return; (byLeg[v.leg || 1] = byLeg[v.leg || 1] || []).push(v); });
+      Object.values(byLeg).forEach(arr => { arr.slice(0, 3).forEach(v => { s += v.scored; c += v.darts.length; }); });
     });
-    for (const v of scoringVisits) {
-      if (v.scored > maxScore) maxScore = v.scored;
-      if (v.remaining === 0 && v.checkout && v.checkout > highCheckout) highCheckout = v.checkout;
-    }
-    pl.visits.forEach(v => visits.push({ ...v, mode: g.mode, gameId: g.id, gameDate: g.date, practice: g.practice }));
-  }
+    return c ? s / c * 3 : 0;
+  })();
+  const winRate = playerGames.length ? gamesWon / playerGames.length * 100 : 0;
+  const tieRate = playerGames.length ? gamesTied / playerGames.length * 100 : 0;
 
-  const scoringVisits = visits.filter(v => !v.bust && !v.atc);
-  const totalScore = scoringVisits.reduce((a, v) => a + v.scored, 0);
-  const avg3 = scoringVisits.length ? totalScore / scoringVisits.length : 0;
-  const first9Avg = first9Count ? first9Total / first9Count : 0;
-  const count180 = scoringVisits.filter(v => v.scored === 180).length;
-  const count140plus = scoringVisits.filter(v => v.scored >= 140 && v.scored < 180).length;
-  const count120plus = scoringVisits.filter(v => v.scored >= 120 && v.scored < 140).count;
-  const count100plus = scoringVisits.filter(v => v.scored >= 100 && v.scored < 120).length;
-  const count80 = scoringVisits.filter(v => v.scored >= 80 && v.scored < 100).length;
-  const count60 = scoringVisits.filter(v => v.scored >= 60 && v.scored < 80).length;
-  const checkoutHits = visits.filter(v => v.remaining === 0).length;
-  const checkoutChances = playerGames.length; // approx
-  const winRate = gamesPlayed ? gamesWon / gamesPlayed : 0;
+  // Darts thrown (all visits, incl. bust/atc) and darts-to-finish per completed leg
+  let dartsThrown = 0;
+  const finishDartsList: number[] = [];
+  playerGames.forEach(g => {
+    const pl = g.players.find(p => p.id === playerId); if (!pl) return;
+    const byLeg: Record<string, { darts: number; finished: boolean }> = {};
+    pl.visits.forEach((v: any) => {
+      dartsThrown += (v.darts?.length || 0);
+      if (v.atc || g.practice) return;
+      const k = String(v.leg || 1);
+      const b = byLeg[k] = byLeg[k] || { darts: 0, finished: false };
+      b.darts += (v.darts?.length || 0);
+      if (v.remaining === 0) b.finished = true;
+    });
+    Object.values(byLeg).forEach(b => { if (b.finished) finishDartsList.push(b.darts); });
+  });
+  const finishMin = finishDartsList.length ? Math.min(...finishDartsList) : 0;
+  const finishMax = finishDartsList.length ? Math.max(...finishDartsList) : 0;
+  const finishAvg = finishDartsList.length ? finishDartsList.reduce((a, b) => a + b, 0) / finishDartsList.length : 0;
 
-  return {
-    gamesPlayed, gamesWon, legsWon, legsPlayed, dartsThrown, avg3, first9Avg,
-    count180, count140plus, count120plus, count100plus, count80, count60,
-    highCheckout, maxScore, checkoutHits, checkoutChances, winRate, visits,
-  };
+  return { games: playerGames.length, gamesWon, gamesTied, legsWon, winRate, tieRate, avg: totalDarts ? totalScore / totalDarts * 3 : 0, first9, highScore, highCheckout, n180, n140, tons, visits, dartsThrown, finishMin, finishMax, finishAvg, legsFinished: finishDartsList.length };
 }
 
 export function bucketAverages(visits: any[], period: string) {
-  const buckets: Record<string, number[]> = {};
-  for (const v of visits) {
-    const d = new Date(v.gameDate || v.date);
-    let key: string;
-    if (period === 'Daily') key = todayKey(d);
-    else if (period === 'Weekly') { const t = new Date(d); const day = (t.getDay() + 6) % 7; t.setDate(t.getDate() - day); key = todayKey(t); }
-    else if (period === 'Monthly') key = d.toISOString().slice(0, 7);
-    else key = String(d.getFullYear());
-    (buckets[key] = buckets[key] || []).push(v.scored);
-  }
-  const sorted = Object.keys(buckets).sort();
-  return sorted.map(k => {
-    const arr = buckets[k];
-    const avg = arr.reduce((a: number, x: number) => a + x, 0) / arr.length;
+  if (!visits.length) return { labels: [], values: [] };
+  const key = (d: string) => {
+    const dt = new Date(d);
+    if (period === 'Daily') return todayKey(dt);
+    if (period === 'Weekly') { const t = new Date(dt); const day = (t.getDay() + 6) % 7; t.setDate(t.getDate() - day); return todayKey(t); }
+    if (period === 'Monthly') return dt.toISOString().slice(0, 7);
+    if (period === 'Yearly') return String(dt.getFullYear());
+    return todayKey(dt);
+  };
+  const map: Record<string, { s: number; d: number }> = {};
+  visits.forEach(v => { const k = key(v.date || v.gameDate); (map[k] = map[k] || { s: 0, d: 0 }); map[k].s += v.scored; map[k].d += v.darts.length; });
+  const keys = Object.keys(map).sort();
+  const trimmed = period === 'Overall' ? keys.slice(-30) : keys.slice(-14);
+  const shortLabel = (k: string) => {
+    if (period === 'Monthly') { const [, m] = k.split('-'); return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][+m - 1]; }
+    if (period === 'Yearly') return k;
     const d = new Date(k); return d.getDate() + '/' + (d.getMonth() + 1);
-  });
+  };
+  return { labels: trimmed.map(shortLabel), values: trimmed.map(k => map[k].d ? map[k].s / map[k].d * 3 : 0) };
 }
 
-import { todayKey } from './store';
+export { ATC_TARGETS, atcLabel };
+
+// ============ Title backfill (backwards-compatible retro unlock) ============
+// Scans full match history for a player and returns any built-in title ids
+// they've already earned but haven't been credited for yet.
+import { BUILTIN_TITLES, buildTitleCheck, type TitleCtx } from './constants';
+import type { CustomTitle } from './types';
+
+export function computeUnlockedTitlesForPlayer(
+  playerId: string,
+  games: GameRecord[],
+  customTitles: CustomTitle[] = [],
+): string[] {
+  const playerGames = games.filter(g => g.players.some(p => p.id === playerId));
+  const gamesWon = playerGames.filter(g => g.winner === playerId).length;
+  const gamesPlayed = playerGames.length;
+  const lifetimeVisits: any[] = [];
+  playerGames.forEach(g => {
+    const pl = g.players.find(p => p.id === playerId);
+    if (!pl) return;
+    pl.visits.forEach(v => lifetimeVisits.push({ ...v, gameId: g.id, gameDate: g.date, practice: g.practice }));
+  });
+
+  const titles = [
+    ...BUILTIN_TITLES,
+    ...customTitles.map(t => ({ ...t, custom: true, check: buildTitleCheck(t) as any })),
+  ];
+  const unlocked = new Set<string>();
+
+  const ctx: TitleCtx = { playerId, games: playerGames, gamesPlayed, gamesWon, lifetimeVisits };
+
+  // Lifetime titles: single pass with the full ctx.
+  titles.forEach(t => {
+    try { if (t.check(lifetimeVisits, [], null, ctx)) unlocked.add(t.id); } catch { /* ignore */ }
+  });
+
+  // Per-game titles: replay each historical game with its own gameVisits.
+  playerGames.forEach(g => {
+    const pl = g.players.find(p => p.id === playerId);
+    if (!pl) return;
+    const gameVisits = pl.visits;
+    const gameLike = { ...g, winner: g.winner, players: g.players, legsBestOf: g.legsBestOf };
+    titles.forEach(t => {
+      if (unlocked.has(t.id)) return;
+      try { if (t.check(lifetimeVisits, gameVisits, gameLike, ctx)) unlocked.add(t.id); } catch { /* ignore */ }
+    });
+  });
+
+  return Array.from(unlocked);
+}
+
+// Merges retro-unlocked ids into a Player's existing unlockedTitles (idempotent).
+export function retroUnlockPlayerTitles(
+  player: Player,
+  games: GameRecord[],
+  customTitles: CustomTitle[] = [],
+): Player {
+  const existing = new Set(player.unlockedTitles || []);
+  const found = computeUnlockedTitlesForPlayer(player.id, games, customTitles);
+  let changed = false;
+  found.forEach(id => { if (!existing.has(id)) { existing.add(id); changed = true; } });
+  return changed ? { ...player, unlockedTitles: Array.from(existing) } : player;
+}
+
+// Backfills all players. Idempotent — safe to run on every app load.
+export function retroUnlockAll(
+  players: Player[],
+  games: GameRecord[],
+  customTitles: CustomTitle[] = [],
+): { players: Player[]; changed: boolean } {
+  let changed = false;
+  const next = players.map(p => {
+    const updated = retroUnlockPlayerTitles(p, games, customTitles);
+    if (updated !== p) changed = true;
+    return updated;
+  });
+  return { players: next, changed };
+}
