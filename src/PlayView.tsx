@@ -475,11 +475,18 @@ function GameOver({ game, onNewGame, onViewStats }: { game: Game; onNewGame: () 
 }
 
 function runMilestones(p: GamePlayer, remaining: number, visitScore: number, settings: Settings, popups: PopupControls, setPlayers: (updater: any) => void, game: Game, players: Player[], games: GameRecord[]) {
+  let scorePopupFired = false;
   if (settings.popups.scores) {
-    for (const sp of SCORE_POPUPS) { if (visitScore >= sp.min) { popups.setMilestone({ emoji: sp.emoji, title: sp.title, sub: sp.sub }); Sound.play('milestone', {}, settings); break; } }
+    for (const sp of SCORE_POPUPS) { if (visitScore >= sp.min) { popups.setMilestone({ emoji: sp.emoji, title: sp.title, sub: sp.sub }); Sound.play('milestone', {}, settings); scorePopupFired = true; break; } }
   }
   if (settings.popups.milestones) {
-    for (const ms of MILESTONES) { if (remaining < ms.threshold && p.score + visitScore >= ms.threshold) { setTimeout(() => popups.setMilestone({ emoji: ms.emoji, title: ms.title, sub: ms.sub }), 1800); break; } }
+    for (const ms of MILESTONES) { if (remaining < ms.threshold && p.score + visitScore >= ms.threshold) {
+      // If a score popup is already showing, delay the milestone popup so it
+      // appears after. Otherwise show immediately so it doesn't get lost.
+      const delay = scorePopupFired ? 1800 : 0;
+      setTimeout(() => popups.setMilestone({ emoji: ms.emoji, title: ms.title, sub: ms.sub }), delay);
+      break;
+    } }
   }
   const pid = p.id;
   const prevVisits = allVisitsFor(pid, []).filter(v => !v.bust && !v.atc);
@@ -502,43 +509,49 @@ function awardVisitXP(p: GamePlayer, visitScore: number, settings: Settings, set
 
 function awardXP(playerId: string, amount: number, reason: string, settings: Settings, setPlayers: (updater: any) => void, popups: PopupControls) {
   if (amount <= 0) return;
+  let leveledUp: { level: number; name: string } | null = null;
   setPlayers((prev: Player[]) => prev.map(p => {
     if (p.id !== playerId) return p;
     const oldLevel = p.level || 1;
     const newXp = (p.xp || 0) + amount;
     const li = levelFromXP(newXp, settings);
-    if (li.level > oldLevel && settings.popups.xp) { popups.setLevelUp({ level: li.level, name: p.name, xpGained: amount, reason }); Sound.play('levelup', {}, settings); }
+    if (li.level > oldLevel) leveledUp = { level: li.level, name: p.name };
     return { ...p, xp: newXp, level: li.level };
   }));
+  if (leveledUp && settings.popups.xp) { popups.setLevelUp({ level: leveledUp.level, name: leveledUp.name, xpGained: amount, reason }); Sound.play('levelup', {}, settings); }
 }
 
 function checkTitleUnlocks(pl: GamePlayer, settings: Settings, popups: PopupControls, setPlayers: (updater: any) => void, game: Game, _players: Player[], games: GameRecord[] = []) {
   if (!settings.popups.titles) return;
   const titles = [...BUILTIN_TITLES, ...settings.customTitles.map(t => ({ ...t, custom: true, check: buildTitleCheck(t) as any }))];
+
+  // Historical stats from prior completed games (excluding the current in-progress game).
+  const historyGames = games.filter(g => g.id !== game.id && g.players.some(p => p.id === pl.id));
+  const historyVisits = allVisitsFor(pl.id, historyGames);
+  const lifetimeVisits = [...historyVisits, ...(pl.visits || [])];
+  const gamesPlayed = historyGames.length + (game.finished ? 1 : 0);
+  const gamesWon = historyGames.filter(g => g.winner === pl.id).length + (game.finished && game.winner === pl.id ? 1 : 0);
+  const ctx = { playerId: pl.id, games: historyGames, gamesPlayed, gamesWon, lifetimeVisits };
+
+  const newlyUnlocked: { id: string; icon?: string; name: string; desc?: string }[] = [];
   setPlayers((prev: Player[]) => {
     const player = prev.find(p => p.id === pl.id);
     if (!player) return prev;
     const unlocked = [...(player.unlockedTitles || [])];
-
-    // Historical stats from prior completed games (excluding the current in-progress game).
-    const historyGames = games.filter(g => g.id !== game.id && g.players.some(p => p.id === pl.id));
-    const historyVisits = allVisitsFor(pl.id, historyGames);
-    const lifetimeVisits = [...historyVisits, ...(pl.visits || [])];
-    const gamesPlayed = historyGames.length + (game.finished ? 1 : 0);
-    const gamesWon = historyGames.filter(g => g.winner === pl.id).length + (game.finished && game.winner === pl.id ? 1 : 0);
-    const ctx = { playerId: pl.id, games: historyGames, gamesPlayed, gamesWon, lifetimeVisits };
-
     titles.forEach(t => {
       if (unlocked.includes(t.id)) return;
       let met = false;
       try { met = t.check(lifetimeVisits, pl.visits || [], game, ctx); } catch { met = false; }
       if (met) {
         unlocked.push(t.id);
-        popups.setTitleUnlock({ icon: t.icon || '🏅', name: t.name, player: pl.name, desc: t.desc || '' });
-        Sound.play('title', {}, settings);
+        newlyUnlocked.push({ id: t.id, icon: t.icon, name: t.name, desc: t.desc });
       }
     });
     return prev.map(p => p.id === pl.id ? { ...p, unlockedTitles: unlocked } : p);
+  });
+  newlyUnlocked.forEach(t => {
+    popups.setTitleUnlock({ icon: t.icon || '🏅', name: t.name, player: pl.name, desc: t.desc || '' });
+    Sound.play('title', {}, settings);
   });
 }
 
