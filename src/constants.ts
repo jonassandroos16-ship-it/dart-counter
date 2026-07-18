@@ -1,6 +1,16 @@
-import type { CustomTitle, Settings } from './types';
+import type { CustomTitle, PlayerSoundId, Settings } from './types';
 
 export const COLORS = ['#22c55e','#3b82f6','#f59e0b','#ef4444','#06b6d4','#ec4899','#a855f7','#84cc16'];
+
+export const PLAYER_SOUNDS: { id: PlayerSoundId; label: string; desc: string }[] = [
+  { id: 'none', label: 'None', desc: 'No entrance sound.' },
+  { id: 'hero', label: 'Hero', desc: 'Bright rising fanfare — a champion walks in.' },
+  { id: 'villain', label: 'Villain', desc: 'Dark, brooding low brass stab.' },
+  { id: 'cyborg', label: 'Cyborg', desc: 'Robotic mechanical chirp with servo whine.' },
+  { id: 'mystic', label: 'Mystic', desc: 'Shimmering mysterious chime.' },
+  { id: 'beast', label: 'Beast', desc: 'Aggressive animalistic growl burst.' },
+  { id: 'champion', label: 'Champion', desc: 'Triumphant brass + crowd-roar swell.' },
+];
 
 // Team color palette — distinct, vibrant, and visible on dark/light backgrounds.
 export const TEAM_COLORS = ['#3b82f6','#ef4444','#22c55e','#f59e0b'];
@@ -465,5 +475,19 @@ export function defaultSettings(): Settings {
     xpConfig: { win: 50, visit60: 5, visit80: 10, visit100: 15, visit120: 20, visit140: 25, visit180: 50, checkout: 10, perDart: 1, levelMult: 1.5, baseLevelXp: 100 },
     customTitles: [],
     popups: { scores: true, milestones: true, xp: true, titles: true },
+    powerUpScaling: {
+      chargePerDouble: 8,
+      chargePerTriple: 12,
+      chargePerBull: 15,
+      chargePerScorePoint: 0.05,
+      chargeMax: 100,
+      pointsPerLevel: 1,
+      startingPoints: 1,
+      attributePointsPerLevel: 5,
+      attributeStartHealth: 400,
+      attributeStartArmor: 0,
+      healthPerPoint: 25,
+      armorPerPoint: 5,
+    },
   };
 }
