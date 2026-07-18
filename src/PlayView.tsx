@@ -179,7 +179,7 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
     cur.score = remaining;
     cur.visits.push({ darts: [...game.darts], scored, remaining, leg: game.leg, date: new Date().toISOString() });
     Sound.play('enter', {}, settings);
-    checkMilestones(cur, remaining, scored, settings, popups, setPlayers, game, players);
+    checkMilestones(cur, remaining, scored, settings, popups, setPlayers, game, players, games);
     advanceTurn({ ...game, players: newPlayers, darts: [], mult: 1 });
   };
 
@@ -420,7 +420,7 @@ function GameOver({ game, onNewGame, onViewStats }: { game: Game; onNewGame: () 
   );
 }
 
-function checkMilestones(p: GamePlayer, remaining: number, visitScore: number, settings: Settings, popups: PopupControls, setPlayers: (updater: any) => void, game: Game, players: Player[]) {
+function checkMilestones(p: GamePlayer, remaining: number, visitScore: number, settings: Settings, popups: PopupControls, setPlayers: (updater: any) => void, game: Game, players: Player[], games: GameRecord[]) {
   if (settings.popups.scores) {
     for (const sp of SCORE_POPUPS) { if (visitScore >= sp.min) { popups.setMilestone({ emoji: sp.emoji, title: sp.title, sub: sp.sub }); Sound.play('milestone', {}, settings); break; } }
   }

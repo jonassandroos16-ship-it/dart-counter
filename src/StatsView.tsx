@@ -1,20 +1,25 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Player, Settings } from './types';
 import { getTitleInfo } from './constants';
-import { playerStats, levelFromXP, getPlayerXP, bucketAverages, allVisitsFor } from './logic';
+import { playerStats, levelFromXP, getPlayerXP, bucketAverages, allVisitsFor, filterGamesByDate } from './logic';
 import { LineChart, BarChart, DartboardHeatmap } from './Charts';
+import { CalendarPicker, filterForPeriod, describeFilter, type Period } from './CalendarPicker';
 
 export function StatsView({ players, games, settings }: { players: Player[]; games: any[]; settings: Settings }) {
   const [pid, setPid] = useState<string>(players[0]?.id || '');
-  const [period, setPeriod] = useState('Overall');
+  const [period, setPeriod] = useState<Period>('Overall');
+  const [refDate, setRefDate] = useState<Date>(() => new Date());
 
   if (!players.length) return <div className="view-scroll"><div className="card empty">No players yet.</div></div>;
   const p = players.find(x => x.id === pid) || players[0];
-  const s = playerStats(p.id, games as any);
+
+  const filter = period === 'Overall' ? null : filterForPeriod(period, refDate);
+  const filteredGames = useMemo(() => filterGamesByDate(games as any, filter), [games, filter]);
+  const s = playerStats(p.id, filteredGames);
   const xp = getPlayerXP(p);
   const li = levelFromXP(xp.xp, settings);
   const ti = getTitleInfo(xp.selectedTitle, settings.customTitles);
-  const visits = allVisitsFor(p.id, games as any);
+  const visits = allVisitsFor(p.id, filteredGames);
   const series = bucketAverages(visits.filter((v: any) => !v.practice && !v.atc), period);
   const buckets: Record<string, number> = { '0-39': 0, '40-59': 0, '60-79': 0, '80-99': 0, '100-139': 0, '140-179': 0, '180': 0 };
   visits.filter((v: any) => !v.bust && !v.atc).forEach((v: any) => {
@@ -39,6 +44,8 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
     ['Legs finished', s.legsFinished],
     ['Level', li.level], ['Total XP', xp.xp || 0], ['Titles', xp.unlockedTitles.length],
   ];
+
+  const filterActive = period !== 'Overall';
 
   return (
     <div className="view-scroll">
@@ -87,19 +94,30 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
         {cells.map(([l, v]) => <div key={l} className="stat"><div className="v">{v}</div><div className="l">{l}</div></div>)}
       </div>
       <div className="tabbar">
-        {['Overall', 'Daily', 'Weekly', 'Monthly', 'Yearly'].map(t => <button key={t} className={t === period ? 'on' : ''} onClick={() => setPeriod(t)}>{t}</button>)}
+        {(['Overall', 'Daily', 'Weekly', 'Monthly', 'Yearly'] as Period[]).map(t => (
+          <button key={t} className={t === period ? 'on' : ''} onClick={() => setPeriod(t)}>{t}</button>
+        ))}
       </div>
+      {filterActive && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div className="row between" style={{ marginBottom: 10 }}>
+            <h3 style={{ margin: 0 }}>Filter: {describeFilter(period, refDate)}</h3>
+            <button className="btn sm ghost" onClick={() => setRefDate(new Date())}>Today</button>
+          </div>
+          <CalendarPicker period={period} value={refDate} onChange={setRefDate} />
+        </div>
+      )}
       <div className="card">
-        <h3 style={{ marginBottom: 4 }}>Average — {period}</h3>
+        <h3 style={{ marginBottom: 4 }}>Average — {period}{filterActive ? ` · ${describeFilter(period, refDate)}` : ''}</h3>
         <div className="muted small" style={{ marginBottom: 10 }}>3-dart average per period</div>
         <LineChart labels={series.labels} values={series.values} />
       </div>
       <div className="card">
-        <h3 style={{ marginBottom: 10 }}>Scoring distribution</h3>
+        <h3 style={{ marginBottom: 10 }}>Scoring distribution{filterActive ? ` — ${describeFilter(period, refDate)}` : ''}</h3>
         <BarChart labels={Object.keys(buckets)} values={Object.values(buckets)} />
       </div>
       <div className="card">
-        <h3 style={{ marginBottom: 4 }}>Dartboard Heatmap</h3>
+        <h3 style={{ marginBottom: 4 }}>Dartboard Heatmap{filterActive ? ` — ${describeFilter(period, refDate)}` : ''}</h3>
         <div className="muted small" style={{ marginBottom: 10 }}>Where your darts land · hotter = more hits</div>
         <div className="dartboard-wrap"><DartboardHeatmap visits={visits} /></div>
         <div className="dartboard-legend">

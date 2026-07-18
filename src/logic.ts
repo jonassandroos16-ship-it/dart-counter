@@ -89,6 +89,21 @@ export function allVisitsFor(playerId: string, games: GameRecord[]): any[] {
   return out;
 }
 
+export interface DateFilter {
+  start: string; // inclusive ISO
+  end: string;   // exclusive ISO
+}
+
+export function filterGamesByDate(games: GameRecord[], filter: DateFilter | null): GameRecord[] {
+  if (!filter) return games;
+  const start = new Date(filter.start).getTime();
+  const end = new Date(filter.end).getTime();
+  return games.filter(g => {
+    const t = new Date(g.date).getTime();
+    return t >= start && t < end;
+  });
+}
+
 export function playerStats(playerId: string, games: GameRecord[]) {
   const visits = allVisitsFor(playerId, games);
   const scoring = visits.filter((v: any) => !v.bust && !v.atc);
@@ -240,4 +255,3 @@ export function retroUnlockAll(
   });
   return { players: next, changed };
 }
-
