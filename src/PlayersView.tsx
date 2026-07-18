@@ -60,7 +60,7 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
         else setPlayers((prev: Player[]) => prev.map(x => x.id === p.id ? p : x));
         setEditing(null); toast(isNew ? 'Player added' : 'Saved');
       }} />}
-      {titlesFor && <TitlesModal player={titlesFor} games={games} settings={settings} setPlayers={setPlayers} onClose={() => setTitlesFor(null)} toast={toast} />}
+      {titlesFor && <TitlesModal player={players.find(p => p.id === titlesFor.id) || titlesFor} games={games} settings={settings} setPlayers={setPlayers} onClose={() => setTitlesFor(null)} toast={toast} />}
       {badgesFor && <BadgesModal player={badgesFor} setPlayers={setPlayers} onClose={() => setBadgesFor(null)} toast={toast} />}
     </div>
   );
@@ -194,22 +194,22 @@ function TitlesModal({ player, games, settings, setPlayers, onClose, toast }: { 
                 pointerEvents: 'none',
                 zIndex: 0,
               }} />
-              <div style={{ position: 'relative', zIndex: 1, fontSize: 24 }}>{unlocked ? (t.icon || '🏅') : '🔒'}</div>
+              <div style={{ position: 'relative', zIndex: 1, fontSize: 34 }}>{unlocked ? (t.icon || '🏅') : '🔒'}</div>
               <div style={{ position: 'relative', zIndex: 1, flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700 }}>{t.name}{t.custom ? <span className="pill" style={{ fontSize: 9, marginLeft: 4 }}>CUSTOM</span> : null}</div>
-                <div className="muted small">{t.desc || ''}</div>
+                <div style={{ fontWeight: 700, fontSize: 18 }}>{t.name}{t.custom ? <span className="pill" style={{ fontSize: 13, marginLeft: 6 }}>CUSTOM</span> : null}</div>
+                <div className="muted" style={{ fontSize: 15 }}>{t.desc || ''}</div>
                 {prog && !unlocked ? (
-                  <div className="muted small" style={{ fontSize: 11, marginTop: 2 }}>
+                  <div className="muted" style={{ fontSize: 15, marginTop: 4, fontWeight: 600 }}>
                     {prog.current.toLocaleString()} / {prog.target.toLocaleString()}
                   </div>
                 ) : null}
               </div>
               <div style={{ position: 'relative', zIndex: 1 }}>
                 {equipped
-                  ? <span className="xp-pill">Equipped</span>
+                  ? <span className="xp-pill" style={{ fontSize: 15, padding: '4px 12px' }}>Equipped</span>
                   : unlocked
-                    ? <button className="btn sm ghost" onClick={() => { setPlayers((prev: Player[]) => prev.map(p => p.id === player.id ? { ...p, selectedTitle: t.id } : p)); toast('Title equipped'); }}>Equip</button>
-                    : <span className="muted small">Locked</span>}
+                    ? <button className="btn sm ghost" style={{ fontSize: 16, padding: '9px 14px' }} onClick={() => { setPlayers((prev: Player[]) => prev.map(p => p.id === player.id ? { ...p, selectedTitle: t.id } : p)); toast('Title equipped'); }}>Equip</button>
+                    : <span className="muted" style={{ fontSize: 15 }}>Locked</span>}
               </div>
             </div>
           );
