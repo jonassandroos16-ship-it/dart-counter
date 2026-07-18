@@ -86,8 +86,12 @@ export function levelFromXP(totalXP: number, settings: Settings) {
 }
 
 export function getPlayerXP(player: Player | undefined) {
-  if (!player) return { xp: 0, level: 1, unlockedTitles: [] as string[], selectedTitle: null as string | null };
-  return { xp: player.xp ?? 0, level: player.level ?? 1, unlockedTitles: player.unlockedTitles ?? [], selectedTitle: player.selectedTitle ?? null };
+  if (!player) return { xp: 0, level: 1, unlockedTitles: [] as string[], selectedTitle: null as string | null, unlockedBadges: [] as string[], selectedBadge: null as string | null };
+  return {
+    xp: player.xp ?? 0, level: player.level ?? 1,
+    unlockedTitles: player.unlockedTitles ?? [], selectedTitle: player.selectedTitle ?? null,
+    unlockedBadges: player.unlockedBadges ?? [], selectedBadge: player.selectedBadge ?? null,
+  };
 }
 
 export function getPlayerXPById(playerId: string, players: Player[]) {
@@ -265,6 +269,30 @@ export function retroUnlockAll(
   let changed = false;
   const next = players.map(p => {
     const updated = retroUnlockPlayerTitles(p, games, customTitles);
+    if (updated !== p) changed = true;
+    return updated;
+  });
+  return { players: next, changed };
+}
+
+// ============ Badge backfill ============
+import { computeLifetimeBadges } from './badges';
+
+export function retroUnlockPlayerBadges(player: Player, games: GameRecord[]): Player {
+  const existing = new Set(player.unlockedBadges || []);
+  const found = computeLifetimeBadges(player.id, games as any[]);
+  let changed = false;
+  found.forEach((id) => { if (!existing.has(id)) { existing.add(id); changed = true; } });
+  return changed ? { ...player, unlockedBadges: Array.from(existing) } : player;
+}
+
+export function retroUnlockAllBadges(
+  players: Player[],
+  games: GameRecord[],
+): { players: Player[]; changed: boolean } {
+  let changed = false;
+  const next = players.map(p => {
+    const updated = retroUnlockPlayerBadges(p, games);
     if (updated !== p) changed = true;
     return updated;
   });

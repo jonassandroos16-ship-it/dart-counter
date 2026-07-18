@@ -409,6 +409,7 @@ function mergePlayers(existing: Player[], incoming: Player[]): Player[] {
         xp: Math.max(idMatch.xp || 0, p.xp || 0) || idMatch.xp || p.xp || 0,
         level: Math.max(idMatch.level || 0, p.level || 0) || idMatch.level || p.level || 0,
         unlockedTitles: Array.from(new Set([...(idMatch.unlockedTitles || []), ...(p.unlockedTitles || [])])),
+        unlockedBadges: Array.from(new Set([...(idMatch.unlockedBadges || []), ...(p.unlockedBadges || [])])),
       });
       byKey.set(matchPlayerKey(p), byId.get(p.id)!);
       continue;
@@ -422,6 +423,7 @@ function mergePlayers(existing: Player[], incoming: Player[]): Player[] {
         xp: Math.max(keyMatch.xp || 0, p.xp || 0) || keyMatch.xp || p.xp || 0,
         level: Math.max(keyMatch.level || 0, p.level || 0) || keyMatch.level || p.level || 0,
         unlockedTitles: Array.from(new Set([...(keyMatch.unlockedTitles || []), ...(p.unlockedTitles || [])])),
+        unlockedBadges: Array.from(new Set([...(keyMatch.unlockedBadges || []), ...(p.unlockedBadges || [])])),
       });
       continue;
     }
