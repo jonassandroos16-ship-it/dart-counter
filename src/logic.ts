@@ -2,15 +2,16 @@ import type { Game, GamePlayer, GameRecord, Player, Settings, Visit } from './ty
 import { MODES, CHECKOUTS, ATC_TARGETS, atcLabel } from './constants';
 import { uid, todayKey } from './store';
 
-export function createGame(modeKey: string, playerIds: string[], players: Player[], doubleOut: boolean, legsBestOf: number): Game {
+export function createGame(modeKey: string, playerIds: string[], players: Player[], doubleOut: boolean, legsBestOf: number, teamMode = false, teamAssignment: number[] = []): Game {
   const mode = MODES[modeKey];
   const meta = (id: string) => players.find(p => p.id === id)!;
   const special = !!(mode.practice || mode.atc || mode.killer || mode.party);
   const basePlayers = playerIds.map((id, i) => {
-    const gp: GamePlayer = { id, name: meta(id).name, color: meta(id).color, score: mode.start, legsWon: 0, visits: [], idx: 0, dartsThrown: 0, done: false };
+    const gp: GamePlayer = { id, name: meta(id).name, color: meta(id).color, score: mode.start, legsWon: 0, visits: [], idx: 0, dartsThrown: 0, done: false, team: teamMode && teamAssignment[i] != null ? teamAssignment[i] : undefined };
     if (mode.killer) { gp.lives = 3; gp.eliminated = false; gp.killerNumber = KILLER_NUMBERS[i % KILLER_NUMBERS.length]; gp.killerHits = 0; gp.kills = []; }
     return gp;
   });
+  const teamCount = teamMode ? (teamAssignment.length ? Math.max(...teamAssignment) + 1 : 0) : 0;
   return {
     id: uid(), mode: modeKey, date: new Date().toISOString(),
     doubleOut: special ? false : doubleOut,
@@ -18,6 +19,11 @@ export function createGame(modeKey: string, playerIds: string[], players: Player
     legsBestOf: special ? 1 : legsBestOf,
     players: basePlayers,
     turn: 0, leg: 1, finished: false, winner: null, checkedOutThisRound: [], thrownThisRound: [], roundStartTurn: 0, darts: [], mult: 1,
+    teamMode, teamCount: teamCount || undefined,
+    teamLegsWon: teamMode ? Array.from({ length: teamCount }, () => 0) : undefined,
+    teamTurn: teamMode ? 0 : undefined,
+    teamPlayerCursor: teamMode ? Array.from({ length: teamCount }, () => 0) : undefined,
+    winningTeam: null,
   };
 }
 
@@ -28,7 +34,8 @@ export function recordFromGame(game: Game): GameRecord {
     id: game.id, date: game.date, mode: game.mode, practice: game.practice, atc: game.atc,
     doubleOut: game.doubleOut, legsBestOf: game.legsBestOf, winner: game.winner,
     tied: !!game.tied, tiedPlayers: game.tiedPlayers ?? null,
-    players: game.players.map(pl => ({ id: pl.id, name: pl.name, color: pl.color, legsWon: pl.legsWon, dartsThrown: pl.dartsThrown || 0, visits: pl.visits })),
+    teamMode: !!game.teamMode, teamCount: game.teamCount, winningTeam: game.winningTeam ?? null,
+    players: game.players.map(pl => ({ id: pl.id, name: pl.name, color: pl.color, legsWon: pl.legsWon, dartsThrown: pl.dartsThrown || 0, visits: pl.visits, team: pl.team })),
   };
 }
 

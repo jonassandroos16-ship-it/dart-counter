@@ -37,6 +37,26 @@ class SoundEngine {
     if (type === 'record') { [392, 523, 659, 784, 1047, 1319].forEach((f, i) => beep(f, i * 0.07, 0.18, 'triangle', 0.14)); return; }
     if (type === 'levelup') { [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => beep(f, i * 0.08, 0.20, 'triangle', 0.15)); return; }
     if (type === 'title') { [659, 784, 1047, 1319].forEach((f, i) => beep(f, i * 0.07, 0.18, 'sine', 0.13)); return; }
+    if (type === 'showdown') {
+      // Dramatic ascending brass-like swell with a final hit.
+      const seq = [196, 247, 294, 392, 494, 587, 784];
+      seq.forEach((f, i) => beep(f, i * 0.11, 0.22, 'sawtooth', 0.10));
+      beep(1175, seq.length * 0.11, 0.45, 'square', 0.12);
+      beep(1568, seq.length * 0.11 + 0.05, 0.4, 'triangle', 0.08);
+      return;
+    }
+    if (type === 'vs') {
+      // Two-tone "VS" impact.
+      beep(330, 0, 0.18, 'square', 0.14);
+      beep(247, 0.02, 0.22, 'sawtooth', 0.12);
+      beep(82, 0, 0.3, 'sine', 0.16);
+      return;
+    }
+    if (type === 'showdown_close') {
+      // Quick whoosh-out on tap to dismiss.
+      [880, 660, 440, 220].forEach((f, i) => beep(f, i * 0.04, 0.12, 'triangle', 0.09));
+      return;
+    }
     switch (type) {
       case 'hit': beep(680, 0, 0.09, 'square', 0.11); beep(1020, 0.05, 0.10, 'square', 0.09); break;
       case 'miss': beep(150, 0, 0.14, 'sawtooth', 0.09); break;
