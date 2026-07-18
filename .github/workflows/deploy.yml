@@ -24,8 +24,8 @@ jobs:
           node-version: 20
       - run: npm install
       - env:
-          VITE_SUPABASE_URL: https://0ec90b57d6e95fcbda19832f.supabase.co
-          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJib2x0IiwicmVmIjoiMGVjOTBiNTdkNmU5NWZjYmRhMTk4MzJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg4ODE1NzQsImV4cCI6MTc1ODg4MTU3NH0.9I8-U0x86Ak8t2DGaIk0HfvTSLsAyzdnz-Nw00mMkKw
+          VITE_SUPABASE_URL: https://mipbvfrzcqpemqexjfgn.supabase.co
+          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1pcGJ2ZnJ6Y3FwZW1xZXhqZmduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzNTQ5NTQsImV4cCI6MjA5OTkzMDk1NH0.fN8aNtdXxyOU3sEhsCykCf1icl7V5Z5TE7--R2yIADw
         run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:
