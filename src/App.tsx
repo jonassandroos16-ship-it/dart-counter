@@ -35,8 +35,8 @@ export default function App() {
 
   useEffect(() => { applyTheme(db.settings); }, [db.settings]);
 
-  // Preload the active voice pack whenever the user switches it.
-  useEffect(() => { void Sound.preload(db.settings); }, [db.settings.voicePack, db.settings.sound]);
+  // Re-arm the audio engine whenever sound is toggled.
+  useEffect(() => { void Sound.preload(db.settings); }, [db.settings.sound]);
 
   // One-shot retroactive title backfill so new lifetime titles unlock from
   // existing match history for players who already earned them.

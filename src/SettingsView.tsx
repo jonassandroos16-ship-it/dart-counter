@@ -2,7 +2,6 @@ import { useRef, useState } from 'react';
 import type { Player, GameRecord, Settings, CustomTitle } from './types';
 import { COLORS, conditionLabel } from './constants';
 import { tracksFor } from './music';
-import { VOICE_PACK_LIST, Sound } from './sound';
 import { uid, todayKey, mergeBackup, type BackupShape, type SyncResult } from './store';
 import { Modal } from './Popups';
 import { POWER_UPS } from './powerups';
@@ -100,26 +99,6 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
           </>
         )}
         <label className="row between"><b>Confirm before quitting/reset</b><input type="checkbox" checked={settings.confirmReset} onChange={e => update({ confirmReset: e.target.checked })} style={{ width: 'auto' }} /></label>
-      </div>
-
-      <div className="card">
-        <h3 style={{ marginBottom: 4 }}>Voice Announcer</h3>
-        <div className="muted small" style={{ marginBottom: 12 }}>Synthesized voice cues for kills, milestones, 180s and more</div>
-        <div className="field" style={{ marginBottom: 14 }}>
-          <span><b>Voice pack</b></span>
-          <select value={settings.voicePack} onChange={e => update({ voicePack: e.target.value as Settings['voicePack'] })}>
-            {VOICE_PACK_LIST.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-          </select>
-        </div>
-        {settings.voicePack && settings.voicePack !== 'off' && (
-          <>
-            <label className="field" style={{ marginBottom: 14 }}>
-              <span><b>Voice volume</b> · {Math.round((settings.voiceVolume ?? 0.8) * 100)}%</span>
-              <input type="range" min={0} max={1} step={0.05} value={settings.voiceVolume ?? 0.8} onChange={e => update({ voiceVolume: +e.target.value })} />
-            </label>
-            <button className="btn ghost sm block" onClick={() => Sound.playVoice('one_eighty', { ...settings, sound: true })}>Test voice</button>
-          </>
-        )}
       </div>
 
       <div className="card">

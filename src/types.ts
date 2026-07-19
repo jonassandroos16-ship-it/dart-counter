@@ -171,8 +171,6 @@ export interface XPConfig {
   checkout: number; perDart: number; levelMult: number; baseLevelXp: number;
 }
 
-export type VoicePackId = 'off' | 'announcer' | 'cyborg' | 'hype' | 'female';
-
 export interface PowerUpScalingConfig {
   chargePerDouble: number;   // charge % granted per double hit
   chargePerTriple: number;   // charge % granted per triple hit
@@ -206,8 +204,6 @@ export interface Settings {
   musicStartTrack: string;
   musicSetupTrack: string;
   musicMatchTrack: string;
-  voicePack: VoicePackId;
-  voiceVolume: number;
   sfxVolume: number;
   xpConfig: XPConfig;
   customTitles: CustomTitle[];

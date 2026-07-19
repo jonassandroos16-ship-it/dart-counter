@@ -16,15 +16,7 @@ export function Modal({ children, onClose }: { children: React.ReactNode; onClos
 
 export function MilestonePopup({ emoji, title, sub, record, onDone, settings }: { emoji: string; title: string; sub: string; record?: boolean; onDone: () => void; settings?: Settings }) {
   useEffect(() => {
-    // Tailored audio: a 180 milestone gets the "180!" voice line; otherwise
-    // play a layered SFX + (optional) milestone announcer.
-    if (title.toUpperCase().includes('EIGHTY')) {
-      Sound.playSfx('milestone', settings || ({} as Settings));
-      Sound.playVoice('one_eighty', settings || ({} as Settings));
-    } else {
-      Sound.playSfx('milestone', settings || ({} as Settings));
-      Sound.playVoice('milestone', settings || ({} as Settings));
-    }
+    Sound.playSfx('milestone', settings || ({} as Settings));
     const t = setTimeout(onDone, 2500);
     return () => clearTimeout(t);
   }, [onDone, title, settings]);
@@ -43,7 +35,6 @@ export function MilestonePopup({ emoji, title, sub, record, onDone, settings }: 
 export function LevelUpPopup({ level, name, xpGained, reason, onDone, settings }: { level: number; name: string; xpGained: number; reason: string; onDone: () => void; settings?: Settings }) {
   useEffect(() => {
     Sound.playSfx('levelup', settings || ({} as Settings));
-    Sound.playVoice('level_up', settings || ({} as Settings));
     const t = setTimeout(onDone, 3000);
     return () => clearTimeout(t);
   }, [onDone, settings]);
@@ -62,7 +53,6 @@ export function LevelUpPopup({ level, name, xpGained, reason, onDone, settings }
 export function TitleUnlockPopup({ icon, name, player, desc, onDone, settings }: { icon: string; name: string; player: string; desc: string; onDone: () => void; settings?: Settings }) {
   useEffect(() => {
     Sound.playSfx('title', settings || ({} as Settings));
-    Sound.playVoice('title_unlocked', settings || ({} as Settings));
     const t = setTimeout(onDone, 3500);
     return () => clearTimeout(t);
   }, [onDone, settings]);
@@ -83,7 +73,6 @@ export function TitleUnlockPopup({ icon, name, player, desc, onDone, settings }:
 export function KillPopup({ killer, victim, onDone, settings }: { killer: string; victim: string; onDone: () => void; settings?: Settings }) {
   useEffect(() => {
     Sound.playSfx('kill', settings || ({} as Settings));
-    Sound.playVoice('eliminated', settings || ({} as Settings));
     const t = setTimeout(onDone, 2200);
     return () => clearTimeout(t);
   }, [onDone, settings]);
@@ -117,7 +106,6 @@ export function BadgeInfoPopup({ icon, name, desc, player, onDone }: { icon: str
 export function FrozenPopup({ name, onDone, settings }: { name: string; onDone: () => void; settings?: Settings }) {
   useEffect(() => {
     Sound.playSfx('kill', settings || ({} as Settings));
-    Sound.playVoice('eliminated', settings || ({} as Settings));
     const t = setTimeout(onDone, 2200);
     return () => clearTimeout(t);
   }, [onDone, settings]);

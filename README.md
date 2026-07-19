@@ -1,6 +1,6 @@
 # Dart Counter
 
-A full-featured dart scoring app built with **React + TypeScript + Vite**. Tracks scores, stats, XP, levels, titles, badges, power-ups, battle mode, and includes synthesized sound effects, voice packs, and background music.
+A full-featured dart scoring app built with **React + TypeScript + Vite**. Tracks scores, stats, XP, levels, titles, badges, power-ups, battle mode, and includes synthesized sound effects and background music.
 
 Live demo: https://jonassandroos16-ship-it.github.io/dart-counter/
 
@@ -18,7 +18,6 @@ Live demo: https://jonassandroos16-ship-it.github.io/dart-counter/
    - [Add a New Title](#add-a-new-title)
    - [Add a New Badge](#add-a-new-badge)
    - [Add a New Power-Up](#add-a-new-power-up)
-   - [Add a New Voice Pack](#add-a-new-voice-pack)
    - [Add a New Showdown Background](#add-a-new-showdown-background)
 7. [How to Change Views (Navigation)](#how-to-change-views-navigation)
 8. [Common React Bugs and How to Fix Them](#common-react-bugs-and-how-to-fix-them)
@@ -63,7 +62,6 @@ Live demo: https://jonassandroos16-ship-it.github.io/dart-counter/
 
 ### Audio
 - Synthesized sound effects (no audio files needed) via Web Audio API
-- 5 voice packs (Off, Announcer, Cyborg, Hype, Female) — formant-based speech synthesis
 - 6 background music tracks (setup + match contexts)
 - Player entrance sounds (Hero, Villain, Cyborg, Mystic, Beast, Champion)
 
@@ -147,7 +145,7 @@ src/
 ├── logic.ts               # Pure game logic: createGame, recordFromGame, stats, XP, battle damage
 ├── badges.ts              # Badge definitions, lifetime aggregations, and award logic
 ├── powerups.ts            # Power-up definitions and apply hooks (returns PowerUpResult)
-├── sound.ts               # Web Audio synthesis — SFX, voice packs, entrance sounds
+├── sound.ts               # Web Audio synthesis — SFX, entrance sounds
 ├── music.ts               # Background music engine (looped synthesized tracks)
 ├── store.ts               # State management — useDB hook, localStorage, Supabase sync
 ├── supabase.ts            # Supabase client init
@@ -240,7 +238,7 @@ Badges live in `src/badges.ts`. Each `BadgeDef` has a `kind` of `in-game` (per-p
 
 ### Audio
 
-All audio is synthesized at runtime via the Web Audio API — no `.mp3` or `.wav` files. `sound.ts` builds oscillators, formant filters, and envelopes to produce SFX, voice, and entrance sounds. `music.ts` loops scheduled note patterns for background tracks. Browsers require a user gesture (click/keydown) before audio can play, so `App.tsx` attaches a one-time `pointerdown`/`keydown` listener to unlock the AudioContext.
+All audio is synthesized at runtime via the Web Audio API — no `.mp3` or `.wav` files. `sound.ts` builds oscillators, a shared convolver reverb, and layered transients (kick, hat, chime) to produce SFX and entrance sounds. `music.ts` schedules multi-layer note patterns for background tracks. Browsers require a user gesture (click/keydown) before audio can play, so `App.tsx` attaches a one-time `pointerdown`/`keydown` listener to unlock the AudioContext.
 
 ---
 
@@ -344,24 +342,6 @@ Power-ups are in `src/powerups.ts` in the `POWER_UPS` array:
 The `apply` function runs from `play/powerups.ts` `activatePowerUp()` when the player taps "Use Power-Up" in the `PowerUpOrb` popup. It receives the current `game` and the activating player's index. Return a new game object (don't mutate the input) and a toast message. Set `ok: false` to abort without consuming the charge.
 
 If your power-up needs a persistent flag during the match (like `_fourthDart`), set it on the player in `apply` and read it in the relevant board component in `play/boards/`. The `activatePowerUp` helper in `play/powerups.ts` already sets `powerUpUsed: true`, resets charge to 0, and records a `_usedX` flag (e.g. `_usedBlocker`, `_usedSurge`, `_usedSteal`, `_usedFreeze`, `_usedReroll`, `_usedLuckyMiss`, `_usedFourthDart`) so `recordFromGame()` can persist `usedPowerUp` on the `GameRecord` for power-up-specific badges.
-
-### Add a New Voice Pack
-
-Voice packs are in `src/sound.ts`. Find the `VOICE_PACKS` record and add an entry:
-
-```ts
-my_pack: {
-  label: 'My Pack',
-  base: 110,           // base pitch in Hz
-  formants: [[600, 1100, 2700]],  // formant frequencies for vowel clarity
-  bright: 0.3,         // 0..1 — higher = brighter/harsher
-  speed: 1.0,          // speech speed multiplier
-  vibrato: 0,          // 0..1 — pitch wobble amount
-  gain: 0.9,           // output gain
-},
-```
-
-Then add the id to `VOICE_PACK_LIST` so it appears in Settings. The `playVoiceByName` function synthesizes phonemes through formant filters — tweak `base`, `formants`, and `speed` to change the character. The Announcer pack uses `base: 95`, clearer formants, and `speed: 1.6` for intelligibility.
 
 ### Add a New Showdown Background
 
@@ -566,8 +546,8 @@ When an AI assistant (Claude, Copilot, Cursor, etc.) modifies this codebase, it 
 
 Update the README whenever any of the following change:
 
-1. **Features** — A mode, title, badge, power-up, voice pack, showdown background, stat, or audio track is added, removed, renamed, or has its behavior changed. Be specific — list the new item by name in the relevant Features bullet.
-2. **"How to Add" sections** — The data model for titles, badges, power-ups, or voice packs changes. The code snippets in those sections must stay byte-accurate: if `BadgeDef` gains a field (e.g. `powerUpOnly`), update the example; if `PowerUpResult` gains an `ok` flag, update the example and the prose.
+1. **Features** — A mode, title, badge, power-up, showdown background, stat, or audio track is added, removed, renamed, or has its behavior changed. Be specific — list the new item by name in the relevant Features bullet.
+2. **"How to Add" sections** — The data model for titles, badges, or power-ups changes. The code snippets in those sections must stay byte-accurate: if `BadgeDef` gains a field (e.g. `powerUpOnly`), update the example; if `PowerUpResult` gains an `ok` flag, update the example and the prose.
 3. **Project Architecture** — A source file is added, removed, renamed, or moved between directories. Keep the tree and the one-line descriptions in sync. The `play/` package and `play/boards/` subpackage must stay accurate.
 4. **Data Flow diagram** — The state management approach changes (e.g. adding a context, switching to Redux, adding a new store key, or splitting a view into submodules).
 5. **Common React Bugs** — You encounter and fix a new class of bug during your work. Add it as a numbered entry with a clear "Cause" / "Bad" / "Good" structure (or "Cause" / "Fix" for non-code bugs).
