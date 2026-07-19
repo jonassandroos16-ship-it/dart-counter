@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { CampaignBattleState, CampaignProgress, CoopPowerUpId, EnemyAttackStep } from './types';
+import type { CampaignBattleState, CampaignProgress, CoopPowerUpDef, CoopPowerUpId, EnemyAttackStep } from './types';
 import {
   addDart, undoDart, resolvePlayerVisit,
   prepareEnemyTurn, applyNextEnemyAttack, setTarget, startBattle, getLevel,
@@ -10,6 +10,7 @@ import type { Player, Settings } from '../types';
 import { Sound } from '../sound';
 import { initials } from '../store';
 import { bumpCoopStat } from './coopStats';
+import { Modal } from '../Popups';
 
 interface Props {
   levelId: number;
@@ -114,10 +115,27 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
     <div className="view-noscroll">
       <div className="play-current">
         <div className="pc-header">
-          <div className="row" style={{ gap: 8 }}>
+          <div className="row" style={{ gap: 8, alignItems: 'center' }}>
             <span className="pc-name">{level.is_boss ? '☠ BOSS · ' : ''}{level.name}</span>
           </div>
-          <span className="muted small">VISIT {state.visitNumber} · {state.phase === 'player' ? 'YOUR TURN' : 'ENEMY TURN'}</span>
+          <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+            <span className="muted small">VISIT {state.visitNumber} · {state.phase === 'player' ? 'YOUR TURN' : 'ENEMY TURN'}</span>
+            {state.phase === 'player' && thrower && (() => {
+              const srcPlayer = players.find(p => p.id === thrower.id);
+              const equippedId = srcPlayer?.powerUps?.coopActive ?? null;
+              const pu = equippedId ? getCoopPowerUp(equippedId as CoopPowerUpId) : null;
+              if (!pu) return null;
+              const can = canActivateCoopPowerUp(state, pu.id);
+              return (
+                <CoopPowerUpOrb
+                  charge={state.powerUpCharge}
+                  pu={pu}
+                  canActivate={can && state.darts.length === 0}
+                  onActivate={() => onActivatePowerUp(pu.id)}
+                />
+              );
+            })()}
+          </div>
         </div>
         <div className="row between" style={{ width: '100%', margin: '4px 0' }}>
           <span className="pill" style={{ background: 'color-mix(in srgb,#ef4444 18%,var(--bg-3))', color: '#fca5a5', borderColor: 'transparent' }}>
@@ -252,34 +270,7 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
         })}
       </div>
 
-      {/* Coop power-up bar — shows the current thrower's equipped Coop
-          power-up. Each player equips a single Coop power-up from the
-          Players tab; that's the one they can activate during their turn. */}
-      {state.phase === 'player' && state.darts.length === 0 && thrower && (() => {
-        const srcPlayer = players.find(p => p.id === thrower.id);
-        const equippedId = srcPlayer?.powerUps?.coopActive ?? null;
-        const pu = equippedId ? getCoopPowerUp(equippedId as CoopPowerUpId) : null;
-        if (!pu) return null;
-        const can = canActivateCoopPowerUp(state, pu.id);
-        return (
-          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <div className="muted small" style={{ marginRight: 4 }}>⚡ {state.powerUpCharge}</div>
-            <button className="pill" disabled={!can}
-              title={`${pu.name}: ${pu.desc}`}
-              onClick={() => can && onActivatePowerUp(pu.id)}
-              style={{
-                background: can ? 'color-mix(in srgb,#ef4444 25%,var(--bg-3))' : 'var(--bg-3)',
-                color: can ? 'var(--text)' : 'var(--muted)',
-                opacity: can ? 1 : 0.5,
-                cursor: can ? 'pointer' : 'not-allowed',
-                borderColor: 'transparent',
-              }}>
-              {pu.icon} {pu.name} <span className="muted small">({pu.cost})</span>
-            </button>
-            <div className="muted small" style={{ fontStyle: 'italic' }}>{pu.desc}</div>
-          </div>
-        );
-      })()}
+      {/* Coop power-up activation is handled via the orb in the player card header. */}
 
       {state.phantomDarts > 0 && state.phase === 'player' && (
         <div className="pill" style={{ marginTop: 6, background: 'color-mix(in srgb,#22d3ee 22%,var(--bg-3))', color: '#cffafe', borderColor: 'transparent' }}>
@@ -321,6 +312,74 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
         />
       )}
     </div>
+  );
+}
+
+// ── Coop power-up orb ─────────────────────────────────────────────────
+//
+// Mirrors the competitive PowerUpOrb: a circular button with a charge ring
+// and percentage badge. Opens a modal with the power-up description and an
+// activate button. Sits inside the player card header so it's always
+// visible during the player's turn — same placement pattern as the
+// competitive boards.
+function CoopPowerUpOrb({ charge, pu, canActivate, onActivate }: {
+  charge: number;
+  pu: CoopPowerUpDef | null;
+  canActivate: boolean;
+  onActivate: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const cap = 100;
+  const clamped = Math.max(0, Math.min(cap, charge));
+  const pct = Math.round((clamped / cap) * 100);
+  const ready = canActivate && !!pu;
+  const chargedButWaiting = !!pu && clamped >= (pu.cost || cap) && !canActivate;
+  const R = 22;
+  const C = 2 * Math.PI * R;
+  const dash = C * (pct / 100);
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        title={pu ? `${pu.name} (${pct}% charged)` : 'No coop power-up equipped'}
+        className={chargedButWaiting ? 'pu-orb-charged-waiting' : undefined}
+        style={{
+          position: 'relative', width: 52, height: 52, borderRadius: '50%',
+          background: ready || chargedButWaiting ? 'color-mix(in srgb,var(--accent) 18%,var(--bg-3))' : 'var(--bg-3)',
+          border: `2px solid ${ready || chargedButWaiting ? 'var(--accent)' : 'var(--border)'}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', padding: 0, color: 'inherit', flex: '0 0 auto',
+          boxShadow: ready || chargedButWaiting ? '0 0 12px color-mix(in srgb,var(--accent) 50%,transparent)' : 'none',
+          transition: 'box-shadow .2s, border-color .2s',
+        }}
+      >
+        <svg width="52" height="52" viewBox="0 0 52 52" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
+          <circle cx="26" cy="26" r={R} fill="none" stroke="var(--border)" strokeWidth="3" />
+          <circle cx="26" cy="26" r={R} fill="none"
+            stroke={ready ? 'var(--accent)' : 'color-mix(in srgb,var(--accent) 60%,var(--bg-3))'}
+            strokeWidth="3" strokeDasharray={`${dash} ${C}`} strokeLinecap="round"
+            style={{ transition: 'stroke-dasharray .4s ease' }} />
+        </svg>
+        <span style={{ fontSize: 20, zIndex: 1 }}>{pu ? pu.icon : '🔒'}</span>
+        <span style={{ position: 'absolute', bottom: -3, right: -3, fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 8, background: ready ? 'var(--accent)' : 'var(--bg-2)', color: ready ? '#04150a' : 'var(--muted)', border: '1px solid var(--border)' }}>{pct}%</span>
+      </button>
+      {open && pu ? (
+        <Modal onClose={() => setOpen(false)}>
+          <div style={{ textAlign: 'center', padding: 8 }}>
+            <div style={{ fontSize: 40, marginBottom: 8 }}>{pu.icon}</div>
+            <h3 style={{ margin: '0 0 6px' }}>{pu.name}</h3>
+            <div className="muted" style={{ fontSize: 13, lineHeight: 1.4, marginBottom: 12, maxWidth: 280 }}>{pu.desc}</div>
+            <div className="muted small" style={{ marginBottom: 12 }}>
+              {ready ? `Fully charged — ready to activate! (Costs ${pu.cost} charge.)` : `${pct}% charged — need ${pu.cost} to activate. Land doubles, triples and bulls to charge.`}
+            </div>
+            <div className="row" style={{ gap: 8, justifyContent: 'center' }}>
+              <button className="btn ghost" onClick={() => setOpen(false)}>Close</button>
+              <button className="btn primary" disabled={!ready} onClick={() => { setOpen(false); onActivate(); }}>Use Power-Up</button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+    </>
   );
 }
 
