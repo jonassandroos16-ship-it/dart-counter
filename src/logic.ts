@@ -56,7 +56,7 @@ export function recordFromGame(game: Game): GameRecord {
     tied: !!game.tied, tiedPlayers: game.tiedPlayers ?? null,
     teamMode: !!game.teamMode, teamCount: game.teamCount, winningTeam: game.winningTeam ?? null,
     powerUpsEnabled: !!game.powerUpsEnabled,
-    players: game.players.map(pl => ({ id: pl.id, name: pl.name, color: pl.color, legsWon: pl.legsWon, dartsThrown: pl.dartsThrown || 0, visits: pl.visits, team: pl.team })),
+    players: game.players.map(pl => ({ id: pl.id, name: pl.name, color: pl.color, legsWon: pl.legsWon, dartsThrown: pl.dartsThrown || 0, visits: pl.visits, team: pl.team, kills: pl.kills, defeated: pl.defeated })),
   };
 }
 
@@ -66,17 +66,13 @@ export function checkoutHint(remaining: number | null, doubleOut: boolean, pract
   if (remaining === 0) return 'Checked out!';
   if (remaining === 1) return doubleOut ? 'No checkout — bust risk' : 'Checkout: S1';
   if (remaining > 170) return 'No 3-dart checkout — score to get ≤ 170';
-  // Prefer the curated CHECKOUTS table — its routes end on a double, which is
-  // valid for both Double Out and Straight Out.
   const co = CHECKOUTS[remaining];
   if (co) return 'Checkout: ' + co.join('  ');
-  // Straight out: any single segment finishes. Suggest the simplest route.
   if (!doubleOut) {
     if (remaining <= 20) return `Checkout: S${remaining}`;
     if (remaining === 25) return 'Checkout: 25 (outer bull)';
     if (remaining === 50) return 'Checkout: Bull';
     if (remaining <= 40) { const d = Math.ceil(remaining / 2); return `Checkout: S${remaining} or D${d}`; }
-    // Two-dart straight-out finish: hit a single/triple then a single.
     if (remaining <= 60) {
       const first = Math.min(20, remaining - 1);
       const rest = remaining - first;
@@ -131,12 +127,6 @@ export function getPlayerXP(player: Player | undefined) {
   };
 }
 
-// ── Attributes & power ups ──────────────────────────────────────────
-// Players start with 400 HP and 0% armor. Each level grants 5 attribute
-// points (configurable) and 1 power-up unlock point (configurable). New
-// players start with 1 power-up point so they have something to spend
-// immediately.
-
 export function defaultAttributes(settings: Settings) {
   return {
     health: settings.powerUpScaling.attributeStartHealth,
@@ -154,23 +144,14 @@ export function defaultPowerUps(settings: Settings) {
   };
 }
 
-// Total attribute points a player should have earned by their current level.
-// Level 1 = 0 points (start), each subsequent level grants `attributePointsPerLevel`.
 export function totalAttributePointsForLevel(level: number, settings: Settings): number {
   return Math.max(0, (level - 1)) * settings.powerUpScaling.attributePointsPerLevel;
 }
 
-// Total power-up unlock points a player should have earned by their current
-// level. New players (level 1) start with `startingPoints` so they can unlock
-// one power up immediately. Each subsequent level grants `pointsPerLevel`.
 export function totalPowerUpPointsForLevel(level: number, settings: Settings): number {
   return settings.powerUpScaling.startingPoints + Math.max(0, (level - 1)) * settings.powerUpScaling.pointsPerLevel;
 }
 
-// Recompute a player's available attribute & power-up points based on their
-// level and what they've already spent. This is idempotent and safe to run
-// after a level-up or settings change. Developer mode grants 100 bonus
-// attribute points and 100 bonus power-up points for testing.
 export function reconcilePlayerPoints(player: Player, settings: Settings): Player {
   const level = player.level ?? 1;
   const attrs = player.attributes || defaultAttributes(settings);
@@ -205,10 +186,6 @@ export function reconcileAllPlayersPoints(players: Player[], settings: Settings)
   return { players: next, changed };
 }
 
-// ── Battle mode helpers ──────────────────────────────────────────────
-// Compute attack damage for a visit in battle mode. Damage scales with
-// the visit score and the attacker's power %. Armor reduces incoming
-// damage by up to the armor cap (default 60%).
 export function computeBattleDamage(visitScore: number, attackerPowerPct: number, targetArmorPct: number, settings: Settings): number {
   const cfg = settings.powerUpScaling;
   const base = cfg.battleBaseDamage + visitScore * 0.5;
@@ -234,8 +211,8 @@ export function allVisitsFor(playerId: string, games: GameRecord[]): any[] {
 }
 
 export interface DateFilter {
-  start: string; // inclusive ISO
-  end: string;   // exclusive ISO
+  start: string;
+  end: string;
 }
 
 export function filterGamesByDate(games: GameRecord[], filter: DateFilter | null): GameRecord[] {
@@ -254,9 +231,6 @@ export function playerStats(playerId: string, games: GameRecord[]) {
   const totalScore = scoring.reduce((a: number, v: any) => a + v.scored, 0);
   const totalDarts = scoring.reduce((a: number, v: any) => a + v.darts.length, 0);
   const playerGames = games.filter(g => g.players.some(p => p.id === playerId));
-  // Solo games (playing against yourself) don't count toward competitive
-  // stats — wins, legs, ties, win/tie rates. They still count as games
-  // played and contribute to scoring stats (avg, high score, 180s, etc.).
   const competitiveGames = playerGames.filter(g => g.players.length >= 2);
   const legsWon = competitiveGames.reduce((a, g) => a + (g.players.find(p => p.id === playerId)?.legsWon || 0), 0);
   const gamesWon = competitiveGames.filter(g => g.winner === playerId).length;
@@ -280,7 +254,6 @@ export function playerStats(playerId: string, games: GameRecord[]) {
   const winRate = competitiveGames.length ? gamesWon / competitiveGames.length * 100 : 0;
   const tieRate = competitiveGames.length ? gamesTied / competitiveGames.length * 100 : 0;
 
-  // Darts thrown (all visits, incl. bust/atc) and darts-to-finish per completed leg
   let dartsThrown = 0;
   const finishDartsList: number[] = [];
   playerGames.forEach(g => {
@@ -300,7 +273,11 @@ export function playerStats(playerId: string, games: GameRecord[]) {
   const finishMax = finishDartsList.length ? Math.max(...finishDartsList) : 0;
   const finishAvg = finishDartsList.length ? finishDartsList.reduce((a, b) => a + b, 0) / finishDartsList.length : 0;
 
-  return { games: playerGames.length, competitiveGames: competitiveGames.length, gamesWon, gamesTied, legsWon, winRate, tieRate, avg: totalDarts ? totalScore / totalDarts * 3 : 0, first9, highScore, highCheckout, n180, n140, tons, visits, dartsThrown, finishMin, finishMax, finishAvg, legsFinished: finishDartsList.length };
+  const battleGames = playerGames.filter(g => g.mode === 'battle');
+  const kills = battleGames.reduce((a, g) => a + ((g.players.find(p => p.id === playerId)?.kills || []).length), 0);
+  const defeatedCount = battleGames.filter(g => g.players.find(p => p.id === playerId)?.defeated).length;
+
+  return { games: playerGames.length, competitiveGames: competitiveGames.length, gamesWon, gamesTied, legsWon, winRate, tieRate, avg: totalDarts ? totalScore / totalDarts * 3 : 0, first9, highScore, highCheckout, n180, n140, tons, visits, dartsThrown, finishMin, finishMax, finishAvg, legsFinished: finishDartsList.length, kills, defeatedCount, battleGames: battleGames.length };
 }
 
 export function bucketAverages(visits: any[], period: string) {
@@ -327,9 +304,6 @@ export function bucketAverages(visits: any[], period: string) {
 
 export { ATC_TARGETS, atcLabel };
 
-// ============ Title backfill (backwards-compatible retro unlock) ============
-// Scans full match history for a player and returns any built-in title ids
-// they've already earned but haven't been credited for yet.
 import { BUILTIN_TITLES, buildTitleCheck, type TitleCtx } from './constants';
 import type { CustomTitle } from './types';
 
@@ -339,7 +313,6 @@ export function computeUnlockedTitlesForPlayer(
   customTitles: CustomTitle[] = [],
 ): string[] {
   const playerGames = games.filter(g => g.players.some(p => p.id === playerId));
-  // Solo games don't count toward competitive wins.
   const gamesWon = playerGames.filter(g => g.players.length >= 2 && g.winner === playerId).length;
   const gamesPlayed = playerGames.length;
   const lifetimeVisits: any[] = [];
@@ -357,12 +330,10 @@ export function computeUnlockedTitlesForPlayer(
 
   const ctx: TitleCtx = { playerId, games: playerGames, gamesPlayed, gamesWon, lifetimeVisits };
 
-  // Lifetime titles: single pass with the full ctx.
   titles.forEach(t => {
     try { if (t.check(lifetimeVisits, [], null, ctx)) unlocked.add(t.id); } catch { /* ignore */ }
   });
 
-  // Per-game titles: replay each historical game with its own gameVisits.
   playerGames.forEach(g => {
     const pl = g.players.find(p => p.id === playerId);
     if (!pl) return;
@@ -377,7 +348,6 @@ export function computeUnlockedTitlesForPlayer(
   return Array.from(unlocked);
 }
 
-// Merges retro-unlocked ids into a Player's existing unlockedTitles (idempotent).
 export function retroUnlockPlayerTitles(
   player: Player,
   games: GameRecord[],
@@ -390,7 +360,6 @@ export function retroUnlockPlayerTitles(
   return changed ? { ...player, unlockedTitles: Array.from(existing) } : player;
 }
 
-// Backfills all players. Idempotent — safe to run on every app load.
 export function retroUnlockAll(
   players: Player[],
   games: GameRecord[],
@@ -405,7 +374,4 @@ export function retroUnlockAll(
   return { players: next, changed };
 }
 
-// ============ Badge backfill ============
-// Note: badges are only awarded from games played after the badge system was
-// introduced — no retroactive backfill from historical games.
 export { computeLifetimeBadges } from './badges';

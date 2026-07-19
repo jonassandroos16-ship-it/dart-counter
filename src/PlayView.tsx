@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Game, GamePlayer, GameRecord, Player, Settings } from './types';
-import { MODES, ATC_TARGETS, atcLabel, BUILTIN_TITLES, buildTitleCheck, getTitleInfo, SCORE_POPUPS, MILESTONES, TEAM_COLORS, TEAM_NAMES } from './constants';
+import { MODES, ATC_TARGETS, atcLabel, BUILTIN_TITLES, buildTitleCheck, getTitleInfo, SCORE_POPUPS, MILESTONES, TEAM_COLORS, TEAM_NAMES, SHOWDOWN_BGS, showdownBgFor } from './constants';
 import { createGame, recordFromGame, checkoutHint, leadTrailBadge, visitAvg, levelFromXP, getPlayerXPById, allVisitsFor, computeBattleDamage } from './logic';
 import { initials } from './store';
 import { Sound } from './sound';
 import type { MusicEngine } from './music';
 import type { PopupControls } from './Popups';
 import { computeGameBadges, getBadgeInfo } from './badges';
-import { BadgeInfoPopup } from './Popups';
+import { BadgeInfoPopup, Modal } from './Popups';
 import { getPowerUpInfo } from './powerups';
 
 interface Props {
@@ -69,7 +69,7 @@ function activatePowerUp(game: Game, playerIdx: number, settings: Settings, toas
   return { ...nextGame, players };
 }
 
-function PowerUpBar({ game, curIdx, settings, onActivate }: { game: Game; curIdx: number; settings: Settings; onActivate: () => void; toast: (m: string) => void }) {
+function PowerUpOrb({ game, curIdx, settings, onActivate }: { game: Game; curIdx: number; settings: Settings; onActivate: () => void; toast: (m: string) => void }) {
   if (!game.powerUpsEnabled) return null;
   const pl = game.players[curIdx];
   if (!pl) return null;
@@ -78,23 +78,57 @@ function PowerUpBar({ game, curIdx, settings, onActivate }: { game: Game; curIdx
   const charge = Math.min(cap, pl.powerUpCharge || 0);
   const pct = Math.round((charge / cap) * 100);
   const ready = !pl.powerUpUsed && charge >= cap && !!pu;
+  const [open, setOpen] = useState(false);
+  const R = 22;
+  const C = 2 * Math.PI * R;
+  const dash = C * (pct / 100);
   return (
-    <div style={{ width: '100%', marginTop: 6, padding: 10, borderRadius: 12, background: 'var(--bg-3)', border: '1px solid var(--border)' }}>
-      <div className="row between" style={{ marginBottom: 6 }}>
-        <div className="row" style={{ gap: 6 }}>
-          <span style={{ fontSize: 18 }}>{pu ? pu.icon : '🔒'}</span>
-          <span style={{ fontWeight: 700, fontSize: 13 }}>{pu ? pu.name : 'No power-up'}</span>
-        </div>
-        <span className="muted small">{pl.powerUpUsed ? 'Used' : ready ? 'Ready!' : `${pct}% charged`}</span>
-      </div>
-      <div className="xp-bar" style={{ width: '100%' }}><div style={{ width: `${pct}%`, background: ready ? 'var(--accent)' : 'color-mix(in srgb,var(--accent) 60%,var(--bg-3))' }} /></div>
-      {pu ? <div className="muted small" style={{ marginTop: 6, lineHeight: 1.3 }}>{pu.desc}</div> : null}
-      <button className="btn block primary" style={{ marginTop: 8 }} disabled={!ready} onClick={onActivate}>Activate Power-Up</button>
-    </div>
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        title={pu ? `${pu.name} (${pct}% charged)` : 'No power-up equipped'}
+        style={{
+          position: 'relative', width: 52, height: 52, borderRadius: '50%',
+          background: ready ? 'color-mix(in srgb,var(--accent) 18%,var(--bg-3))' : 'var(--bg-3)',
+          border: `2px solid ${ready ? 'var(--accent)' : 'var(--border)'}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', padding: 0, color: 'inherit',
+          boxShadow: ready ? '0 0 12px color-mix(in srgb,var(--accent) 50%,transparent)' : 'none',
+          transition: 'box-shadow .2s, border-color .2s',
+        }}
+      >
+        <svg width="52" height="52" viewBox="0 0 52 52" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
+          <circle cx="26" cy="26" r={R} fill="none" stroke="var(--border)" strokeWidth="3" />
+          <circle cx="26" cy="26" r={R} fill="none"
+            stroke={ready ? 'var(--accent)' : 'color-mix(in srgb,var(--accent) 60%,var(--bg-3))'}
+            strokeWidth="3" strokeDasharray={`${dash} ${C}`} strokeLinecap="round"
+            style={{ transition: 'stroke-dasharray .4s ease' }} />
+        </svg>
+        <span style={{ fontSize: 20, zIndex: 1 }}>{pu ? pu.icon : '🔒'}</span>
+        <span style={{ position: 'absolute', bottom: -3, right: -3, fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 8, background: ready ? 'var(--accent)' : 'var(--bg-2)', color: ready ? '#04150a' : 'var(--muted)', border: '1px solid var(--border)' }}>{pct}%</span>
+      </button>
+      {open && pu ? (
+        <Modal onClose={() => setOpen(false)}>
+          <div style={{ textAlign: 'center', padding: 8 }}>
+            <div style={{ fontSize: 40, marginBottom: 8 }}>{pu.icon}</div>
+            <h3 style={{ margin: '0 0 6px' }}>{pu.name}</h3>
+            <div className="muted" style={{ fontSize: 13, lineHeight: 1.4, marginBottom: 12, maxWidth: 280 }}>{pu.desc}</div>
+            <div className="muted small" style={{ marginBottom: 12 }}>
+              {pl.powerUpUsed ? 'Already used this match.' : ready ? 'Fully charged — ready to activate!' : `${pct}% charged — keep hitting doubles, triples and bulls to charge.`}
+            </div>
+            <div className="row" style={{ gap: 8, justifyContent: 'center' }}>
+              <button className="btn ghost" onClick={() => setOpen(false)}>Close</button>
+              <button className="btn primary" disabled={!ready} onClick={() => { setOpen(false); onActivate(); }}>Use Power-Up</button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+    </>
   );
 }
 
-function AttributeStrip({ playerId, players }: { playerId: string; players: Player[] }) {
+function AttributeStrip({ playerId, players, mode }: { playerId: string; players: Player[]; mode: string }) {
+  if (mode !== 'battle') return null;
   const player = players.find(p => p.id === playerId);
   if (!player) return null;
   const attrs = player.attributes;
@@ -532,14 +566,16 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
         <div className="pc-remaining" style={{ color: projected < 0 ? 'var(--danger)' : 'var(--text)' }}>{projected}</div>
         <div className="checkout-hint center">{checkoutHint(game.practice ? null : projected, game.doubleOut, game.practice)}</div>
         <div className="pc-slots">
-          {[0, 1, 2].map(i => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
+          {Array.from({ length: (game.powerUpsEnabled && (p as any)._fourthDart) ? 4 : 3 }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`} style={i === 3 ? { borderColor: 'var(--accent)' } : {}}>{d ? d.label : (i === 3 ? '🎯' : '–')}</div>; })}
         </div>
         <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{buffScored}</b> · Darts thrown: <b style={{ color: 'var(--text)' }}>{(p.visits.reduce((a, v) => a + v.darts.length, 0)) + game.darts.length}</b></div>
-        <AttributeStrip playerId={p.id} players={players} />
-        <PowerUpBar game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
-          const next = activatePowerUp(game, game.turn, settings, toast);
-          if (next) setGame(next);
-        }} />
+        <AttributeStrip playerId={p.id} players={players} mode={game.mode} />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+          <PowerUpOrb game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
+            const next = activatePowerUp(game, game.turn, settings, toast);
+            if (next) setGame(next);
+          }} />
+        </div>
       </div>
 
       {game.players.length > 1 && (
@@ -569,7 +605,7 @@ function GameBoard({ game, setGame, settings, players, games, setGames, setPlaye
                 </div>
                 <div className="po-score">{pl.score}</div>
                 <div className="po-sub">avg {visitAvg(pl).toFixed(1)} · {pl.visits.reduce((a, v) => a + v.darts.length, 0)} 🎯 · L{li.level}{ti ? ` · ${ti.icon || ''} ${ti.name}` : ''}</div>
-                <AttributeStrip playerId={pl.id} players={players} />
+                <AttributeStrip playerId={pl.id} players={players} mode={game.mode} />
               </div>
             );
           })}
@@ -991,13 +1027,15 @@ function KillerBoard({ game, setGame, settings, toast, music, onQuit, setGames, 
           {(p.killerHits || 0) < 5 ? `Become a Killer: ${p.killerHits || 0}/5 hits on ${p.killerNumber}` : 'Hit opponent numbers to eliminate them'}
         </div>
         <div className="pc-slots">
-          {[0, 1, 2].map(i => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
+          {Array.from({ length: (game.powerUpsEnabled && (p as any)._fourthDart) ? 4 : 3 }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`} style={i === 3 ? { borderColor: 'var(--accent)' } : {}}>{d ? d.label : (i === 3 ? '🎯' : '–')}</div>; })}
         </div>
         <div className="muted small">Lives: <b style={{ color: 'var(--text)' }}>{'❤️'.repeat(p.lives || 0) || 'none'}</b></div>
-        <PowerUpBar game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
-          const next = activatePowerUp(game, game.turn, settings, toast);
-          if (next) setGame(next);
-        }} />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+          <PowerUpOrb game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
+            const next = activatePowerUp(game, game.turn, settings, toast);
+            if (next) setGame(next);
+          }} />
+        </div>
       </div>
 
       <div className="play-others">
@@ -1134,13 +1172,15 @@ function HighScoreBoard({ game, setGame, settings, toast, music, onQuit, setGame
         <div className="pc-remaining">{p.score}</div>
         <div className="checkout-hint center">{visitNum >= HIGH_SCORE_VISITS ? 'Final visit — go big!' : 'Score as high as you can!'}</div>
         <div className="pc-slots">
-          {[0, 1, 2].map(i => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
+          {Array.from({ length: (game.powerUpsEnabled && (p as any)._fourthDart) ? 4 : 3 }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`} style={i === 3 ? { borderColor: 'var(--accent)' } : {}}>{d ? d.label : (i === 3 ? '🎯' : '–')}</div>; })}
         </div>
         <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{game.darts.reduce((a, d) => a + d.value, 0)}</b></div>
-        <PowerUpBar game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
-          const next = activatePowerUp(game, game.turn, settings, toast);
-          if (next) setGame(next);
-        }} />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+          <PowerUpOrb game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
+            const next = activatePowerUp(game, game.turn, settings, toast);
+            if (next) setGame(next);
+          }} />
+        </div>
       </div>
 
       {game.players.length > 1 && (
@@ -1314,9 +1354,9 @@ function BattleBoard({ game, setGame, settings, toast, music, onQuit, setGames, 
           <div style={{ height: '100%', width: `${hpPct(p)}%`, background: p.color, transition: 'width .3s' }} />
         </div>
         <div className="pc-slots">
-          {[0, 1, 2].map(i => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
+          {Array.from({ length: (game.powerUpsEnabled && (p as any)._fourthDart) ? 4 : 3 }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`} style={i === 3 ? { borderColor: 'var(--accent)' } : {}}>{d ? d.label : (i === 3 ? '🎯' : '–')}</div>; })}
         </div>
-        <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{game.darts.reduce((a, d) => a + d.value, 0)}</b>{lastHit && lastHit.target ? <span style={{ marginLeft: 8, color: 'var(--danger)' }}>−{lastHit.damage} dmg</span> : null}</div>
+        <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{game.darts.reduce((a, d) => a + d.value, 0)}</b>{lastHit && lastHit.target ? <span style={{ marginLeft: 8, color: 'var(--danger)' }}> · {lastHit.damage} dmg → {game.players.find(pl => pl.id === lastHit.target)?.name || 'target'}</span> : null}</div>
         {aliveOthers.length > 1 && (
           <div style={{ width: '100%', marginTop: 6 }}>
             <div className="muted small" style={{ marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Attack target</div>
@@ -1330,10 +1370,12 @@ function BattleBoard({ game, setGame, settings, toast, music, onQuit, setGames, 
             </div>
           </div>
         )}
-        <PowerUpBar game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
-          const next = activatePowerUp(game, game.turn, settings, toast);
-          if (next) setGame(next);
-        }} />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+          <PowerUpOrb game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
+            const next = activatePowerUp(game, game.turn, settings, toast);
+            if (next) setGame(next);
+          }} />
+        </div>
       </div>
 
       <div className="play-others">
@@ -1426,7 +1468,7 @@ function Showdown({ game, players, settings, onClose }: {
   }, []);
 
   return (
-    <div className="showdown-bg" onClick={onClose}>
+    <div className="showdown-bg" style={{ background: showdownBgFor(players) }} onClick={onClose}>
       <div className="showdown-flash" />
       <div className={`showdown-grid showdown-cols-${sides.length}`}>
         {sides.map((s, i) => (

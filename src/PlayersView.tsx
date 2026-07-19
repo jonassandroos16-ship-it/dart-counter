@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Player, PlayerSoundId, Settings, CustomTitle } from './types';
-import { COLORS, allTitles, getTitleInfo, conditionLabel, titleProgressInfo, PLAYER_SOUNDS, type TitleCtx } from './constants';
+import { COLORS, allTitles, getTitleInfo, conditionLabel, titleProgressInfo, PLAYER_SOUNDS, SHOWDOWN_BGS, type TitleCtx } from './constants';
 import { levelFromXP, getPlayerXP, playerStats, allVisitsFor, defaultAttributes, defaultPowerUps, totalAttributePointsForLevel, totalPowerUpPointsForLevel } from './logic';
 import { initials, uid } from './store';
 import { Modal } from './Popups';
@@ -86,11 +86,8 @@ function EditPlayerModal({ player, players, isNew, games, settings, onClose, onS
   const [name, setName] = useState(player.name);
   const [color, setColor] = useState(player.color || COLORS[0]);
   const [sound, setSound] = useState<PlayerSoundId>(player.sound || 'none');
+  const [showdownBg, setShowdownBg] = useState<string>(player.showdownBg || 'default');
 
-  // For existing players, derive the live state from the players array so
-  // changes made inside the modal (e.g. equipping a power-up) are reflected
-  // immediately in the tab UI. For new players we keep a local working copy
-  // since they aren't in the array yet.
   const [devMode, setDevMode] = useState<boolean>(!!player.developerMode);
   const livePlayer = isNew ? { ...player, developerMode: devMode } : (players.find(p => p.id === player.id) || player);
 
@@ -105,6 +102,7 @@ function EditPlayerModal({ player, players, isNew, games, settings, onClose, onS
       attributes: livePlayer.attributes,
       powerUps: livePlayer.powerUps,
       developerMode: livePlayer.developerMode,
+      showdownBg,
     };
     onSave(base);
   };
@@ -143,6 +141,23 @@ function EditPlayerModal({ player, players, isNew, games, settings, onClose, onS
               <span className="muted" style={{ fontSize: 12, lineHeight: 1.3, display: 'block', marginTop: 2 }}>Grants +100 attribute points and +100 power-up points for testing power-ups and battle stats without grinding XP.</span>
             </span>
           </label>
+          <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 6, marginTop: 14, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Showdown Background</span>
+          <div className="muted small" style={{ marginBottom: 8 }}>Pick a dramatic backdrop shown during the pre-match showdown intro.</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(84px, 1fr))', gap: 8 }}>
+            {SHOWDOWN_BGS.map(bg => (
+              <button key={bg.id} onClick={() => setShowdownBg(bg.id)}
+                title={bg.label}
+                style={{
+                  position: 'relative', height: 56, borderRadius: 10, cursor: 'pointer', padding: 0,
+                  background: bg.css,
+                  border: `2px solid ${showdownBg === bg.id ? 'var(--accent)' : 'var(--border)'}`,
+                  boxShadow: showdownBg === bg.id ? '0 0 10px color-mix(in srgb,var(--accent) 60%,transparent)' : 'none',
+                  overflow: 'hidden',
+                }}>
+                <span style={{ position: 'absolute', bottom: 3, left: 0, right: 0, textAlign: 'center', fontSize: 10, fontWeight: 700, color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,.8)' }}>{bg.label}</span>
+              </button>
+            ))}
+          </div>
         </>
       )}
 

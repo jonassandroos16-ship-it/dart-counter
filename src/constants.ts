@@ -12,9 +12,31 @@ export const PLAYER_SOUNDS: { id: PlayerSoundId; label: string; desc: string }[]
   { id: 'champion', label: 'Champion', desc: 'Triumphant brass + crowd-roar swell.' },
 ];
 
-// Team color palette — distinct, vibrant, and visible on dark/light backgrounds.
 export const TEAM_COLORS = ['#3b82f6','#ef4444','#22c55e','#f59e0b'];
 export const TEAM_NAMES = ['Alpha','Bravo','Delta','Echo'];
+
+export const SHOWDOWN_BGS: { id: string; label: string; css: string }[] = [
+  { id: 'default',    label: 'Midnight',    css: 'radial-gradient(circle at 50% 40%, #1a1d2a 0%, #0a0c12 70%)' },
+  { id: 'inferno',    label: 'Inferno',     css: 'radial-gradient(circle at 50% 30%, #4a0e0e 0%, #1a0606 60%, #0a0303 100%)' },
+  { id: 'aurora',     label: 'Aurora',      css: 'linear-gradient(135deg, #0a1a2a 0%, #0d3b2e 40%, #1a4a3a 70%, #06121a 100%)' },
+  { id: 'voltage',    label: 'Voltage',     css: 'radial-gradient(circle at 30% 40%, #1a2a4a 0%, #0a1430 50%, #050818 100%)' },
+  { id: 'sunset',     label: 'Sunset',      css: 'linear-gradient(180deg, #2a1a3a 0%, #4a2a3a 40%, #6a3a2a 70%, #1a0a1a 100%)' },
+  { id: 'glacier',    label: 'Glacier',     css: 'radial-gradient(circle at 50% 40%, #1a3a4a 0%, #0a1a2a 60%, #050a14 100%)' },
+  { id: 'neon',       label: 'Neon Grid',   css: 'linear-gradient(180deg, #1a0a2a 0%, #2a0a3a 50%, #0a0518 100%)' },
+  { id: 'forest',     label: 'Deep Forest', css: 'radial-gradient(circle at 50% 50%, #0e2a1a 0%, #06180e 60%, #030a06 100%)' },
+  { id: 'crimson',    label: 'Crimson',     css: 'radial-gradient(circle at 50% 30%, #3a0a1a 0%, #1a050a 60%, #0a0205 100%)' },
+  { id: 'storm',      label: 'Storm',       css: 'linear-gradient(180deg, #1a1a2a 0%, #2a2a3a 40%, #0a0a1a 100%)' },
+];
+
+export function showdownBgFor(players: { showdownBg?: string }[]): string {
+  for (const p of players) {
+    if (p.showdownBg) {
+      const found = SHOWDOWN_BGS.find(b => b.id === p.showdownBg);
+      if (found) return found.css;
+    }
+  }
+  return SHOWDOWN_BGS[0].css;
+}
 
 export const CHECKOUTS: Record<number, string[]> = {
   170:['T20','T20','Bull'],167:['T20','T19','Bull'],164:['T20','T18','Bull'],161:['T20','T17','Bull'],
@@ -163,10 +185,10 @@ export const MILESTONES = [
 
 export interface TitleCtx {
   playerId?: string;
-  games?: any[];        // lifetime game records for the player (excluding current in-progress game)
+  games?: any[];
   gamesPlayed?: number;
   gamesWon?: number;
-  lifetimeVisits?: any[]; // pre-computed lifetime scoring visits (history + current game visits)
+  lifetimeVisits?: any[];
 }
 
 export interface TitleDef {
@@ -179,7 +201,6 @@ export interface TitleDef {
   progress?: (ctx?: TitleCtx) => { current: number; target: number } | null;
 }
 
-// ---------- helpers for title checks ----------
 const dartsFromVisits = (visits: any[]) => visits.flatMap((v: any) => v.darts || []);
 const countHits = (visits: any[], base: number, mult: number) =>
   dartsFromVisits(visits).filter((d: any) => d.base === base && d.mult === mult).length;
@@ -196,7 +217,6 @@ const countTons = (visits: any[]) => scoringVisits(visits).filter((v: any) => v.
 const countCheckouts = (visits: any[]) => scoringVisits(visits).filter((v: any) => v.remaining === 0).length;
 
 export const BUILTIN_TITLES: TitleDef[] = [
-  // ============ In-game (per match) ============
   { id: 't20king', name: 'Triple 20 King', desc: 'Hit T20 five times in one game', icon: '👑',
     check: (_v, gv) => countHits(gv, 20, 3) >= 5 },
   { id: 't20trio', name: 'T20 Trio', desc: 'Hit T20 three times in one game', icon: '🎯',
@@ -205,7 +225,6 @@ export const BUILTIN_TITLES: TitleDef[] = [
     check: (_v, gv) => countHits(gv, 20, 3) >= 10 },
   { id: 't1master', name: 'Triple 1 Master', desc: 'Hit T1 three times in one game', icon: '🎪',
     check: (_v, gv) => countHits(gv, 1, 3) >= 3 },
-  // Bull family (easier → harder). Cow variants only need outer/single bull hits.
   { id: 'cow_tipper', name: 'Cow Tipper', desc: 'Hit a single bull (25) in one game', icon: '🐄',
     check: (_v, gv) => countOuterBulls(gv) >= 1 },
   { id: 'milkman', name: 'The Milkman', desc: 'Hit 3 single bulls (25) in one game', icon: '🥛',
@@ -230,8 +249,6 @@ export const BUILTIN_TITLES: TitleDef[] = [
     check: (_v, gv) => count140plus(gv) + count180s(gv) >= 3 },
   { id: 'consistent', name: 'The Consistent', desc: 'Score 60+ in 5 consecutive visits', icon: '📊',
     check: (visits) => { const s = visits.filter((v:any) => !v.bust && !v.atc); for (let i=0; i<=s.length-5; i++) if (s.slice(i,i+5).every((v:any) => v.scored>=60)) return true; return false; } },
-  // Checkout family (easier → harder). Funny baby tiers first so beginners
-  // get a medal for checking out even tiny numbers.
   { id: 'checkout_1', name: 'Baby Checkout', desc: 'Checkout with less than 10', icon: '🍼',
     check: (visits) => visits.some((v:any) => v.remaining===0 && v.checkout>0 && v.checkout<10) },
   { id: 'checkout_10', name: 'Tiny Tim', desc: 'Checkout with 10+', icon: '🧸',
@@ -265,7 +282,6 @@ export const BUILTIN_TITLES: TitleDef[] = [
   { id: 'first9_flyer', name: 'First 9 Flyer', desc: 'Average 40+ in first 9 darts', icon: '🚀',
     check: (visits) => { const byLeg: Record<number, any[]> = {}; visits.filter((v:any) => !v.bust && !v.atc).forEach((v:any) => { (byLeg[v.leg] = byLeg[v.leg]||[]).push(v); }); return Object.values(byLeg).some((arr:any[]) => arr.slice(0,3).reduce((a,v) => a+v.scored,0) >= 120); } },
 
-  // ============ Lifetime / global (match history) ============
   { id: 'life_score_1k', name: 'Rookie Scorer', desc: 'Score 1,000 points across all games', icon: '🥉',
     check: (_v, _gv, _g, ctx) => lifetimeScoreSum(ctx?.lifetimeVisits || []) >= 1000,
     progress: (ctx) => ({ current: lifetimeScoreSum(ctx?.lifetimeVisits || []), target: 1000 }) },
@@ -382,7 +398,6 @@ export const BUILTIN_TITLES: TitleDef[] = [
     check: (_v, _gv, _g, ctx) => (ctx?.gamesWon || 0) >= 100,
     progress: (ctx) => ({ current: ctx?.gamesWon || 0, target: 100 }) },
 
-  // ============ Killer mode ============
   { id: 'killer_first', name: 'First Kill', desc: 'Eliminate a player in Killer', icon: '💀',
     check: (_v, _gv, g) => g && g.mode === 'killer' && g.players.some((p:any) => (p.kills||[]).length >= 1) },
   { id: 'killer_3', name: 'Killing Spree', desc: 'Eliminate 3 players in one Killer game', icon: '🔫',
@@ -394,7 +409,6 @@ export const BUILTIN_TITLES: TitleDef[] = [
   { id: 'killer_flawless', name: 'Flawless Victory', desc: 'Win Killer without losing a life', icon: '✨',
     check: (_v, _gv, g) => g && g.mode === 'killer' && g.players.length >= 2 && g.winner && g.players.some((p:any) => p.id === g.winner && (p.lives||0) >= 3) },
 
-  // ============ Party modes ============
   { id: 'speed_demon', name: 'Speed Demon', desc: 'Win a Speed 101 game', icon: '⚡',
     check: (_v, _gv, g) => g && g.mode === 'speed101' && g.players.length >= 2 && g.winner && g.players.some((p:any) => p.id === g.winner) },
   { id: 'speed_blur', name: 'Blur', desc: 'Checkout 101 in a single visit', icon: '💨',
@@ -407,7 +421,6 @@ export const BUILTIN_TITLES: TitleDef[] = [
     check: (_v, _gv, _g, ctx) => (ctx?.games || []).filter((g:any) => g.mode === 'speed101' || g.mode === 'highscore').length >= 5,
     progress: (ctx) => ({ current: (ctx?.games || []).filter((g:any) => g.mode === 'speed101' || g.mode === 'highscore').length, target: 5 }) },
 
-  // ============ Battle mode ============
   { id: 'battle_first_win', name: 'First Blood', desc: 'Win your first Battle match', icon: '🩸',
     check: (_v, _gv, g, ctx) => {
       if (g?.mode === 'battle' && g.players.length >= 2 && g.winner && g.players.some((p:any) => p.id === g.winner)) return true;
@@ -436,7 +449,6 @@ export const BUILTIN_TITLES: TitleDef[] = [
   { id: 'battle_powerhouse', name: 'Powerhouse', desc: 'Have 100% power equipped for a Battle match', icon: '⚡',
     check: (_v, _gv, g) => g && g.mode === 'battle' && g.players.some((p:any) => (p.powerPct || 0) >= 100) },
 
-  // ============ Team mode ============
   { id: 'team_first_win', name: 'Team Player', desc: 'Win your first team match', icon: '🤝',
     check: (_v, _gv, g, ctx) => {
       if (g?.teamMode && g.winningTeam != null && g.players.some((p:any) => p.id === ctx?.playerId && p.team === g.winningTeam)) return true;

@@ -2,38 +2,31 @@ import type { PlayerSoundId, Settings, VoicePackId } from './types';
 
 type Ctx = AudioContext | null;
 
-// ── Runtime audio synthesis ─────────────────────────────────────────
-// All SFX and voice cues are synthesized in-browser via the Web Audio API.
-// No binary assets are required — everything here is original, procedurally
-// generated math (sine/saw/square/noise + formant filters) and is free for
-// commercial use without attribution.
-
 interface PackConfig {
   label: string;
-  base: number;       // fundamental frequency (Hz)
-  vibrato: number;    // vibrato rate (Hz); 0 = off
-  vibDepth: number;   // vibrato depth
-  formants: [number, number, number][]; // F1, F2, F3
-  bright: number;     // 0..1 extra high-frequency energy
+  base: number;
+  vibrato: number;
+  vibDepth: number;
+  formants: [number, number, number][];
+  bright: number;
+  speed: number;
 }
 
 const VOICE_PACKS: Record<VoicePackId, PackConfig> = {
-  off: { label: 'None', base: 0, vibrato: 0, vibDepth: 0, formants: [[0, 0, 0]], bright: 0 },
-  announcer: { label: 'Announcer (Deep)', base: 110, vibrato: 4.0, vibDepth: 0.03, formants: [[220, 700, 2500]], bright: 0.2 },
-  cyborg: { label: 'Cyborg (Robotic)', base: 130, vibrato: 0, vibDepth: 0, formants: [[300, 900, 2200]], bright: 0.4 },
-  hype: { label: 'Hype (Energetic)', base: 160, vibrato: 5.5, vibDepth: 0.04, formants: [[260, 800, 2700]], bright: 0.35 },
-  female: { label: 'Female (Clear)', base: 200, vibrato: 5.0, vibDepth: 0.035, formants: [[280, 1000, 2900]], bright: 0.3 },
+  off: { label: 'None', base: 0, vibrato: 0, vibDepth: 0, formants: [[0, 0, 0]], bright: 0, speed: 1 },
+  announcer: { label: 'Announcer (Clear)', base: 95, vibrato: 3.5, vibDepth: 0.025, formants: [[600, 1100, 2700]], bright: 0.35, speed: 1.6 },
+  cyborg: { label: 'Cyborg (Robotic)', base: 130, vibrato: 0, vibDepth: 0, formants: [[300, 900, 2200]], bright: 0.4, speed: 1 },
+  hype: { label: 'Hype (Energetic)', base: 160, vibrato: 5.5, vibDepth: 0.04, formants: [[260, 800, 2700]], bright: 0.35, speed: 1 },
+  female: { label: 'Female (Clear)', base: 200, vibrato: 5.0, vibDepth: 0.035, formants: [[280, 1000, 2900]], bright: 0.3, speed: 1.1 },
 };
 
 export const VOICE_PACK_LIST: { id: VoicePackId; label: string }[] = [
   { id: 'off', label: 'None' },
-  { id: 'announcer', label: 'Announcer (Deep)' },
+  { id: 'announcer', label: 'Announcer (Clear)' },
   { id: 'cyborg', label: 'Cyborg (Robotic)' },
   { id: 'hype', label: 'Hype (Energetic)' },
   { id: 'female', label: 'Female (Clear)' },
 ];
-
-// ── Synthesis helpers ────────────────────────────────────────────────
 
 function adsr(ctx: AudioContext, dest: AudioNode, start: number, dur: number, a: number, d: number, s: number, r: number, peak: number) {
   const g = ctx.createGain();
@@ -88,8 +81,6 @@ function sweep(ctx: AudioContext, dest: AudioNode, start: number, dur: number, f
   o.stop(start + dur + 0.05);
 }
 
-// ── SFX definitions ─────────────────────────────────────────────────
-
 function playSfxByName(ctx: AudioContext, name: string, vol: number, startOffset: number) {
   const master = ctx.createGain();
   master.gain.value = vol;
@@ -115,8 +106,7 @@ function playSfxByName(ctx: AudioContext, name: string, vol: number, startOffset
       osc(ctx, master, 180, t, 0.14, 'sine', 0.6);
       noiseBurst(ctx, master, t, 0.06, 0.3, 2000, 1500);
       break;
-    case 'win': {
-      const notes = [523, 659, 784, 1047];
+    case 'win': {\n      const notes = [523, 659, 784, 1047];
       notes.forEach((f, i) => osc(ctx, master, f, t + i * 0.12, 0.4, 'triangle', 0.4));
       break;
     }
@@ -144,18 +134,12 @@ function playSfxByName(ctx: AudioContext, name: string, vol: number, startOffset
       sweep(ctx, master, t, 0.6, 180, 50, 'sine', 0.7);
       noiseBurst(ctx, master, t, 0.4, 0.4, 500, 100);
       break;
-    case 'record': {
-      const notes = [392, 523, 659, 784, 1047, 1319];
+    case 'record': {\n      const notes = [392, 523, 659, 784, 1047, 1319];
       notes.forEach((f, i) => osc(ctx, master, f, t + i * 0.10, 0.3, 'triangle', 0.4));
       break;
     }
   }
 }
-
-// ── Player entrance sounds ──────────────────────────────────────────
-// Short synthesized motifs for the showdown intro. Each is original
-// procedural audio (sine/saw/square/noise + filters) — free for commercial
-// use without attribution.
 
 function playPlayerSoundByName(ctx: AudioContext, id: PlayerSoundId, vol: number, startOffset: number) {
   const master = ctx.createGain();
@@ -164,7 +148,6 @@ function playPlayerSoundByName(ctx: AudioContext, id: PlayerSoundId, vol: number
   const t = startOffset;
   switch (id) {
     case 'hero': {
-      // Bright rising fanfare: C-E-G-C arpeggio.
       const notes = [523.25, 659.25, 783.99, 1046.5];
       notes.forEach((f, i) => {
         osc(ctx, master, f, t + i * 0.12, 0.3, 'triangle', 0.45);
@@ -173,23 +156,20 @@ function playPlayerSoundByName(ctx: AudioContext, id: PlayerSoundId, vol: number
       break;
     }
     case 'villain': {
-      // Dark low brass stab + descending tritone.
       osc(ctx, master, 110, t, 0.5, 'sawtooth', 0.5);
-      osc(ctx, master, 146.83, t, 0.5, 'sawtooth', 0.3); // D — tritone above A
+      osc(ctx, master, 146.83, t, 0.5, 'sawtooth', 0.3);
       noiseBurst(ctx, master, t, 0.18, 0.25, 600, 80);
       osc(ctx, master, 110, t + 0.35, 0.3, 'sawtooth', 0.35);
       osc(ctx, master, 98, t + 0.35, 0.3, 'sine', 0.2);
       break;
     }
     case 'cyborg': {
-      // Robotic chirp + servo whine.
       const blips = [880, 1320, 880, 1760];
       blips.forEach((f, i) => osc(ctx, master, f, t + i * 0.08, 0.07, 'square', 0.35));
       sweep(ctx, master, t + 0.32, 0.4, 400, 1200, 'sawtooth', 0.25);
       break;
     }
     case 'mystic': {
-      // Shimmering chime — high sine cluster with slow vibrato.
       const notes = [783.99, 987.77, 1174.66, 1567.98];
       notes.forEach((f, i) => {
         const o = ctx.createOscillator();
@@ -207,17 +187,14 @@ function playPlayerSoundByName(ctx: AudioContext, id: PlayerSoundId, vol: number
       break;
     }
     case 'beast': {
-      // Aggressive growl — low sawtooth + noise burst with downward sweep.
       osc(ctx, master, 80, t, 0.6, 'sawtooth', 0.55);
       sweep(ctx, master, t, 0.5, 220, 70, 'sawtooth', 0.35);
       noiseBurst(ctx, master, t, 0.4, 0.4, 800, 100);
       break;
     }
     case 'champion': {
-      // Triumphant brass + crowd-roar swell.
       const notes = [392, 523.25, 659.25, 783.99];
       notes.forEach((f, i) => osc(ctx, master, f, t + i * 0.1, 0.5, 'sawtooth', 0.4));
-      // Crowd roar: filtered noise swell.
       const n = Math.floor(1.2 * ctx.sampleRate);
       const buf = ctx.createBuffer(1, n, ctx.sampleRate);
       const data = buf.getChannelData(0);
@@ -242,11 +219,8 @@ function playPlayerSoundByName(ctx: AudioContext, id: PlayerSoundId, vol: number
   }
 }
 
-// ── Voice synthesis (formant-based spoken-style cues) ─────────────────
-
 interface Phoneme { type: 'vowel' | 'consonant'; dur: number; pitch: number; formants: [number, number, number]; }
 
-// Vowel formants (F1, F2, F3) approximate English vowels.
 const V: Record<string, [number, number, number]> = {
   ah: [800, 1200, 2600], ay: [600, 1800, 2600], eh: [500, 1700, 2500],
   ih: [400, 1900, 2500], oh: [500, 900, 2400], uh: [600, 1200, 2400],
@@ -344,27 +318,29 @@ const PHRASES: Record<string, Phoneme[]> = {
 function playVowel(ctx: AudioContext, dest: AudioNode, start: number, ph: Phoneme, pack: PackConfig) {
   const f0 = pack.base * ph.pitch;
   const dur = ph.dur;
-  // Glottal pulse train via sawtooth
   const o = ctx.createOscillator();
   o.type = 'sawtooth';
   o.frequency.value = f0;
-  // Formant filters
-  const f1 = ctx.createBiquadFilter(); f1.type = 'bandpass'; f1.frequency.value = ph.formants[0]; f1.Q.value = 8;
-  const f2 = ctx.createBiquadFilter(); f2.type = 'bandpass'; f2.frequency.value = ph.formants[1]; f2.Q.value = 8;
-  const f3 = ctx.createBiquadFilter(); f3.type = 'bandpass'; f3.frequency.value = ph.formants[2]; f3.Q.value = 8;
-  const g1 = ctx.createGain(); g1.gain.value = 1.0;
-  const g2 = ctx.createGain(); g2.gain.value = 0.5;
-  const g3 = ctx.createGain(); g3.gain.value = 0.25 + pack.bright * 0.3;
-  // Mix
+  const q = 10;
+  const f1 = ctx.createBiquadFilter(); f1.type = 'bandpass'; f1.frequency.value = ph.formants[0]; f1.Q.value = q;
+  const f2 = ctx.createBiquadFilter(); f2.type = 'bandpass'; f2.frequency.value = ph.formants[1]; f2.Q.value = q;
+  const f3 = ctx.createBiquadFilter(); f3.type = 'bandpass'; f3.frequency.value = ph.formants[2]; f3.Q.value = q;
+  const g1 = ctx.createGain(); g1.gain.value = 1.2;
+  const g2 = ctx.createGain(); g2.gain.value = 0.6;
+  const g3 = ctx.createGain(); g3.gain.value = 0.3 + pack.bright * 0.3;
   const mix = ctx.createGain();
-  mix.gain.value = 0.7;
-  // ADSR — env sits between mix and dest so the envelope shapes the whole voice.
-  const env = adsr(ctx, dest, start, dur, 0.02, 0.04, 0.7, Math.max(0.04, dur * 0.4), 0.6);
+  mix.gain.value = 0.75;
+  const env = adsr(ctx, dest, start, dur, 0.03, 0.05, 0.75, Math.max(0.06, dur * 0.4), 0.65);
   o.connect(f1); f1.connect(g1); g1.connect(mix);
   o.connect(f2); f2.connect(g2); g2.connect(mix);
   o.connect(f3); f3.connect(g3); g3.connect(mix);
   mix.connect(env);
-  // Vibrato via frequency wobble
+  const sub = ctx.createOscillator();
+  sub.type = 'sine';
+  sub.frequency.value = f0 * 0.5;
+  const subGain = ctx.createGain();
+  subGain.gain.value = 0.25;
+  sub.connect(subGain); subGain.connect(env);
   if (pack.vibrato > 0) {
     const lfo = ctx.createOscillator();
     const lfoGain = ctx.createGain();
@@ -375,10 +351,11 @@ function playVowel(ctx: AudioContext, dest: AudioNode, start: number, ph: Phonem
   }
   o.start(start);
   o.stop(start + dur + 0.05);
+  sub.start(start);
+  sub.stop(start + dur + 0.05);
 }
 
 function playConsonant(ctx: AudioContext, dest: AudioNode, start: number, ph: Phoneme, pack: PackConfig) {
-  // Short noise burst (fricative) + tonal pop (stop) for a crisp consonant.
   const dur = ph.dur;
   noiseBurst(ctx, dest, start, dur, 0.25, 3000, 1500);
   osc(ctx, dest, start, dur, pack.base * ph.pitch * 0.5, 'triangle', 0.15);
@@ -394,13 +371,12 @@ function playVoiceByName(ctx: AudioContext, phrase: string, packId: VoicePackId,
   master.connect(ctx.destination);
   let t = startOffset;
   for (const ph of phs) {
-    if (ph.type === 'vowel') playVowel(ctx, master, t, ph, pack);
-    else playConsonant(ctx, master, t, ph, pack);
-    t += ph.dur;
+    const scaled = { ...ph, dur: ph.dur * pack.speed };
+    if (scaled.type === 'vowel') playVowel(ctx, master, t, scaled, pack);
+    else playConsonant(ctx, master, t, scaled, pack);
+    t += scaled.dur;
   }
 }
-
-// ── Event mapping ────────────────────────────────────────────────────
 
 interface EventDef { sfx?: string; voice?: string; combo?: boolean; }
 
@@ -445,7 +421,6 @@ class SoundEngine {
     if (c && c.state === 'suspended') c.resume();
   }
 
-  // No-op preload kept for API compatibility (synthesis is instant).
   async preload(_settings: Settings) { /* no-op */ }
 
   play(type: string, opts: { score?: number } = {}, settings: Settings) {
@@ -453,7 +428,6 @@ class SoundEngine {
     const ctx = this.ensure();
     if (!ctx) return;
     if (ctx.state === 'suspended') ctx.resume();
-    // 180 score → dedicated "180!" voice line.
     if (type === 'milestone' && opts.score != null && opts.score >= 180) {
       this.playEvent('one_eighty', settings);
       return;
@@ -472,7 +446,6 @@ class SoundEngine {
     if (def.voice && settings.voicePack && settings.voicePack !== 'off') {
       let phrase = def.voice;
       if (def.combo) phrase = this.advanceCombo(type);
-      // Slight delay so the SFX hits first, then the announcer shouts.
       const delay = 0.08;
       setTimeout(() => {
         const c = this.ensure();
@@ -518,8 +491,6 @@ class SoundEngine {
     playSfxByName(ctx, name, settings.sfxVolume ?? 0.9, ctx.currentTime + 0.01);
   }
 
-  // Player entrance sounds, played in showdown card order. Each is a short
-  // synthesized motif — no binary assets required.
   playPlayerSound(id: PlayerSoundId, settings: Settings) {
     if (!settings.sound) return;
     if (!id || id === 'none') return;
