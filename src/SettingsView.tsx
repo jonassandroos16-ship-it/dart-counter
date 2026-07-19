@@ -6,9 +6,11 @@ import { VOICE_PACK_LIST, Sound } from './sound';
 import { uid, todayKey, mergeBackup, type BackupShape, type SyncResult } from './store';
 import { Modal } from './Popups';
 import { POWER_UPS } from './powerups';
+import { CampaignEditor } from './campaign/CampaignEditor';
 
 export function SettingsView({ players, games, settings, setSettings, setPlayers, setGames, toast, hasDatabase, connected, upToDate, lastSync, syncing, onSync }: { players: Player[]; games: GameRecord[]; settings: Settings; setSettings: (updater: any) => void; setPlayers: (updater: any) => void; setGames: (updater: any) => void; toast: (m: string) => void; hasDatabase: boolean; connected: boolean; upToDate: boolean; lastSync: number | null; syncing: boolean; onSync: () => Promise<SyncResult> }) {
   const [editingTitle, setEditingTitle] = useState(false);
+  const [showEditor, setShowEditor] = useState(false);
   const cfg = settings.xpConfig;
   const [xpForm, setXpForm] = useState(cfg);
   const [puForm, setPuForm] = useState(settings.powerUpScaling);
@@ -30,9 +32,16 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
 
   const lastSyncLabel = lastSync ? `Last sync ${new Date(lastSync).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : '';
 
+  if (showEditor) return <CampaignEditor onBack={() => setShowEditor(false)} />;
+
   return (
     <div className="view-scroll">
       <h2 style={{ marginBottom: 12 }}>Settings</h2>
+      <div className="card">
+        <button className="btn block" style={{ marginBottom: 10, background: 'linear-gradient(135deg, color-mix(in srgb,#ef4444 28%,var(--bg-3)) 0%, var(--bg-3) 80%)', borderColor: 'color-mix(in srgb,#ef4444 50%,var(--border))' }} onClick={() => setShowEditor(true)}>
+          ⚔️ Campaign Level Editor
+        </button>
+      </div>
       <div className="card">
         <div className="row between" style={{ marginBottom: 6 }}>
           <div className="row" style={{ gap: 8 }}>
