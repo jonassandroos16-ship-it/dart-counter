@@ -1,6 +1,9 @@
 import type { Game, GamePlayer, GameRecord, Player, Settings, Visit } from './types';
 import { MODES, CHECKOUTS, ATC_TARGETS, atcLabel, defaultSettings } from './constants';
 import { uid, todayKey } from './store';
+import { COOP_POWER_UPS } from './campaign/engine';
+
+export const COOP_POWER_UP_IDS: string[] = COOP_POWER_UPS.map(p => p.id);
 
 export function createGame(modeKey: string, playerIds: string[], players: Player[], doubleOut: boolean, legsBestOf: number, teamMode = false, teamAssignment: number[] = [], powerUpsEnabled = false, settings: Settings | null = null): Game {
   const mode = MODES[modeKey];
@@ -179,6 +182,11 @@ export function defaultPowerUps(settings: Settings) {
     unlocked: [] as string[],
     active: null as string | null,
     pointsAvailable: settings.powerUpScaling.startingPoints,
+    // All Coop power-ups are unlocked from the start — they're a separate
+    // selection type used only in Coop Campaign mode, so there's no point
+    // cost or progression gating.
+    coopUnlocked: COOP_POWER_UP_IDS as string[],
+    coopActive: null as string | null,
   };
 }
 
@@ -259,14 +267,19 @@ export function reconcilePlayerPoints(player: Player, settings: Settings): Playe
     power: nextPower,
     pointsAvailable: attrAvail,
   };
-  const nextPwr = { ...pwr, pointsAvailable: pwrAvail };
+  // Backfill coopUnlocked for existing players — all Coop power-ups are
+  // unlocked from the start, so any missing ids are added here.
+  const coopUnlockedSet = new Set([...(pwr.coopUnlocked || []), ...COOP_POWER_UP_IDS]);
+  const coopUnlocked = COOP_POWER_UP_IDS.filter(id => coopUnlockedSet.has(id));
+  const nextPwr = { ...pwr, pointsAvailable: pwrAvail, coopUnlocked };
 
   const changed =
     attrs.pointsAvailable !== attrAvail ||
     pwr.pointsAvailable !== pwrAvail ||
     attrs.health !== nextHealth ||
     attrs.armor !== nextArmor ||
-    attrs.power !== nextPower;
+    attrs.power !== nextPower ||
+    (pwr.coopUnlocked || []).length !== coopUnlocked.length;
   if (!changed) return player;
   return { ...player, attributes: nextAttrs, powerUps: nextPwr };
 }
