@@ -8,6 +8,12 @@ import { BADGES, getBadgeInfo, getBadgeContext, computeLifetimeBadgeCounts } fro
 import { POWER_UPS, getPowerUpInfo } from './powerups';
 import { Sound } from './sound';
 
+// Resolve a player's effective level from XP (the source of truth) rather than
+// the cached `player.level` field, which can be stale on older saves/imports.
+function effectiveLevel(player: Player, settings: Settings): number {
+  return levelFromXP(player.xp ?? 0, settings).level;
+}
+
 function spentOn(current: number, start: number, perPoint: number): number {
   if (!Number.isFinite(current) || !Number.isFinite(start)) return 0;
   if (!Number.isFinite(perPoint) || perPoint <= 0) return 0;
@@ -372,7 +378,7 @@ function BadgesTab({ player, games, setPlayers, toast }: { player: Player; games
 function AttributesTab({ player, settings, setPlayers, toast }: { player: Player; settings: Settings; setPlayers: (updater: any) => void; toast: (m: string) => void }) {
   const cfg = settings.powerUpScaling;
   const attrs = player.attributes || defaultAttributes(settings);
-  const level = player.level ?? 1;
+  const level = effectiveLevel(player, settings);
   const totalPoints = totalAttributePointsForLevel(level, settings) + (player.developerMode ? 100 : 0);
   const safeHealth = Number.isFinite(attrs.health) ? attrs.health : cfg.attributeStartHealth;
   const safeArmor = Number.isFinite(attrs.armor) ? attrs.armor : cfg.attributeStartArmor;
@@ -446,7 +452,7 @@ function AttributesTab({ player, settings, setPlayers, toast }: { player: Player
 function PowerUpsTab({ player, settings, setPlayers, toast }: { player: Player; settings: Settings; setPlayers: (updater: any) => void; toast: (m: string) => void }) {
   const cfg = settings.powerUpScaling;
   const pwr = player.powerUps || defaultPowerUps(settings);
-  const level = player.level ?? 1;
+  const level = effectiveLevel(player, settings);
   const totalPoints = totalPowerUpPointsForLevel(level, settings);
   const spent = pwr.unlocked.length;
   const available = Math.max(0, totalPoints - spent);
