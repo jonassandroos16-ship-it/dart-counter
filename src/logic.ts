@@ -1,9 +1,6 @@
 import type { Game, GamePlayer, GameRecord, Player, Settings, Visit } from './types';
 import { MODES, CHECKOUTS, ATC_TARGETS, atcLabel, defaultSettings } from './constants';
 import { uid, todayKey } from './store';
-import { COOP_POWER_UPS } from './campaign/engine';
-
-export const COOP_POWER_UP_IDS: string[] = COOP_POWER_UPS.map(p => p.id);
 
 export function createGame(modeKey: string, playerIds: string[], players: Player[], doubleOut: boolean, legsBestOf: number, teamMode = false, teamAssignment: number[] = [], powerUpsEnabled = false, settings: Settings | null = null): Game {
   const mode = MODES[modeKey];
@@ -32,13 +29,22 @@ export function createGame(modeKey: string, playerIds: string[], players: Player
       const s = settings as Settings | null;
       const attrs = src.attributes || defaultAttributes(s || defaultSettings());
       const cfg = s ? s.powerUpScaling : defaultSettings().powerUpScaling;
-      const safeHealth = Number.isFinite(attrs.health) ? attrs.health : cfg.attributeStartHealth;
-      const safeArmor = Number.isFinite(attrs.armor) ? attrs.armor : cfg.attributeStartArmor;
-      const safePower = Number.isFinite(attrs.power) ? attrs.power : cfg.attributeStartPower;
-      gp.hp = Math.max(1, Math.min(cfg.healthMax, safeHealth));
-      gp.maxHp = Math.max(1, Math.min(cfg.healthMax, safeHealth));
-      gp.armorPct = Math.max(0, Math.min(cfg.armorMax, safeArmor));
-      gp.powerPct = Math.max(0, Math.min(cfg.powerMax, safePower));
+      // Fallbacks for missing scaling fields (e.g. older saves that predate
+      // `healthMax`/`battleMinDamage`). Without these, `Math.min(undefined, x)`
+      // produces NaN and corrupts battle HP.
+      const healthMax = Number.isFinite(cfg.healthMax) ? cfg.healthMax : Number.MAX_SAFE_INTEGER;
+      const armorMax = Number.isFinite(cfg.armorMax) ? cfg.armorMax : Number.MAX_SAFE_INTEGER;
+      const powerMax = Number.isFinite(cfg.powerMax) ? cfg.powerMax : Number.MAX_SAFE_INTEGER;
+      const startHealth = Number.isFinite(cfg.attributeStartHealth) ? cfg.attributeStartHealth : 0;
+      const startArmor = Number.isFinite(cfg.attributeStartArmor) ? cfg.attributeStartArmor : 0;
+      const startPower = Number.isFinite(cfg.attributeStartPower) ? cfg.attributeStartPower : 0;
+      const safeHealth = Number.isFinite(attrs.health) ? attrs.health : startHealth;
+      const safeArmor = Number.isFinite(attrs.armor) ? attrs.armor : startArmor;
+      const safePower = Number.isFinite(attrs.power) ? attrs.power : startPower;
+      gp.hp = Math.max(1, Math.min(healthMax, safeHealth));
+      gp.maxHp = Math.max(1, Math.min(healthMax, safeHealth));
+      gp.armorPct = Math.max(0, Math.min(armorMax, safeArmor));
+      gp.powerPct = Math.max(0, Math.min(powerMax, safePower));
       gp.defeated = false;
       gp.attacks = [];
       gp.damageDealt = 0;
@@ -182,11 +188,6 @@ export function defaultPowerUps(settings: Settings) {
     unlocked: [] as string[],
     active: null as string | null,
     pointsAvailable: settings.powerUpScaling.startingPoints,
-    // All Coop power-ups are unlocked from the start — they're a separate
-    // selection type used only in Coop Campaign mode, so there's no point
-    // cost or progression gating.
-    coopUnlocked: COOP_POWER_UP_IDS as string[],
-    coopActive: null as string | null,
   };
 }
 
@@ -267,19 +268,14 @@ export function reconcilePlayerPoints(player: Player, settings: Settings): Playe
     power: nextPower,
     pointsAvailable: attrAvail,
   };
-  // Backfill coopUnlocked for existing players — all Coop power-ups are
-  // unlocked from the start, so any missing ids are added here.
-  const coopUnlockedSet = new Set([...(pwr.coopUnlocked || []), ...COOP_POWER_UP_IDS]);
-  const coopUnlocked = COOP_POWER_UP_IDS.filter(id => coopUnlockedSet.has(id));
-  const nextPwr = { ...pwr, pointsAvailable: pwrAvail, coopUnlocked };
+  const nextPwr = { ...pwr, pointsAvailable: pwrAvail };
 
   const changed =
     attrs.pointsAvailable !== attrAvail ||
     pwr.pointsAvailable !== pwrAvail ||
     attrs.health !== nextHealth ||
     attrs.armor !== nextArmor ||
-    attrs.power !== nextPower ||
-    (pwr.coopUnlocked || []).length !== coopUnlocked.length;
+    attrs.power !== nextPower;
   if (!changed) return player;
   return { ...player, attributes: nextAttrs, powerUps: nextPwr };
 }
@@ -313,11 +309,14 @@ export function reconcileAllPlayersPoints(players: Player[], settings: Settings)
 //   damage(dart) = max(0, dartValue + power) − armor   →   clamp to [minDamage, ∞) on hit, 0 on miss
 export function computeBattleDartDamage(dartValue: number, attackerPower: number, targetArmor: number, settings: Settings): number {
   const cfg = settings.powerUpScaling;
-  const power = Math.min(cfg.powerMax, Math.max(0, attackerPower));
-  const armor = Math.min(cfg.armorMax, Math.max(0, targetArmor));
+  const powerMax = Number.isFinite(cfg.powerMax) ? cfg.powerMax : Number.MAX_SAFE_INTEGER;
+  const armorMax = Number.isFinite(cfg.armorMax) ? cfg.armorMax : Number.MAX_SAFE_INTEGER;
+  const minDamage = Number.isFinite(cfg.battleMinDamage) && cfg.battleMinDamage > 0 ? cfg.battleMinDamage : 1;
+  const power = Math.min(powerMax, Math.max(0, attackerPower));
+  const armor = Math.min(armorMax, Math.max(0, targetArmor));
   if (dartValue <= 0) return 0; // miss — power only applies on successful hits
   const raw = Math.max(0, dartValue + power) - armor;
-  return Math.max(cfg.battleMinDamage, raw);
+  return Math.max(minDamage, raw);
 }
 
 // Convenience: total damage across a visit's darts.

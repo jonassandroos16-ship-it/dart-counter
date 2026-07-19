@@ -25,11 +25,28 @@ export function applyTheme(settings: Settings) {
   if (meta) meta.setAttribute('content', settings.theme === 'dark' ? '#0f1115' : '#f4f6fb');
 }
 
+// Deep-merge `powerUpScaling` so a partial saved config (e.g. an older
+// backup missing fields like `healthMax` or `battleMinDamage`) is backfilled
+// from defaults. Without this, missing numeric fields become `undefined`,
+// which turns `Math.min(undefined, x)` into `NaN` and corrupts battle mode.
+export function withDefaults(parsed: Partial<Settings> | undefined | null): Settings {
+  const base = defaultSettings();
+  if (!parsed) return base;
+  return {
+    ...base,
+    ...parsed,
+    powerUpScaling: { ...base.powerUpScaling, ...(parsed.powerUpScaling || {}) },
+  };
+}
+
 function loadSettings(): Settings {
   const raw = localStorage.getItem(KEYS.settings);
   if (!raw) return defaultSettings();
-  const parsed = JSON.parse(raw) as Partial<Settings>;
-  return { ...defaultSettings(), ...parsed, powerUpScaling: { ...defaultSettings().powerUpScaling, ...(parsed.powerUpScaling || {}) } };
+  try {
+    return withDefaults(JSON.parse(raw) as Partial<Settings>);
+  } catch {
+    return defaultSettings();
+  }
 }
 
 function loadActiveGame(): Game | null {
@@ -61,7 +78,7 @@ async function fetchAppState(): Promise<{ players: Player[]; settings: Settings;
   if (!data) return null;
   return {
     players: (data.players as Player[]) || [],
-    settings: { ...defaultSettings(), ...((data.settings as Partial<Settings>) || {}) },
+    settings: withDefaults(data.settings as Partial<Settings> | null),
     deletedPlayerIds: (data.deleted_player_ids as string[]) || [],
     deletedGameIds: (data.deleted_game_ids as string[]) || [],
   };
@@ -182,7 +199,7 @@ export function useDB(): DBAPI {
   const doMerge = useCallback((remoteState: { players: Player[]; settings: Settings; deletedPlayerIds?: string[]; deletedGameIds?: string[] } | null, remoteGames: GameRecord[]) => {
     const localPlayers = JSON.parse(localStorage.getItem(KEYS.players) || '[]') as Player[];
     const localGames = JSON.parse(localStorage.getItem(KEYS.games) || '[]') as GameRecord[];
-    const localSettings = { ...defaultSettings(), ...JSON.parse(localStorage.getItem(KEYS.settings) || '{}') } as Settings;
+    const localSettings = withDefaults(JSON.parse(localStorage.getItem(KEYS.settings) || '{}') as Partial<Settings>);
     // Union local + remote tombstones so a delete on any client propagates everywhere.
     const tombP = Array.from(new Set([...loadTomb(KEYS.tombPlayers), ...(remoteState?.deletedPlayerIds || [])]));
     const tombG = Array.from(new Set([...loadTomb(KEYS.tombGames), ...(remoteState?.deletedGameIds || [])]));
@@ -347,7 +364,7 @@ export function useDB(): DBAPI {
       if (!remote) { setConnected(false); return { ok: false, message: 'Could not reach database' }; }
       const localPlayers = JSON.parse(localStorage.getItem(KEYS.players) || '[]') as Player[];
       const localGames = JSON.parse(localStorage.getItem(KEYS.games) || '[]') as GameRecord[];
-      const localSettings = { ...defaultSettings(), ...JSON.parse(localStorage.getItem(KEYS.settings) || '{}') } as Settings;
+      const localSettings = withDefaults(JSON.parse(localStorage.getItem(KEYS.settings) || '{}') as Partial<Settings>);
       const tombP = Array.from(new Set([...loadTomb(KEYS.tombPlayers), ...(remote.deletedPlayerIds || [])]));
       const tombG = Array.from(new Set([...loadTomb(KEYS.tombGames), ...(remote.deletedGameIds || [])]));
       localStorage.setItem(KEYS.tombPlayers, JSON.stringify(tombP));
@@ -464,7 +481,12 @@ function mergeSettings(existing: Settings, incoming?: Settings): Settings {
     for (const t of [...existing.customTitles, ...(incoming.customTitles || [])]) byId.set(t.id, t);
     return Array.from(byId.values());
   })();
-  return { ...existing, ...incoming, customTitles };
+  return {
+    ...existing,
+    ...incoming,
+    customTitles,
+    powerUpScaling: { ...existing.powerUpScaling, ...(incoming.powerUpScaling || {}) },
+  };
 }
 
 export function mergeBackup(
