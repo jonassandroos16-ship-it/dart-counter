@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Player, PlayerSoundId, Settings, CustomTitle } from './types';
 import { COLORS, allTitles, getTitleInfo, conditionLabel, titleProgressInfo, PLAYER_SOUNDS, SHOWDOWN_BGS, type TitleCtx } from './constants';
 import { levelFromXP, getPlayerXP, playerStats, allVisitsFor, defaultAttributes, defaultPowerUps, totalAttributePointsForLevel, totalPowerUpPointsForLevel } from './logic';
-import { initials, uid } from './store';
+import { initials } from './store';
 import { Modal } from './Popups';
 import { BADGES, getBadgeInfo, getBadgeContext, computeLifetimeBadgeCounts } from './badges';
 import { POWER_UPS, getPowerUpInfo } from './powerups';
@@ -80,16 +80,12 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
           </div>
         );
       })}
-      {editing && <EditPlayerModal player={editing} players={players} isNew={isNew} games={games} settings={settings} onClose={() => setEditing(null)} onSave={(p) => {
-        if (isNew) setPlayers((prev: Player[]) => [...prev, p]);
-        else setPlayers((prev: Player[]) => prev.map(x => x.id === p.id ? p : x));
-        setEditing(null); toast(isNew ? 'Player added' : 'Saved');
-      }} setPlayers={setPlayers} toast={toast} />}
+      {editing && <EditPlayerModal player={editing} players={players} isNew={isNew} games={games} settings={settings} onClose={() => setEditing(null)} setPlayers={setPlayers} toast={toast} />}
     </div>
   );
 }
 
-function EditPlayerModal({ player, players, isNew, games, settings, onClose, onSave, setPlayers, toast }: { player: Player; players: Player[]; isNew: boolean; games: any[]; settings: Settings; onClose: () => void; onSave: (p: Player) => void; setPlayers: (updater: any) => void; toast: (m: string) => void }) {
+function EditPlayerModal({ player, players, isNew, games, settings, onClose, setPlayers, toast }: { player: Player; players: Player[]; isNew: boolean; games: any[]; settings: Settings; onClose: () => void; setPlayers: (updater: any) => void; toast: (m: string) => void }) {
   const [tab, setTab] = useState<'basic' | 'titles' | 'badges' | 'sound' | 'attributes' | 'powerups'>('basic');
   const [name, setName] = useState(player.name);
   const [color, setColor] = useState(player.color || COLORS[0]);
@@ -98,22 +94,6 @@ function EditPlayerModal({ player, players, isNew, games, settings, onClose, onS
 
   const [devMode, setDevMode] = useState<boolean>(!!player.developerMode);
   const livePlayer = isNew ? { ...player, developerMode: devMode } : (players.find(p => p.id === player.id) || player);
-
-  const save = () => {
-    if (!name.trim()) return;
-    const base: Player = {
-      ...player,
-      id: player.id || uid(),
-      name: name.trim(),
-      color,
-      sound,
-      attributes: livePlayer.attributes,
-      powerUps: livePlayer.powerUps,
-      developerMode: livePlayer.developerMode,
-      showdownBg,
-    };
-    onSave(base);
-  };
 
   return (
     <Modal onClose={onClose}>
@@ -234,7 +214,6 @@ function EditPlayerModal({ player, players, isNew, games, settings, onClose, onS
 
       <div className="row" style={{ gap: 10, marginTop: 16 }}>
         <button className="btn block ghost" onClick={onClose}>Cancel</button>
-        <button className="btn block primary" onClick={save}>Save</button>
       </div>
     </Modal>
   );
