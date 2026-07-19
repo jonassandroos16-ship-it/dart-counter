@@ -162,6 +162,14 @@ export function startBattle(
 ): CampaignBattleState {
   const party = players.map(p => toCoopPlayer(p, settings));
   const partyMaxHp = partyMaxHpFor(players, settings);
+  // Apply starting charge for the equipped coop power-up. The party shares a
+  // single orb, so we use the first player who has a coop power-up equipped.
+  const cfg = settings?.powerUpScaling;
+  const chargeCap = Number.isFinite(cfg?.chargeMax) ? (cfg?.chargeMax as number) : 100;
+  const startMap = (cfg && cfg.startingCharge) || {};
+  const equippedCoopId = (players.find(p => p.powerUps?.coopActive)?.powerUps?.coopActive) ?? null;
+  const startCharge = equippedCoopId ? (startMap[equippedCoopId] || 0) : 0;
+  const powerUpCharge = Math.max(0, Math.min(chargeCap, startCharge));
   const enemies: ActiveEnemy[] = level.enemies.map((defId) => {
     const def = db[defId];
     if (!def) throw new Error(`Unknown enemy id: ${defId}`);
@@ -197,7 +205,7 @@ export function startBattle(
     lastVisitLog: [],
     visitNumber: 1,
     outcome: 'ongoing',
-    powerUpCharge: 0,
+    powerUpCharge,
     resolvedDarts: [],
     visitEnemiesSnapshot: [],
     pendingEnemyAttacks: [],

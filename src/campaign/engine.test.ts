@@ -279,4 +279,22 @@ describe('campaign engine', () => {
     const s = addDart(near, 50, 1, 'Bull', true, settings);
     expect(s.powerUpCharge).toBe(settings.powerUpScaling.chargeMax);
   });
+
+  it('coop power-up starts partially charged when configured for the equipped power-up', () => {
+    const lvl = getLevel(1)!;
+    const players = makePlayers(1).map(p => ({
+      ...p,
+      powerUps: { unlocked: [], active: null, pointsAvailable: 0, coopUnlocked: ['coop_heal'], coopActive: 'coop_heal' as any },
+    }));
+    const cfg = { ...settings, powerUpScaling: { ...settings.powerUpScaling, startingCharge: { coop_heal: 50 } } };
+    const state = startBattle(lvl, players, cfg);
+    expect(state.powerUpCharge).toBe(50);
+  });
+
+  it('coop power-up starts at 0 when no coop power-up is equipped', () => {
+    const lvl = getLevel(1)!;
+    const cfg = { ...settings, powerUpScaling: { ...settings.powerUpScaling, startingCharge: { coop_heal: 50 } } };
+    const state = startBattle(lvl, makePlayers(1), cfg);
+    expect(state.powerUpCharge).toBe(0);
+  });
 });

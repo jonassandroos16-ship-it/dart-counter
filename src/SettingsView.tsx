@@ -5,6 +5,7 @@ import { tracksFor } from './music';
 import { uid, todayKey, mergeBackup, type BackupShape, type SyncResult } from './store';
 import { Modal } from './Popups';
 import { POWER_UPS } from './powerups';
+import { COOP_POWER_UPS } from './campaign/engine';
 import { CampaignEditor } from './campaign/CampaignEditor';
 
 export function SettingsView({ players, games, settings, setSettings, setPlayers, setGames, toast, hasDatabase, connected, upToDate, lastSync, syncing, onSync }: { players: Player[]; games: GameRecord[]; settings: Settings; setSettings: (updater: any) => void; setPlayers: (updater: any) => void; setGames: (updater: any) => void; toast: (m: string) => void; hasDatabase: boolean; connected: boolean; upToDate: boolean; lastSync: number | null; syncing: boolean; onSync: () => Promise<SyncResult> }) {
@@ -159,8 +160,21 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
         </div>
         <div className="muted small" style={{ margin: '14px 0 8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Starting Charge</div>
         <div className="muted small" style={{ marginBottom: 8 }}>Some power-ups begin a match partially charged. Surge is an early-game power-up, so it defaults to 40%. Set 0 to start empty.</div>
+        <div className="muted small" style={{ marginBottom: 4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>Competitive</div>
         <div className="grid grid-2">
           {POWER_UPS.map((pu) => {
+            const sc = (puForm.startingCharge || {})[pu.id] ?? 0;
+            return (
+              <label key={pu.id} className="field"><span>{pu.icon} {pu.name} start (%)</span>
+                <input type="number" value={sc} min={0} max={puForm.chargeMax} step={5}
+                  onChange={e => setPuForm({ ...puForm, startingCharge: { ...(puForm.startingCharge || {}), [pu.id]: Math.max(0, Math.min(puForm.chargeMax, +e.target.value || 0)) } })} />
+              </label>
+            );
+          })}
+        </div>
+        <div className="muted small" style={{ margin: '12px 0 4px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>Coop <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight:500 }}>(used in Co-op Campaign)</span></div>
+        <div className="grid grid-2">
+          {COOP_POWER_UPS.map((pu) => {
             const sc = (puForm.startingCharge || {})[pu.id] ?? 0;
             return (
               <label key={pu.id} className="field"><span>{pu.icon} {pu.name} start (%)</span>
