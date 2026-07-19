@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Target, Users, BarChart3, History, Settings as SettingsIcon } from 'lucide-react';
+import { Target, Users, BarChart3, History, Settings as SettingsIcon, ChevronUp, ChevronDown } from 'lucide-react';
 import { useDB, applyTheme, useToast } from './store';
 import { retroUnlockAll, reconcileAllPlayersPoints } from './logic';
 import { MusicEngine } from './music';
@@ -28,12 +28,15 @@ export default function App() {
   const { msg, show } = useToast();
   const popups = usePopupState();
   const [view, setView] = useState<View>('play');
+  const [navOpen, setNavOpen] = useState(() => localStorage.getItem('dc_nav_open') !== '0');
   const musicRef = useRef<MusicEngine>(new MusicEngine());
   const backfilledRef = useRef(false);
   const { progress: campaignProgress } = useCampaignProgress();
   const [welcomeDone, setWelcomeDone] = useState(false);
 
   useEffect(() => { applyTheme(db.settings); }, [db.settings]);
+
+  useEffect(() => { localStorage.setItem('dc_nav_open', navOpen ? '1' : '0'); }, [navOpen]);
 
   // Re-arm the audio engine whenever sound is toggled.
   useEffect(() => { void Sound.preload(db.settings); }, [db.settings.sound]);
@@ -98,11 +101,20 @@ export default function App() {
       {view === 'history' && <HistoryView players={db.players} games={db.games} settings={db.settings} setGames={db.setGames} toast={show} />}
       {view === 'settings' && <SettingsView players={db.players} games={db.games} settings={db.settings} setSettings={db.setSettings} setPlayers={db.setPlayers} setGames={db.setGames} toast={show} hasDatabase={db.hasDatabase} connected={db.connected} upToDate={db.upToDate} lastSync={db.lastSync} syncing={db.syncing} onSync={db.manualSync} />}
 
-      <nav className="nav">
+      <button
+        className={`nav-toggle${navOpen ? ' open' : ''}`}
+        onClick={() => setNavOpen(o => !o)}
+        aria-label={navOpen ? 'Hide navigation' : 'Show navigation'}
+        aria-expanded={navOpen}
+      >
+        {navOpen ? <ChevronDown size={18} strokeWidth={2.5} /> : <ChevronUp size={18} strokeWidth={2.5} />}
+      </button>
+
+      <nav className={`nav${navOpen ? ' open' : ''}`} aria-hidden={!navOpen}>
         {NAV.map(n => {
           const Icon = n.icon;
           return (
-            <button key={n.id} className={view === n.id ? 'active' : ''} onClick={() => setView(n.id)}>
+            <button key={n.id} className={view === n.id ? 'active' : ''} onClick={() => setView(n.id)} tabIndex={navOpen ? 0 : -1}>
               <Icon size={22} strokeWidth={2} />
               <span>{n.label}</span>
             </button>
