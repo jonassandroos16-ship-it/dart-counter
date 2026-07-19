@@ -58,6 +58,7 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
                   {ti ? <span className="title-badge">{ti.icon || ''} {ti.name}</span> : null}
                   {bi ? <span className="title-badge" title={bi.desc}>{bi.icon} {bi.name}</span> : null}
                   {activePu ? <span className="title-badge" title={activePu.desc}>{activePu.icon} {activePu.name}</span> : null}
+                  {p.developerMode ? <span className="xp-pill" title="Developer mode — bonus points for testing">DEV</span> : null}
                 </div>
                 <div className="muted small">{s.games} games ({s.competitiveGames} competitive) · {s.avg.toFixed(1)} avg · {s.n180} × 180 · {xp.xp} XP · {(xp.unlockedBadges || []).length} badges · {totalBadgeEarns} earned</div>
                 <div className="muted small" style={{ marginTop: 2 }}>❤️ {attrs.health} HP · 🛡️ {attrs.armor}% armor · ⚡ {attrs.power}% power · {pwr.unlocked.length} power-ups · {pwr.pointsAvailable} PU pts · {attrs.pointsAvailable} attr pts</div>
@@ -71,7 +72,7 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
           </div>
         );
       })}
-      {editing && <EditPlayerModal player={editing} isNew={isNew} games={games} settings={settings} onClose={() => setEditing(null)} onSave={(p) => {
+      {editing && <EditPlayerModal player={editing} players={players} isNew={isNew} games={games} settings={settings} onClose={() => setEditing(null)} onSave={(p) => {
         if (isNew) setPlayers((prev: Player[]) => [...prev, p]);
         else setPlayers((prev: Player[]) => prev.map(x => x.id === p.id ? p : x));
         setEditing(null); toast(isNew ? 'Player added' : 'Saved');
@@ -80,13 +81,18 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
   );
 }
 
-function EditPlayerModal({ player, isNew, games, settings, onClose, onSave, setPlayers, toast }: { player: Player; isNew: boolean; games: any[]; settings: Settings; onClose: () => void; onSave: (p: Player) => void; setPlayers: (updater: any) => void; toast: (m: string) => void }) {
+function EditPlayerModal({ player, players, isNew, games, settings, onClose, onSave, setPlayers, toast }: { player: Player; players: Player[]; isNew: boolean; games: any[]; settings: Settings; onClose: () => void; onSave: (p: Player) => void; setPlayers: (updater: any) => void; toast: (m: string) => void }) {
   const [tab, setTab] = useState<'basic' | 'titles' | 'badges' | 'sound' | 'attributes' | 'powerups'>('basic');
   const [name, setName] = useState(player.name);
   const [color, setColor] = useState(player.color || COLORS[0]);
   const [sound, setSound] = useState<PlayerSoundId>(player.sound || 'none');
 
-  const livePlayer = isNew ? player : { ...player };
+  // For existing players, derive the live state from the players array so
+  // changes made inside the modal (e.g. equipping a power-up) are reflected
+  // immediately in the tab UI. For new players we keep a local working copy
+  // since they aren't in the array yet.
+  const [devMode, setDevMode] = useState<boolean>(!!player.developerMode);
+  const livePlayer = isNew ? { ...player, developerMode: devMode } : (players.find(p => p.id === player.id) || player);
 
   const save = () => {
     if (!name.trim()) return;
@@ -98,6 +104,7 @@ function EditPlayerModal({ player, isNew, games, settings, onClose, onSave, setP
       sound,
       attributes: livePlayer.attributes,
       powerUps: livePlayer.powerUps,
+      developerMode: livePlayer.developerMode,
     };
     onSave(base);
   };
@@ -121,6 +128,21 @@ function EditPlayerModal({ player, isNew, games, settings, onClose, onSave, setP
           <div className="row wrap" style={{ gap: 10, marginBottom: 18 }}>
             {COLORS.map(c => <button key={c} className={`swatch${c === color ? ' on' : ''}`} style={{ background: c }} onClick={() => setColor(c)} />)}
           </div>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 12, borderRadius: 10, background: 'var(--bg-3)', border: `1px solid ${livePlayer.developerMode ? 'var(--accent)' : 'var(--border)'}`, cursor: 'pointer', marginBottom: 6 }}>
+            <input type="checkbox" checked={!!livePlayer.developerMode} onChange={e => {
+              const on = e.target.checked;
+              if (isNew) {
+                setDevMode(on);
+              } else {
+                setPlayers((prev: Player[]) => prev.map(p => p.id === player.id ? { ...p, developerMode: on } : p));
+              }
+              toast(on ? 'Developer mode on — +100 attribute & power-up points' : 'Developer mode off');
+            }} style={{ marginTop: 2, cursor: 'pointer' }} />
+            <span>
+              <span style={{ fontWeight: 700, fontSize: 14, display: 'block' }}>Developer mode</span>
+              <span className="muted" style={{ fontSize: 12, lineHeight: 1.3, display: 'block', marginTop: 2 }}>Grants +100 attribute points and +100 power-up points for testing power-ups and battle stats without grinding XP.</span>
+            </span>
+          </label>
         </>
       )}
 
