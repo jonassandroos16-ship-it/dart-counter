@@ -44,13 +44,14 @@ export default function App() {
     if (changed) db.setPlayers(next);
   }, [db.players, db.games, db.settings.customTitles]);
 
-  // Reconcile attribute & power-up points whenever player levels or scaling
-  // settings change so newly-earned points become spendable.
+  // Reconcile attribute & power-up points whenever player levels, scaling
+  // settings, or developer mode toggles change so newly-earned points become
+  // spendable.
   useEffect(() => {
     const { players: next, changed } = reconcileAllPlayersPoints(db.players, db.settings);
     if (changed) db.setPlayers(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [db.players.map(p => p.level).join(','), db.settings.powerUpScaling]);
+  }, [db.players.map(p => p.level).join(','), db.players.map(p => p.developerMode ? 1 : 0).join(','), db.settings.powerUpScaling]);
 
   useEffect(() => {
     const unlock = () => {

@@ -169,19 +169,21 @@ export function totalPowerUpPointsForLevel(level: number, settings: Settings): n
 
 // Recompute a player's available attribute & power-up points based on their
 // level and what they've already spent. This is idempotent and safe to run
-// after a level-up or settings change.
+// after a level-up or settings change. Developer mode grants 100 bonus
+// attribute points and 100 bonus power-up points for testing.
 export function reconcilePlayerPoints(player: Player, settings: Settings): Player {
   const level = player.level ?? 1;
   const attrs = player.attributes || defaultAttributes(settings);
   const pwr = player.powerUps || defaultPowerUps(settings);
+  const devBonus = player.developerMode ? 100 : 0;
 
-  const attrTotal = totalAttributePointsForLevel(level, settings);
+  const attrTotal = totalAttributePointsForLevel(level, settings) + devBonus;
   const attrSpent = Math.round((attrs.health - settings.powerUpScaling.attributeStartHealth) / settings.powerUpScaling.healthPerPoint)
     + Math.round((attrs.armor - settings.powerUpScaling.attributeStartArmor) / settings.powerUpScaling.armorPerPoint)
     + Math.round((attrs.power - settings.powerUpScaling.attributeStartPower) / settings.powerUpScaling.powerPerPoint);
   const attrAvail = Math.max(0, attrTotal - attrSpent);
 
-  const pwrTotal = totalPowerUpPointsForLevel(level, settings);
+  const pwrTotal = totalPowerUpPointsForLevel(level, settings) + devBonus;
   const pwrSpent = (pwr.unlocked || []).length;
   const pwrAvail = Math.max(0, pwrTotal - pwrSpent);
 

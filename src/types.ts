@@ -28,6 +28,7 @@ export interface Player {
   sound?: PlayerSoundId;
   attributes?: PlayerAttributes;
   powerUps?: PlayerPowerUps;
+  developerMode?: boolean;
 }
 
 export interface Dart {
