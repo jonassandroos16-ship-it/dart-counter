@@ -268,7 +268,7 @@ export const BADGES: BadgeDef[] = [
     check: (_v, _game) => false, // coop badges are never earned from a game record
     context: (_playerId, _games, ctx?: any) => (ctx?.campaignProgress?.highest_level_beaten || 0) >= 1 ? 1 : 0,
     contextLabel: 'levels' },
-  { id: 'b_coop_boss_slayer', name: 'Boss Slayer', desc: 'Defeat the final boss of the Co-op Campaign', icon: '☠️', kind: 'in-game', coopOnly: true,
+  { id: 'b_coop_boss_slayer', name: 'Boss Slayer', desc: 'Defeat a Co-op Campaign boss', icon: '☠️', kind: 'in-game', coopOnly: true,
     check: (_v, _game) => false,
     context: (_playerId, _games, ctx?: any) => (ctx?.campaignProgress?.highest_level_beaten || 0) >= 5 ? 1 : 0,
     contextLabel: 'boss' },

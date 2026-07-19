@@ -6,6 +6,7 @@ import {
   describeShield, getCoopPowerUp, canActivateCoopPowerUp, activateCoopPowerUp,
   levelRewardPowerUp,
 } from './engine';
+import { getChapter } from './campaignLevels';
 import type { Player, Settings } from '../types';
 import { Sound } from '../sound';
 import { initials } from '../store';
@@ -14,18 +15,20 @@ import { Modal } from '../Popups';
 
 interface Props {
   levelId: number;
+  chapterId: string;
   progress: CampaignProgress;
   settings: Settings;
   players: Player[];
-  onWin: (newHighest: number, unlockedPowerUpId: string | null) => void;
+  onWin: (newHighest: number, unlockedPowerUpId: string | null, stats: CampaignBattleState['stats']) => void;
   onLose: () => void;
   onQuit: () => void;
 }
 
-export function CampaignBattle({ levelId, progress, settings, players, onWin, onLose, onQuit }: Props) {
-  const level = getLevel(levelId)!;
+export function CampaignBattle({ levelId, chapterId, progress, settings, players, onWin, onLose, onQuit }: Props) {
+  const chapter = getChapter(chapterId);
+  const level = (chapter?.levels.find(l => l.level_id === levelId)) || getLevel(levelId)!;
   const [state, setState] = useState<CampaignBattleState>(() =>
-    startBattle(level, players, settings),
+    startBattle(level, players, settings, undefined, chapterId),
   );
   const [mult, setMult] = useState(1);
 
@@ -38,10 +41,10 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
       // Determine if this level grants a power-up reward the player hasn't
       // already unlocked. The first time a level is beaten, the reward is
       // unlocked; replaying a level does not re-grant it.
-      const rewardId = levelRewardPowerUp(levelId);
+      const rewardId = levelRewardPowerUp(levelId, chapterId);
       const alreadyUnlocked = !!rewardId && (progress.unlockedPowerUps || []).includes(rewardId);
       const grantId = rewardId && !alreadyUnlocked ? rewardId : null;
-      onWin(newHighest, grantId);
+      onWin(newHighest, grantId, state.stats);
     } else if (state.outcome === 'defeat') {
       Sound.play('kill', {}, settings);
       onLose();
@@ -113,11 +116,12 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
   const showingOverlay = playerVisitDone || state.pendingEnemyAttacks.length > 0;
 
   return (
-    <div className="view-noscroll">
+    <div className="view-noscroll" style={{ background: chapter?.theme.background || undefined, borderRadius: 14 }}>
       <div className="play-current">
         <div className="pc-header">
           <div className="row" style={{ gap: 8, alignItems: 'center' }}>
             <span className="pc-name">{level.is_boss ? '☠ BOSS · ' : ''}{level.name}</span>
+            {chapter && <span className="muted small" style={{ color: chapter.theme.accent }}>{chapter.name}</span>}
           </div>
           <div className="row" style={{ gap: 8, alignItems: 'center' }}>
             <span className="muted small">VISIT {state.visitNumber} · {state.phase === 'player' ? 'YOUR TURN' : 'ENEMY TURN'}</span>

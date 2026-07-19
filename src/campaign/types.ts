@@ -60,9 +60,47 @@ export interface CampaignLevel {
   // Coop power-up id unlocked the first time this level is beaten. The
   // boss level (last level) carries the strongest advanced power-up.
   reward_power_up?: string;
+  // Short story beat shown on the post-game screen after this level is
+  // cleared. Optional; falls back to the chapter's outro for the boss.
+  story_bit?: string;
 }
 
 export interface CampaignConfig {
+  levels: CampaignLevel[];
+}
+
+// ── Chapters ──────────────────────────────────────────────────────────
+//
+// The campaign is split into chapters. Each chapter has its own theme
+// (background palette), story (intro shown on the chapter-select screen,
+// outro shown after the boss is defeated), and a linear set of levels.
+// Chapters unlock sequentially — chapter N requires chapter N-1's boss
+// to be defeated (i.e. the previous chapter's last level cleared).
+
+export type ChapterThemeId = 'crimson' | 'ice' | 'jungle';
+
+export interface ChapterTheme {
+  id: ChapterThemeId;
+  name: string;
+  // CSS background applied to the chapter's screens (map, battle, post-game).
+  background: string;
+  // Accent color used for headers, pills, and highlights.
+  accent: string;
+  // Soft tint used for card backgrounds.
+  cardTint: string;
+}
+
+export interface CampaignChapter {
+  id: string;
+  name: string;
+  subtitle: string;
+  theme: ChapterTheme;
+  // Short overall story for the chapter — intro shown on chapter select,
+  // outro shown on the post-game screen after the boss is defeated.
+  story: {
+    intro: string;
+    outro: string;
+  };
   levels: CampaignLevel[];
 }
 
@@ -86,12 +124,18 @@ export type CoopPowerUpId =
   | 'coop_buff_acc'    // Distract enemies: -accuracy & -precision for N turns
   | 'coop_freeze'      // Freeze all enemies for N turns (skip their attacks)
   | 'coop_shield'      // Add a temporary shield that absorbs one enemy hit
-  // Advanced (unlocked as level rewards)
+  // Advanced — Chapter 1 (unlocked as level rewards)
   | 'coop_meteor'      // L1: Massive AoE damage to every enemy
   | 'coop_phantom'    // L2: Next 3 darts auto-bullseye
   | 'coop_time_warp'  // L3: Enemies take 3 turns of double damage
   | 'coop_ressurect'  // L4: Full party HP + clear all debuffs
-  | 'coop_apocalypse'; // L5 (boss): Devastating nuke + freeze + heal combo
+  | 'coop_apocalypse' // L5 (boss): Devastating nuke + freeze + heal combo
+  // Advanced — Chapter 2 (Frozen Throne rewards)
+  | 'coop_blizzard'     // C2 L1: Damage + freeze all enemies for 1 turn
+  | 'coop_frostbite'    // C2 L2: Enemies take -accuracy for 3 turns and 40 dmg
+  | 'coop_ice_lance'    // C2 L3: 120 damage to a single targeted enemy, ignoring shields
+  | 'coop_winter_veil'  // C2 L4: Party takes half damage for 3 turns (shield + heal)
+  | 'coop_glacial_doom'; // C2 L5 (boss): 180 dmg to all + freeze 3 turns + full heal
 
 export interface CoopPowerUpDef {
   id: CoopPowerUpId;
@@ -191,6 +235,18 @@ export interface CampaignBattleState {
   partyHp: number;
   partyMaxHp: number;
   players: CoopPlayer[];
+  // Chapter this battle belongs to. Used by the post-game screen to pick
+  // the right theme/story and by the engine to scope level lookups.
+  chapterId: string;
+  // Cumulative battle stats shown on the post-game screen.
+  stats: {
+    visitsUsed: number;
+    dartsThrown: number;
+    damageDealt: number;
+    enemiesDefeated: number;
+    powerUpsUsed: number;
+    partyHpLost: number;
+  };
   // Whose turn within the party (index into `players`). After every player
   // has thrown once, the enemy phase begins.
   playerTurnIdx: number;
@@ -233,9 +289,20 @@ export interface CampaignBattleState {
 }
 
 // Persisted progress (also stored to localStorage + Supabase).
+//
+// `highest_level_beaten` is kept for backwards compatibility with badges
+// and titles that read it (it counts the cumulative number of levels
+// cleared across all chapters). Per-chapter progress is tracked in
+// `chapters`: a map of chapter id → highest level index cleared (0 = none,
+// N = boss cleared). A chapter is "completed" when its boss index matches
+// the number of levels in that chapter.
 export interface CampaignProgress {
   highest_level_beaten: number;
   // Advanced coop power-up ids unlocked by clearing levels. Starter
   // power-ups are always available and not tracked here.
   unlockedPowerUps?: string[];
+  // Per-chapter progress. Key is chapter id; value is the highest level
+  // index (0-based, into the chapter's `levels` array) that has been
+  // cleared. A value equal to `levels.length` means the chapter is done.
+  chapters?: Record<string, number>;
 }

@@ -69,7 +69,7 @@ export function CoopSetupView({ players, settings, onStart, onBack }: CoopSetupP
           </div>
         </div>
         <button className="btn primary block" disabled={!picked.length} onClick={() => picked.length && onStart(picked)}>
-          Continue to level select
+          Continue to chapter select
         </button>
       </div>
     </div>

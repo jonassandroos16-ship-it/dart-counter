@@ -7,14 +7,17 @@ const KEY = 'dc_campaign_progress';
 function loadLocal(): CampaignProgress {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { highest_level_beaten: 0, unlockedPowerUps: [] };
+    if (!raw) return { highest_level_beaten: 0, unlockedPowerUps: [], chapters: {} };
     const p = JSON.parse(raw) as Partial<CampaignProgress>;
     return {
       highest_level_beaten: Math.max(0, p.highest_level_beaten || 0),
       unlockedPowerUps: Array.isArray(p.unlockedPowerUps) ? Array.from(new Set(p.unlockedPowerUps.filter((x): x is string => typeof x === 'string'))) : [],
+      chapters: (p.chapters && typeof p.chapters === 'object') ? Object.fromEntries(
+        Object.entries(p.chapters).map(([k, v]) => [k, Math.max(0, Math.floor(Number(v) || 0))]),
+      ) : {},
     };
   } catch {
-    return { highest_level_beaten: 0, unlockedPowerUps: [] };
+    return { highest_level_beaten: 0, unlockedPowerUps: [], chapters: {} };
   }
 }
 
@@ -44,6 +47,7 @@ export function useCampaignProgress() {
               ...(prev.unlockedPowerUps || []),
               ...(remote.unlockedPowerUps || []),
             ])),
+            chapters: { ...(prev.chapters || {}), ...(remote.chapters || {}) },
           };
           saveLocal(merged);
           return merged;

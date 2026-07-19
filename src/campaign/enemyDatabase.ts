@@ -3,6 +3,7 @@ import type { EnemyDatabase } from './types';
 // Static enemy definitions. Editable via the in-app Campaign Editor, which
 // can export this exact shape as JSON for paste-back into this file.
 export const ENEMY_DATABASE: EnemyDatabase = {
+  // ── Chapter 1: Crimson Vale ──────────────────────────────────────────
   goblin_scout: {
     name: 'Goblin Scout',
     difficulty: 'Easy',
@@ -66,6 +67,53 @@ export const ENEMY_DATABASE: EnemyDatabase = {
       { type: 'span', target_value: 'TOP_HALF' },
       { type: 'exact', target_value: '20' },
       { type: 'exact', target_value: 'D18' },
+    ],
+  },
+
+  // ── Chapter 2: Frozen Throne ────────────────────────────────────────
+  ice_wolf: {
+    name: 'Ice Wolf',
+    difficulty: 'Easy',
+    max_hp: 60,
+    armor: 1,
+    accuracy: 0.45,
+    precision: 0.45,
+    shields: [],
+  },
+  frost_archer: {
+    name: 'Frost Archer',
+    difficulty: 'Hard',
+    max_hp: 110,
+    armor: 3,
+    accuracy: 0.65,
+    precision: 0.70,
+    shields: [
+      { type: 'span', target_value: 'BOTTOM_HALF' },
+    ],
+  },
+  frost_knight: {
+    name: 'Frost Knight',
+    difficulty: 'Hard',
+    max_hp: 180,
+    armor: 10,
+    accuracy: 0.60,
+    precision: 0.55,
+    shields: [
+      { type: 'span', target_value: 'TOP_HALF' },
+      { type: 'exact', target_value: 'T20' },
+    ],
+  },
+  ice_queen: {
+    name: 'The Ice Queen',
+    difficulty: 'Boss',
+    max_hp: 360,
+    armor: 14,
+    accuracy: 0.85,
+    precision: 0.90,
+    shields: [
+      { type: 'span', target_value: 'TOP_HALF' },
+      { type: 'exact', target_value: 'D20' },
+      { type: 'exact', target_value: 'Bull' },
     ],
   },
 };

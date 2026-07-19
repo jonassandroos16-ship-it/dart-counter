@@ -302,8 +302,8 @@ export const BUILTIN_TITLES: TitleDef[] = [
     check: (_v, _gv, _g, ctx) => (ctx?.campaignProgress?.highest_level_beaten || 0) >= 5,
     progress: (ctx) => ({ current: Math.min(ctx?.campaignProgress?.highest_level_beaten || 0, 5), target: 5 }) },
   { id: 'coop_full_clear', name: 'Campaign Conqueror', desc: 'Clear every Co-op Campaign level', icon: '👑',
-    check: (_v, _gv, _g, ctx) => (ctx?.campaignProgress?.highest_level_beaten || 0) >= 99,
-    progress: (ctx) => ({ current: Math.min(ctx?.campaignProgress?.highest_level_beaten || 0, 99), target: 99 }) },
+    check: (_v, _gv, _g, ctx) => (ctx?.campaignProgress?.highest_level_beaten || 0) >= 10,
+    progress: (ctx) => ({ current: Math.min(ctx?.campaignProgress?.highest_level_beaten || 0, 10), target: 10 }) },
 ];
 
 

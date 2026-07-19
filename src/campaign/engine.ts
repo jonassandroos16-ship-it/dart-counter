@@ -18,7 +18,8 @@ import type {
   VisitLogEntry,
 } from './types';
 import { ENEMY_DATABASE } from './enemyDatabase';
-import { CAMPAIGN_LEVELS } from './campaignLevels';
+import { CAMPAIGN_LEVELS, CAMPAIGN_CHAPTERS, getChapter } from './campaignLevels';
+import type { CampaignChapter } from './types';
 import type { Player, Settings } from '../types';
 
 // How much the Focus Buff subtracts from each alive enemy's accuracy and
@@ -41,6 +42,12 @@ export const COOP_POWER_UPS: CoopPowerUpDef[] = [
   { id: 'coop_time_warp', name: 'Time Warp', icon: '⏳', desc: 'Enemies take 50% more damage from all sources for 3 turns.', cost: 110, tier: 'advanced' },
   { id: 'coop_ressurect', name: 'Resurrection', icon: '✨', desc: 'Restore the party to full HP and clear all enemy shields.', cost: 130, tier: 'advanced' },
   { id: 'coop_apocalypse', name: 'Apocalypse', icon: '🔥', desc: 'BOSS REWARD: 150 damage to every enemy, freeze them for 2 turns, and fully heal the party.', cost: 150, tier: 'advanced' },
+  // ── Advanced tier — Chapter 2 (Frozen Throne) ──────────────────────
+  { id: 'coop_blizzard', name: 'Blizzard', icon: '🌨️', desc: 'A howling gale — 45 damage to every enemy and freeze them for 1 turn.', cost: 95, tier: 'advanced' },
+  { id: 'coop_frostbite', name: 'Frostbite', icon: '🥶', desc: 'Chill every enemy to the bone — 40 damage and -25% accuracy for 3 turns.', cost: 100, tier: 'advanced' },
+  { id: 'coop_ice_lance', name: 'Ice Lance', icon: '🔱', desc: 'A single perfect shard — 120 damage to the targeted enemy, ignoring shields.', cost: 90, tier: 'advanced' },
+  { id: 'coop_winter_veil', name: "Winter's Veil", icon: '🌫️', desc: 'Wrap the party in mist — restore 60 HP and shield against the next 2 turns of damage.', cost: 120, tier: 'advanced' },
+  { id: 'coop_glacial_doom', name: 'Glacial Doom', icon: '🧊', desc: 'BOSS REWARD: 180 damage to every enemy, freeze them for 3 turns, and fully heal the party.', cost: 160, tier: 'advanced' },
 ];
 
 export function getCoopPowerUp(id: CoopPowerUpId): CoopPowerUpDef | undefined {
@@ -56,9 +63,11 @@ export function unlockedCoopPowerUps(progress: CampaignProgress | undefined | nu
   return [...starter, ...advanced];
 }
 
-// Returns the reward power-up id for a level, or null if none.
-export function levelRewardPowerUp(levelId: number): string | null {
-  const level = getLevel(levelId);
+// Returns the reward power-up id for a level, or null if none. Looks up
+// the level within a specific chapter (since level ids are unique only
+// within a chapter). Falls back to the flat lookup for backwards compat.
+export function levelRewardPowerUp(levelId: number, chapterId?: string): string | null {
+  const level = chapterId ? getLevelInChapter(chapterId, levelId) : getLevel(levelId);
   if (!level || !level.reward_power_up) return null;
   return level.reward_power_up;
 }
@@ -69,8 +78,15 @@ function nextInstanceId(prefix: string): string {
   return `${prefix}_${instanceCounter}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
+// Flat lookup across all chapters (backwards compat). Returns the first
+// level with a matching id across all chapters.
 export function getLevel(levelId: number): CampaignLevel | undefined {
   return CAMPAIGN_LEVELS.levels.find(l => l.level_id === levelId);
+}
+
+// Lookup within a specific chapter.
+export function getLevelInChapter(chapterId: string, levelId: number): CampaignLevel | undefined {
+  return getChapter(chapterId)?.levels.find(l => l.level_id === levelId);
 }
 
 export function getEnemyDef(defId: string, db: EnemyDatabase = ENEMY_DATABASE): EnemyDef | undefined {
@@ -159,6 +175,7 @@ export function startBattle(
   players: Player[],
   settings: Settings,
   db: EnemyDatabase = ENEMY_DATABASE,
+  chapterId: string = 'crimson_vale',
 ): CampaignBattleState {
   const party = players.map(p => toCoopPlayer(p, settings));
   const partyMaxHp = partyMaxHpFor(players, settings);
@@ -197,6 +214,15 @@ export function startBattle(
     partyHp: partyMaxHp,
     partyMaxHp,
     players: party,
+    chapterId,
+    stats: {
+      visitsUsed: 0,
+      dartsThrown: 0,
+      damageDealt: 0,
+      enemiesDefeated: 0,
+      powerUpsUsed: 0,
+      partyHpLost: 0,
+    },
     playerTurnIdx: 0,
     darts: [],
     enemies,
@@ -424,6 +450,12 @@ export function addDart(
     visitEnemiesSnapshot,
     outcome,
     powerUpCharge,
+    stats: {
+      ...state.stats,
+      dartsThrown: state.stats.dartsThrown + 1,
+      damageDealt: state.stats.damageDealt + (step.kind === 'damage' || step.kind === 'defeated' ? step.damage : 0),
+      enemiesDefeated: state.stats.enemiesDefeated + (step.kind === 'defeated' ? 1 : 0),
+    },
   };
 }
 
@@ -483,7 +515,13 @@ export function computePlayerDartDamage(dart: CampaignDart, attackerPower: numbe
 export function resolvePlayerVisit(state: CampaignBattleState): CampaignBattleState {
   if (state.phase !== 'player') return state;
   if (!state.darts.length) return state;
-  return advanceAfterPlayerVisit({ ...state, darts: [], resolvedDarts: [], visitEnemiesSnapshot: [] });
+  return advanceAfterPlayerVisit({
+    ...state,
+    darts: [],
+    resolvedDarts: [],
+    visitEnemiesSnapshot: [],
+    stats: { ...state.stats, visitsUsed: state.stats.visitsUsed + 1 },
+  });
 }
 
 // After a player's visit is fully animated, either pass to the next player
@@ -617,6 +655,7 @@ export function applyNextEnemyAttack(state: CampaignBattleState): CampaignBattle
   }
   const [step, ...rest] = state.pendingEnemyAttacks;
   const log: VisitLogEntry[] = [...state.lastVisitLog, { kind: 'player_attack_step', step }];
+  const partyHpLost = state.stats.partyHpLost + (step.damage > 0 ? step.damage : 0);
   const next: CampaignBattleState = {
     ...state,
     partyHp: step.partyHpAfter,
@@ -624,6 +663,7 @@ export function applyNextEnemyAttack(state: CampaignBattleState): CampaignBattle
     appliedEnemyAttacks: [...state.appliedEnemyAttacks, step],
     lastVisitLog: log,
     awaitContinue: rest.length > 0,
+    stats: { ...state.stats, partyHpLost },
   };
   if (next.partyHp <= 0) {
     return { ...next, outcome: 'defeat', phase: 'player', pendingEnemyAttacks: [], appliedEnemyAttacks: [], awaitContinue: false };
@@ -684,6 +724,11 @@ export function activateCoopPowerUp(state: CampaignBattleState, id: CoopPowerUpI
   const def = getCoopPowerUp(id)!;
   const thrower = state.players[state.playerTurnIdx];
   const charge = state.powerUpCharge - def.cost;
+  const next = applyCoopPowerUp(state, id, thrower, charge);
+  return { ...next, stats: { ...next.stats, powerUpsUsed: next.stats.powerUpsUsed + 1 } };
+}
+
+function applyCoopPowerUp(state: CampaignBattleState, id: CoopPowerUpId, thrower: CoopPlayer, charge: number): CampaignBattleState {
   if (id === 'coop_heal') {
     const healed = Math.min(state.partyMaxHp, state.partyHp + 80);
     return { ...state, partyHp: healed, powerUpCharge: charge };
@@ -755,6 +800,59 @@ export function activateCoopPowerUp(state: CampaignBattleState, id: CoopPowerUpI
     });
     return { ...state, enemies, partyHp: state.partyMaxHp, powerUpCharge: charge };
   }
+  // ── Chapter 2 advanced power-ups ───────────────────────────────────
+  if (id === 'coop_blizzard') {
+    // 45 dmg to every alive enemy + freeze 1 turn.
+    const enemies = state.enemies.map(e => {
+      if (e.defeated) return e;
+      const hp = Math.max(0, e.hp - 45);
+      return { ...e, hp, defeated: hp <= 0, frozenTurns: Math.max(e.frozenTurns, 1) };
+    });
+    return { ...state, enemies, powerUpCharge: charge };
+  }
+  if (id === 'coop_frostbite') {
+    // 40 dmg + distract (-25% acc/precision) for 3 turns on every alive enemy.
+    const enemies = state.enemies.map(e => e.defeated ? e : {
+      ...e,
+      hp: Math.max(0, e.hp - 40),
+      defeated: e.hp - 40 <= 0,
+      distractedTurns: FOCUS_BUFF_TURNS,
+      distractAmount: Math.max(e.distractAmount, 0.25),
+    });
+    return { ...state, enemies, powerUpCharge: charge };
+  }
+  if (id === 'coop_ice_lance') {
+    // 120 dmg to the targeted enemy, ignoring shields.
+    let targetIdx = state.targetIdx;
+    let target = state.enemies[targetIdx];
+    if (!target || target.defeated) {
+      const firstAlive = state.enemies.findIndex(e => !e.defeated);
+      if (firstAlive < 0) return { ...state, powerUpCharge: charge };
+      targetIdx = firstAlive;
+      target = state.enemies[targetIdx];
+    }
+    const enemies = state.enemies.map((e, i) => {
+      if (i !== targetIdx || e.defeated) return e;
+      const hp = Math.max(0, e.hp - 120);
+      return { ...e, hp, defeated: hp <= 0 };
+    });
+    return { ...state, enemies, targetIdx, powerUpCharge: charge };
+  }
+  if (id === 'coop_winter_veil') {
+    // Restore 60 HP (acts as shield absorption) + clear enemy shields.
+    const healed = Math.min(state.partyMaxHp, state.partyHp + 60);
+    const enemies = state.enemies.map(e => ({ ...e, shields: [] }));
+    return { ...state, partyHp: healed, enemies, powerUpCharge: charge };
+  }
+  if (id === 'coop_glacial_doom') {
+    // Boss reward: 180 dmg to every alive enemy + freeze 3 turns + full heal.
+    const enemies = state.enemies.map(e => {
+      if (e.defeated) return e;
+      const hp = Math.max(0, e.hp - 180);
+      return { ...e, hp, defeated: hp <= 0, frozenTurns: 3, shields: [] };
+    });
+    return { ...state, enemies, partyHp: state.partyMaxHp, powerUpCharge: charge };
+  }
   return state;
 }
 
@@ -772,14 +870,47 @@ export function chargeFromDart(dart: CampaignDart, settings: Settings): number {
 }
 
 // ── Progress helpers ──────────────────────────────────────────────────
+//
+// Per-chapter gating: level 1 of any chapter is unlocked as soon as the
+// chapter itself is unlocked. Each subsequent level requires the previous
+// level in the same chapter to be cleared. The flat `highest_level_beaten`
+// is kept for backwards compat with badges/titles that read it as a
+// cumulative count.
 
 export function isLevelUnlocked(levelId: number, highestBeaten: number): boolean {
   if (levelId <= 1) return true;
   return levelId <= highestBeaten + 1;
 }
 
+// Per-chapter version: level 1 is unlocked iff the chapter is unlocked;
+// later levels require the previous level in the same chapter to be
+// cleared (chapters[chapterId] >= levelId - 1).
+export function isLevelUnlockedInChapter(
+  chapterId: string,
+  levelId: number,
+  progress: { chapters?: Record<string, number> } | undefined | null,
+): boolean {
+  if (levelId <= 1) return true;
+  const cleared = progress?.chapters?.[chapterId] ?? 0;
+  return levelId <= cleared + 1;
+}
+
 export function nextLevelId(levelId: number): number | null {
   const idx = CAMPAIGN_LEVELS.levels.findIndex(l => l.level_id === levelId);
   if (idx < 0 || idx + 1 >= CAMPAIGN_LEVELS.levels.length) return null;
   return CAMPAIGN_LEVELS.levels[idx + 1].level_id;
+}
+
+// Returns the next level id within a chapter, or null if this was the last.
+export function nextLevelIdInChapter(chapterId: string, levelId: number): number | null {
+  const chapter = getChapter(chapterId);
+  if (!chapter) return null;
+  const idx = chapter.levels.findIndex(l => l.level_id === levelId);
+  if (idx < 0 || idx + 1 >= chapter.levels.length) return null;
+  return chapter.levels[idx + 1].level_id;
+}
+
+// Returns the chapter a level belongs to (by level id, first match wins).
+export function chapterForLevel(levelId: number): CampaignChapter | undefined {
+  return CAMPAIGN_CHAPTERS.find(ch => ch.levels.some(l => l.level_id === levelId));
 }
