@@ -307,6 +307,12 @@ canvas { width: 100%; display:block; }
   border-color: #fbbf24 !important;
   box-shadow: 0 10px 30px rgba(0,0,0,.5), 0 0 22px rgba(251,191,36,.35);
 }
+.showdown-card.sd-has-bg::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: linear-gradient(180deg, rgba(8,10,16,.35) 0%, rgba(8,10,16,.55) 100%);
+  pointer-events: none; z-index: 0;
+}
+.showdown-card.sd-has-bg > * { position: relative; z-index: 1; }
 .sd-crown {
   position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
   font-size: 10px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase;
