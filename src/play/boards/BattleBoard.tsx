@@ -12,9 +12,6 @@ import { finishSimpleGame } from '../finish';
 import { GameOver } from '../GameOver';
 import { BattleVisitOverlay } from '../BattleVisitOverlay';
 
-const numOr = (v: unknown, fallback: number): number =>
-  typeof v === 'number' && Number.isFinite(v) ? v : fallback;
-
 export function BattleBoard({ game, setGame, settings, players, games, toast, music, onQuit, setGames, setPlayers, popups, onGameOver }: {
   game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[]; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void;
 }) {
@@ -46,12 +43,16 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
   const enterVisit = () => {
     if (!game.darts.length) { toast('Add at least one dart'); return; }
     const cur0 = game.players[game.turn] as any;
-    const surgeActive = !!cur0._surgeNext;
+    const surgeActive = !!cur0._surgeNext && !cur0._surgeArmed;
+    const crippleActive = !!cur0._crippledNext;
     const rawScored = game.darts.reduce((a, d) => a + d.value, 0);
-    const scored = surgeActive ? rawScored * 2 : rawScored;
+    const surgeScored = surgeActive ? rawScored * 2 : rawScored;
+    const scored = crippleActive ? Math.round(surgeScored * 0.5) : surgeScored;
     const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
     const cur = newPlayers[game.turn] as any;
-    if (cur._surgeNext) delete cur._surgeNext;
+    if (cur._surgeArmed) delete cur._surgeArmed;
+    else if (cur._surgeNext) delete cur._surgeNext;
+    if (cur._crippledNext) delete cur._crippledNext;
     if (cur._fourthDart) delete cur._fourthDart;
 
     let target = targetId;
@@ -65,13 +66,14 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
     // to every dart and power boosts every successful hit. Surge doubles each
     // dart's value for damage purposes (mirroring the score multiplier).
     const darts = [...game.darts] as Dart[];
-    const power = numOr(cur.powerPct, 0);
-    const armor = numOr(victim.armorPct, 0);
+    const power = cur.powerPct || 0;
+    const armor = victim.armorPct || 0;
     let totalDamage = 0;
-    let hp = numOr(victim.hp, 0);
+    let hp = victim.hp || 0;
     for (const d of darts) {
       const dartValue = surgeActive ? d.value * 2 : d.value;
-      const dmg = computeBattleDartDamage(dartValue, power, armor, settings);
+      const rawDmg = computeBattleDartDamage(dartValue, power, armor, settings);
+      const dmg = crippleActive ? Math.round(rawDmg * 0.5) : rawDmg;
       totalDamage += dmg;
       hp = Math.max(0, hp - dmg);
     }
@@ -80,7 +82,7 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
     victim.damageTaken = (victim.damageTaken || 0) + totalDamage;
     cur.attacks = [...(cur.attacks || []), { target: victim.id, damage: totalDamage, visit: cur.visits.length + 1, date: new Date().toISOString() }];
     cur.score += scored;
-    cur.visits.push({ darts, scored, remaining: numOr(cur.hp, 0), leg: 1, mode: 'battle', date: new Date().toISOString() });
+    cur.visits.push({ darts, scored, remaining: cur.hp, leg: 1, mode: 'battle', date: new Date().toISOString() });
     cur.dartsThrown += darts.length;
     Sound.play('impact', {}, settings);
     setLastHit({ target: victim.id, damage: totalDamage });
@@ -121,13 +123,11 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
       let guards = 0;
       while (guards < newPlayers.length) {
         const np = newPlayers[nextTurn] as any;
-        if (np._blockedNext || np._frozenNext) {
-          const flag = np._blockedNext ? 'blocked' : 'frozen';
-          delete np._blockedNext; delete np._frozenNext;
-          if (flag === 'frozen') {
-            np.visits.push({ darts: [], scored: 0, remaining: np.hp, leg: 1, mode: 'battle', date: new Date().toISOString(), frozen: true });
-          }
-          toast(`${np.name} ${flag === 'frozen' ? 'is frozen' : 'is blocked'} — visit skipped.`);
+        if (np._frozenNext) {
+          delete np._frozenNext;
+          np.visits.push({ darts: [], scored: 0, remaining: np.hp, leg: 1, mode: 'battle', date: new Date().toISOString(), frozen: true });
+          popups.setFrozen({ name: np.name });
+          toast(`${np.name} is frozen — visit skipped.`);
           nextTurn = (nextTurn + 1) % newPlayers.length;
           while (newPlayers[nextTurn].defeated) nextTurn = (nextTurn + 1) % newPlayers.length;
           guards++;
@@ -139,11 +139,7 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
 
   if (game.finished) return <GameOver game={game} onNewGame={() => { setGame(null); onGameOver(); music.startContext('setup', settings); }} onViewStats={() => { setGame(null); onGameOver(); }} />;
 
-  const hpPct = (pl: any) => Math.max(0, Math.min(100, ((numOr(pl.hp, 0)) / (numOr(pl.maxHp, 1) || 1)) * 100));
-  const curHp = numOr(p.hp, 0);
-  const curMaxHp = numOr(p.maxHp, 0);
-  const curArmor = numOr(p.armorPct, 0);
-  const curPower = numOr(p.powerPct, 0);
+  const hpPct = (pl: any) => Math.max(0, Math.min(100, ((pl.hp || 0) / (pl.maxHp || 1)) * 100));
 
   return (
     <div className="view-noscroll">
@@ -155,13 +151,28 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
           </div>
           <span className="muted small">BATTLE · {alive.length} ALIVE</span>
         </div>
-        <div className="pc-remaining" style={{ fontSize: 28 }}>{curHp} HP</div>
-        <div className="checkout-hint center">❤️ {curHp}/{curMaxHp} · 🛡️ {curArmor} armor · ⚡ {curPower} power</div>
+        <div className="pc-remaining" style={{ fontSize: 28 }}>{p.hp} HP</div>
+        <div className="checkout-hint center">❤️ {p.hp}/{p.maxHp} · 🛡️ {p.armorPct} armor · ⚡ {p.powerPct} power</div>
         <div style={{ width: '100%', height: 8, borderRadius: 4, background: 'var(--bg-3)', overflow: 'hidden', margin: '4px 0' }}>
           <div style={{ height: '100%', width: `${hpPct(p)}%`, background: p.color, transition: 'width .3s' }} />
         </div>
+        {game.powerUpsEnabled && (p as any)._oneDartNext && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#f59e0b 18%,var(--bg-3))', border: '1px solid #f59e0b', color: '#f59e0b' }}>
+            🛡️ Blocked! You only get ONE dart this visit.
+          </div>
+        )}
+        {game.powerUpsEnabled && (p as any)._crippledNext && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#ef4444 18%,var(--bg-3))', border: '1px solid #ef4444', color: '#ef4444' }}>
+            🦾 Crippled! You deal 50% damage this visit.
+          </div>
+        )}
+        {game.powerUpsEnabled && (p as any)._surgeNext && !(p as any)._surgeArmed && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,var(--accent) 18%,var(--bg-3))', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
+            ⚡ Surge active! This visit scores double.
+          </div>
+        )}
         <div className="pc-slots">
-          {Array.from({ length: (game.powerUpsEnabled && (p as any)._fourthDart) ? 4 : 3 }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`} style={i === 3 ? { borderColor: 'var(--accent)' } : {}}>{d ? d.label : (i === 3 ? '🎯' : '–')}</div>; })}
+          {Array.from({ length: (game.powerUpsEnabled && (p as any)._fourthDart) ? 4 : (game.powerUpsEnabled && (p as any)._oneDartNext ? 1 : 3) }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`} style={i === 3 ? { borderColor: 'var(--accent)' } : {}}>{d ? d.label : (i === 3 ? '🎯' : '–')}</div>; })}
         </div>
         <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{game.darts.reduce((a, d) => a + d.value, 0)}</b>{lastHit && lastHit.target ? <span style={{ marginLeft: 8, color: 'var(--danger)' }}> · {lastHit.damage} dmg → {game.players.find(pl => pl.id === lastHit.target)?.name || 'target'}</span> : null}</div>
         {aliveOthers.length > 1 && (
@@ -193,20 +204,19 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
             <div key={`${pl.id}-${shake}`} className="play-other" style={{
               ...(defeated ? { opacity: 0.4, filter: 'grayscale(.6)' } : {}),
               animation: shake > 0 ? `dmgShake${shake % 2 === 0 ? 'B' : 'A'} .4s ease` : undefined,
-            }}
-            >
+            }}>
               <div className="row between">
                 <div className="row" style={{ gap: 6 }}>
                   <BadgeAvatar playerId={pl.id} players={players} games={games} size={22} fontSize={10} color={pl.color} />
                   <span className="po-name">{pl.name}</span>
                   {defeated && <span className="pill" style={{ fontSize: 9, background: '#ef4444', color: '#fff' }}>DEFEATED</span>}
                 </div>
-                <span className="pill" style={{ fontSize: 10 }}>{numOr(pl.hp, 0)} HP</span>
+                <span className="pill" style={{ fontSize: 10 }}>{pl.hp} HP</span>
               </div>
               <div style={{ marginTop: 4, height: 6, borderRadius: 3, background: 'var(--bg-3)', overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${hpPct(pl)}%`, background: pl.color, transition: 'width .3s' }} />
               </div>
-              <div className="po-sub">🛡️ {numOr(pl.armorPct, 0)} · ⚡ {numOr(pl.powerPct, 0)}{pl.damageDealt ? ` · 💥 ${pl.damageDealt}` : ''}</div>
+              <div className="po-sub">🛡️ {pl.armorPct} · ⚡ {pl.powerPct}{pl.damageDealt ? ` · 💥 ${pl.damageDealt}` : ''}</div>
             </div>
           );
         })}

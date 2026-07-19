@@ -174,9 +174,6 @@ export const BADGES: BadgeDef[] = [
   { id: 'b_highest_score', name: 'Top Scorer', desc: 'Had the highest single-visit score', icon: '📈', kind: 'post-game',
     pick: (game) => pickExtreme(game, (pl) => Math.max(0, ...(pl.visits || []).filter((v: any) => !v.bust && !v.atc).map((v: any) => v.scored || 0)), 'max'),
     context: lifetimeHighScore, contextLabel: 'high score' },
-  { id: 'b_most_darts', name: 'Marathon', desc: 'Threw the most darts in the game', icon: '🏃', kind: 'post-game',
-    pick: (game) => pickExtreme(game, (pl) => dartsOf(pl.visits || []).length, 'max'),
-    context: lifetimeDartsThrown, contextLabel: 'darts' },
   { id: 'b_best_comeback', name: 'Comeback Kid', desc: 'Won after trailing by 50+, or threw a 150+ visit to level the scores', icon: '🔄', kind: 'post-game',
     pick: (game) => {
       if (!game || game.practice || game.atc) return null;
@@ -253,6 +250,10 @@ export const BADGES: BadgeDef[] = [
     pick: (game) => pickPowerUpWinner(game, 'pu_lucky_miss') },
   { id: 'b_power_fourth', name: 'Quad Squad', desc: 'Win a power-up match after activating Fourth Dart', icon: '🎯', kind: 'post-game', powerUpOnly: true,
     pick: (game) => pickPowerUpWinner(game, 'pu_fourth_dart') },
+  { id: 'b_power_rethrow', name: 'Second Chance', desc: 'Win a power-up match after activating Re-Throw', icon: '🔁', kind: 'post-game', powerUpOnly: true,
+    pick: (game) => pickPowerUpWinner(game, 'pu_rethrow') },
+  { id: 'b_power_cripple', name: 'Saboteur', desc: 'Win a power-up match after activating Cripple', icon: '🦾', kind: 'post-game', powerUpOnly: true,
+    pick: (game) => pickPowerUpWinner(game, 'pu_cripple') },
 ];
 
 // Awards a power-up badge to the winner of a power-up match if they activated
@@ -270,6 +271,8 @@ function pickPowerUpWinner(game: any, puId: string): string | null {
     pu_reroll: '_usedReroll',
     pu_lucky_miss: '_usedLuckyMiss',
     pu_fourth_dart: '_usedFourthDart',
+    pu_rethrow: '_usedRethrow',
+    pu_cripple: '_usedCripple',
   };
   const used = (w as any).usedPowerUp === puId || (w as any)[flagMap[puId]] === true;
   return used ? game.winner : null;

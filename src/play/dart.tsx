@@ -6,8 +6,11 @@ import { applyCharge, chargeFromDart, catchUpBoost } from './powerups';
 // the numeric keypad. Returns a new Game with the dart appended and the
 // power-up charge updated when power-ups are enabled.
 export function addDartToGame(game: Game, base: number, mult: number, labelOverride: string | undefined, isBull: boolean | undefined, settings: Settings, toast: (m: string) => void): Game | null {
-  const maxDarts = (game.powerUpsEnabled && (game.players[game.turn] as any)._fourthDart) ? 4 : 3;
-  if (game.darts.length >= maxDarts) { toast(`${maxDarts} darts already`); return null; }
+  const cur = game.players[game.turn] as any;
+  let maxDarts = 3;
+  if (game.powerUpsEnabled && cur._fourthDart) maxDarts = 4;
+  if (game.powerUpsEnabled && cur._oneDartNext) maxDarts = 1;
+  if (game.darts.length >= maxDarts) { toast(`${maxDarts} dart${maxDarts === 1 ? '' : 's'} already`); return null; }
   let value: number, label: string;
   if (isBull) { value = 50; label = 'Bull'; }
   else if (base === 25) { value = mult === 2 ? 50 : 25; label = mult === 2 ? 'Bull' : '25'; }

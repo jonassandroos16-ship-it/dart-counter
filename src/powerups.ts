@@ -33,17 +33,17 @@ export const POWER_UPS: PowerUpDef[] = [
     id: 'pu_fourth_dart',
     name: 'Fourth Dart',
     icon: '🎯',
-    desc: 'Add a bonus 4th dart to your current visit — score it before tapping Enter visit.',
+    desc: 'Add a bonus 4th dart to your current visit — score it before tapping Enter Visit.',
     apply: (game, _curIdx) => ({ game, message: 'Fourth Dart active — score your bonus dart!' }),
   },
   {
     id: 'pu_blocker',
     name: 'Blocker',
     icon: '🛡️',
-    desc: 'Force every other player to skip their next visit. They keep their score.',
+    desc: 'Every other player only gets ONE dart on their next visit (instead of three).',
     apply: (game, curIdx) => {
-      const players = (game.players || []).map((pl: any, i: number) => i === curIdx ? pl : { ...pl, _blockedNext: true });
-      return { game: { ...game, players }, message: 'Blocker! Opponents skip their next visit.' };
+      const players = (game.players || []).map((pl: any, i: number) => i === curIdx ? pl : { ...pl, _oneDartNext: true });
+      return { game: { ...game, players }, message: 'Blocker! Opponents only get one dart next visit.' };
     },
   },
   {
@@ -64,13 +64,42 @@ export const POWER_UPS: PowerUpDef[] = [
     },
   },
   {
+    id: 'pu_rethrow',
+    name: 'Re-Throw',
+    icon: '🔁',
+    desc: 'Take back your last dart this visit and throw it again. Use when you mis-tap a segment.',
+    apply: (game, _curIdx) => {
+      const darts = [...(game.darts || [])];
+      if (!darts.length) return { game, message: 'Re-Throw: no dart to take back yet.', ok: false };
+      darts.pop();
+      return { game: { ...game, darts }, message: 'Re-Throw! Last dart taken back — throw it again.' };
+    },
+  },
+  {
     id: 'pu_surge',
     name: 'Surge',
     icon: '⚡',
-    desc: 'Your next visit scores double. After the visit, the bonus wears off.',
+    desc: 'Your NEXT visit scores double (activates on your next turn, not this one).',
     apply: (game, curIdx) => {
-      const players = (game.players || []).map((pl: any, i: number) => i === curIdx ? { ...pl, _surgeNext: true } : pl);
-      return { game: { ...game, players }, message: 'Surge! Your next visit scores double.' };
+      const players = (game.players || []).map((pl: any, i: number) => i === curIdx ? { ...pl, _surgeNext: true, _surgeArmed: true } : pl);
+      return { game: { ...game, players }, message: 'Surge armed! Your next visit scores double.' };
+    },
+  },
+  {
+    id: 'pu_cripple',
+    name: 'Cripple',
+    icon: '🦾',
+    desc: 'The leading opponent only scores 50% on their next visit. They are warned when they throw.',
+    apply: (game, curIdx) => {
+      const players = [...(game.players || [])];
+      if (players.length < 2) return { game, message: 'Cripple: no opponents to cripple.', ok: false };
+      const others = players.map((pl, i) => ({ pl, i })).filter(({ i }) => i !== curIdx);
+      const isHighScore = game.mode === 'highscore';
+      const target = isHighScore
+        ? others.reduce((a, b) => b.pl.score > a.pl.score ? b : a)
+        : others.reduce((a, b) => b.pl.score < a.pl.score ? b : a);
+      const newPlayers = players.map((pl: any, i: number) => i === target.i ? { ...pl, _crippledNext: true } : pl);
+      return { game: { ...game, players: newPlayers }, message: `Cripple! ${target.pl.name} scores 50% next visit.` };
     },
   },
   {
@@ -82,7 +111,6 @@ export const POWER_UPS: PowerUpDef[] = [
       const players = [...(game.players || [])];
       if (players.length < 2) return { game, message: 'Steal: no opponents to steal from.', ok: false };
       const others = players.map((pl, i) => ({ pl, i })).filter(({ i }) => i !== curIdx);
-      // Leader = lowest remaining in x01, highest score in highscore.
       const isHighScore = game.mode === 'highscore';
       const target = isHighScore
         ? others.reduce((a, b) => b.pl.score > a.pl.score ? b : a)

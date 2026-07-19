@@ -77,6 +77,8 @@ export function activatePowerUp(game: Game, playerIdx: number, settings: Setting
     if (puId === 'pu_reroll') updated._usedReroll = true;
     if (puId === 'pu_lucky_miss') updated._usedLuckyMiss = true;
     if (puId === 'pu_fourth_dart') updated._usedFourthDart = true;
+    if (puId === 'pu_rethrow') updated._usedRethrow = true;
+    if (puId === 'pu_cripple') updated._usedCripple = true;
     return updated;
   });
   toast(message);

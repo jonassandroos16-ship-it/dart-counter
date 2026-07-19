@@ -15,24 +15,27 @@ export function createGame(modeKey: string, playerIds: string[], players: Player
       gp.powerUpUsed = false;
       gp.powerUpUses = 0;
       gp.powerUpId = src.powerUps?.active ?? null;
+      // Some power-ups start a match partially charged (configured in
+      // settings). Surge is the canonical example — an early-game boost.
+      const s = settings as Settings | null;
+      const startMap = (s && s.powerUpScaling && s.powerUpScaling.startingCharge) || {};
+      const startCharge = startMap[gp.powerUpId || ''] || 0;
+      if (startCharge > 0) {
+        const cap = (s && s.powerUpScaling && s.powerUpScaling.chargeMax) || 100;
+        gp.powerUpCharge = Math.max(0, Math.min(cap, startCharge));
+      }
     }
     if (modeKey === 'battle') {
       const s = settings as Settings | null;
       const attrs = src.attributes || defaultAttributes(s || defaultSettings());
       const cfg = s ? s.powerUpScaling : defaultSettings().powerUpScaling;
-      const startHealth = numOr(cfg.attributeStartHealth, 300);
-      const startArmor = numOr(cfg.attributeStartArmor, 0);
-      const startPower = numOr(cfg.attributeStartPower, 0);
-      const capHealth = Math.max(1, numOr(cfg.healthMax, startHealth));
-      const capArmor = Math.max(0, numOr(cfg.armorMax, startArmor));
-      const capPower = Math.max(0, numOr(cfg.powerMax, startPower));
-      const safeHealth = Number.isFinite(attrs.health) ? (attrs.health as number) : startHealth;
-      const safeArmor = Number.isFinite(attrs.armor) ? (attrs.armor as number) : startArmor;
-      const safePower = Number.isFinite(attrs.power) ? (attrs.power as number) : startPower;
-      gp.hp = Math.max(1, Math.min(capHealth, safeHealth));
-      gp.maxHp = Math.max(1, Math.min(capHealth, safeHealth));
-      gp.armorPct = Math.max(0, Math.min(capArmor, safeArmor));
-      gp.powerPct = Math.max(0, Math.min(capPower, safePower));
+      const safeHealth = Number.isFinite(attrs.health) ? attrs.health : cfg.attributeStartHealth;
+      const safeArmor = Number.isFinite(attrs.armor) ? attrs.armor : cfg.attributeStartArmor;
+      const safePower = Number.isFinite(attrs.power) ? attrs.power : cfg.attributeStartPower;
+      gp.hp = Math.max(1, Math.min(cfg.healthMax, safeHealth));
+      gp.maxHp = Math.max(1, Math.min(cfg.healthMax, safeHealth));
+      gp.armorPct = Math.max(0, Math.min(cfg.armorMax, safeArmor));
+      gp.powerPct = Math.max(0, Math.min(cfg.powerMax, safePower));
       gp.defeated = false;
       gp.attacks = [];
       gp.damageDealt = 0;
@@ -77,6 +80,8 @@ export function recordFromGame(game: Game): GameRecord {
           : pu._usedReroll ? 'pu_reroll'
           : pu._usedLuckyMiss ? 'pu_lucky_miss'
           : pu._usedFourthDart ? 'pu_fourth_dart'
+          : pu._usedRethrow ? 'pu_rethrow'
+          : pu._usedCripple ? 'pu_cripple'
           : null;
         r.usedPowerUp = used;
       }
@@ -193,70 +198,20 @@ export function reconcilePlayerPoints(player: Player, settings: Settings): Playe
   const devBonus = player.developerMode ? 100 : 0;
 
   const attrTotal = totalAttributePointsForLevel(level, settings) + devBonus;
-
-  // Sanitize raw attribute values: clamp NaN/non-finite to the configured
-  // starting value, then clamp to the configured caps. Old saves may carry
-  // values from a previous scaling config (e.g. health=400 when the base is
-  // now 300) — we recompute each attribute from the starting value plus the
-  // points the player could have spent on it, so the stored value always
-  // reflects the current base stats rather than a stale DB snapshot.
-  const startHealth = numOr(cfg.attributeStartHealth, 0);
-  const startArmor = numOr(cfg.attributeStartArmor, 0);
-  const startPower = numOr(cfg.attributeStartPower, 0);
-  const capHealth = numOr(cfg.healthMax, startHealth);
-  const capArmor = numOr(cfg.armorMax, startArmor);
-  const capPower = numOr(cfg.powerMax, startPower);
-  const perHealth = numOr(cfg.healthPerPoint, 1) || 1;
-  const perArmor = numOr(cfg.armorPerPoint, 1) || 1;
-  const perPower = numOr(cfg.powerPerPoint, 1) || 1;
-
-  const rawHealth = Number.isFinite(attrs.health) ? (attrs.health as number) : startHealth;
-  const rawArmor = Number.isFinite(attrs.armor) ? (attrs.armor as number) : startArmor;
-  const rawPower = Number.isFinite(attrs.power) ? (attrs.power as number) : startPower;
-
-  // How many points the player has effectively spent on each attribute,
-  // derived from the stored value vs the current starting value.
-  let healthSpent = safeSpent(rawHealth, startHealth, perHealth);
-  let armorSpent = safeSpent(rawArmor, startArmor, perArmor);
-  let powerSpent = safeSpent(rawPower, startPower, perPower);
-
-  // If the total spent exceeds what the player could have earned, the stored
-  // values came from an old scaling config. Recompute each attribute from the
-  // starting value using the points actually available to spend on it, so the
-  // value is always derived from base stats rather than the stale DB value.
+  const healthSpent = safeSpent(attrs.health, cfg.attributeStartHealth, cfg.healthPerPoint);
+  const armorSpent = safeSpent(attrs.armor, cfg.attributeStartArmor, cfg.armorPerPoint);
+  const powerSpent = safeSpent(attrs.power, cfg.attributeStartPower, cfg.powerPerPoint);
   const attrSpent = healthSpent + armorSpent + powerSpent;
-  if (attrSpent > attrTotal) {
-    // Redistribute the available points proportionally to what was spent,
-    // falling back to an even split when the prior spend can't be honored.
-    if (attrSpent <= 0) {
-      healthSpent = 0; armorSpent = 0; powerSpent = 0;
-    } else {
-      const scale = attrTotal / attrSpent;
-      healthSpent = Math.floor(healthSpent * scale);
-      armorSpent = Math.floor(armorSpent * scale);
-      powerSpent = Math.max(0, attrTotal - healthSpent - armorSpent);
-    }
-  }
-
-  const sanitizedHealth = Math.max(startHealth, Math.min(capHealth, startHealth + healthSpent * perHealth));
-  const sanitizedArmor = Math.max(startArmor, Math.min(capArmor, startArmor + armorSpent * perArmor));
-  const sanitizedPower = Math.max(startPower, Math.min(capPower, startPower + powerSpent * perPower));
-
-  const attrAvail = Math.max(0, attrTotal - (healthSpent + armorSpent + powerSpent));
+  const attrAvail = Math.max(0, attrTotal - attrSpent);
 
   const pwrTotal = totalPowerUpPointsForLevel(level, settings) + devBonus;
   const pwrSpent = (pwr.unlocked || []).length;
   const pwrAvail = Math.max(0, pwrTotal - pwrSpent);
 
-  const nextAttrs = { ...attrs, health: sanitizedHealth, armor: sanitizedArmor, power: sanitizedPower, pointsAvailable: attrAvail };
+  const nextAttrs = { ...attrs, pointsAvailable: attrAvail };
   const nextPwr = { ...pwr, pointsAvailable: pwrAvail };
 
-  const changed =
-    (attrs.pointsAvailable !== attrAvail) ||
-    (attrs.health !== sanitizedHealth) ||
-    (attrs.armor !== sanitizedArmor) ||
-    (attrs.power !== sanitizedPower) ||
-    (pwr.pointsAvailable !== pwrAvail);
+  const changed = (attrs.pointsAvailable !== attrAvail) || (pwr.pointsAvailable !== pwrAvail);
   if (!changed) return player;
   return { ...player, attributes: nextAttrs, powerUps: nextPwr };
 }

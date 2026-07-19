@@ -1,7 +1,7 @@
 export type PlayerSoundId = 'none' | 'hero' | 'villain' | 'cyborg' | 'mystic' | 'beast' | 'champion';
 
 export interface PlayerAttributes {
-  health: number;      // current max health (starts 300)
+  health: number;      // current max health (starts 400)
   armor: number;       // current armor % (starts 0, capped at 60)
   power: number;       // current power % — boosts attack damage (starts 0)
   pointsAvailable: number; // unspent attribute points
@@ -190,6 +190,9 @@ export interface PowerUpScalingConfig {
   powerMax: number;          // hard cap for power (flat bonus per dart)
   healthMax: number;          // hard cap for HP at max level progression
   battleMinDamage: number;    // minimum damage on a successful hit (default 1)
+  // Starting charge (0..chargeMax) for specific power-ups at the start of a
+  // match. Lets early-game power-ups like Surge begin partially charged.
+  startingCharge: Record<string, number>;
 }
 
 export interface Settings {

@@ -3,3 +3,19 @@
   0%, 100% { box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 30%, transparent); }
   50% { box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 70%, transparent); }
 }
+
+.pu-banner {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border-radius: 10px;
+  margin: 6px 0;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  animation: puBannerPulse 1.8s ease-in-out infinite;
+}
+@keyframes puBannerPulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.15); }
+}

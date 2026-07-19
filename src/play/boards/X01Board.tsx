@@ -34,12 +34,19 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
   const enterVisit = () => {
     if (!game.darts.length) { toast('Add at least one dart'); return; }
     const cur0 = game.players[game.turn] as any;
-    const surgeActive = !!cur0._surgeNext;
+    // Surge only fires on the player's NEXT visit — the turn after they
+    // activated it. While `_surgeArmed` is set, surge was activated this visit
+    // and is not yet active.
+    const surgeActive = !!cur0._surgeNext && !cur0._surgeArmed;
+    const crippleActive = !!cur0._crippledNext;
     const rawScored = game.darts.reduce((a, d) => a + d.value, 0);
-    const scored = surgeActive ? rawScored * 2 : rawScored;
+    const surgeScored = surgeActive ? rawScored * 2 : rawScored;
+    const scored = crippleActive ? Math.round(surgeScored * 0.5) : surgeScored;
     const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
     const cur = newPlayers[game.turn] as any;
-    if (cur._surgeNext) delete cur._surgeNext;
+    if (cur._surgeArmed) delete cur._surgeArmed; // armed this visit — surge stays for next
+    else if (cur._surgeNext) delete cur._surgeNext; // surge was active, consume
+    if (cur._crippledNext) delete cur._crippledNext;
     if (cur._fourthDart) delete cur._fourthDart;
 
     if (game.practice) {
@@ -157,17 +164,13 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
       let guards = 0;
       while (guards < g.players.length) {
         const np = g.players[turn] as any;
-        if (np._blockedNext || np._frozenNext) {
-          const flag = np._blockedNext ? 'blocked' : 'frozen';
-          g = { ...g, players: g.players.map((pl, i) => i === turn ? (() => { const c = { ...pl } as any; delete c._blockedNext; delete c._frozenNext; return c; })() : pl) };
-          if (flag === 'frozen') {
-            const frozenPl = g.players[turn];
-            const visits = [...frozenPl.visits, { darts: [], scored: 0, remaining: frozenPl.score, leg: g.leg, frozen: true, date: new Date().toISOString() }];
-            g = { ...g, players: g.players.map((pl, i) => i === turn ? { ...pl, visits } : pl), thrownThisRound: [...(g.thrownThisRound || []), frozenPl.id] };
-          } else {
-            g = { ...g, thrownThisRound: [...(g.thrownThisRound || []), g.players[turn].id] };
-          }
-          toast(`${g.players[turn].name} ${flag === 'frozen' ? 'is frozen' : 'is blocked'} — visit skipped.`);
+        if (np._frozenNext) {
+          g = { ...g, players: g.players.map((pl, i) => i === turn ? (() => { const c = { ...pl } as any; delete c._frozenNext; return c; })() : pl) };
+          const frozenPl = g.players[turn];
+          const visits = [...frozenPl.visits, { darts: [], scored: 0, remaining: frozenPl.score, leg: g.leg, frozen: true, date: new Date().toISOString() }];
+          g = { ...g, players: g.players.map((pl, i) => i === turn ? { ...pl, visits } : pl), thrownThisRound: [...(g.thrownThisRound || []), frozenPl.id] };
+          popups.setFrozen({ name: frozenPl.name });
+          toast(`${frozenPl.name} is frozen — visit skipped.`);
           turn = (turn + 1) % g.players.length;
           guards++;
         } else {
@@ -239,8 +242,23 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
         </div>
         <div className="pc-remaining" style={{ color: projected < 0 ? 'var(--danger)' : 'var(--text)' }}>{projected}</div>
         <div className="checkout-hint center">{checkoutHint(game.practice ? null : projected, game.doubleOut, game.practice)}</div>
+        {game.powerUpsEnabled && (p as any)._oneDartNext && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#f59e0b 18%,var(--bg-3))', border: '1px solid #f59e0b', color: '#f59e0b' }}>
+            🛡️ Blocked! You only get ONE dart this visit.
+          </div>
+        )}
+        {game.powerUpsEnabled && (p as any)._crippledNext && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#ef4444 18%,var(--bg-3))', border: '1px solid #ef4444', color: '#ef4444' }}>
+            🦾 Crippled! You only score 50% this visit.
+          </div>
+        )}
+        {game.powerUpsEnabled && (p as any)._surgeNext && !(p as any)._surgeArmed && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,var(--accent) 18%,var(--bg-3))', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
+            ⚡ Surge active! This visit scores double.
+          </div>
+        )}
         <div className="pc-slots">
-          {Array.from({ length: (game.powerUpsEnabled && (p as any)._fourthDart) ? 4 : 3 }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`} style={i === 3 ? { borderColor: 'var(--accent)' } : {}}>{d ? d.label : (i === 3 ? '🎯' : '–')}</div>; })}
+          {Array.from({ length: (game.powerUpsEnabled && (p as any)._fourthDart) ? 4 : (game.powerUpsEnabled && (p as any)._oneDartNext ? 1 : 3) }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`} style={i === 3 ? { borderColor: 'var(--accent)' } : {}}>{d ? d.label : (i === 3 ? '🎯' : '–')}</div>; })}
         </div>
         <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{buffScored}</b> · Darts thrown: <b style={{ color: 'var(--text)' }}>{(p.visits.reduce((a, v) => a + v.darts.length, 0)) + game.darts.length}</b></div>
         <AttributeStrip playerId={p.id} players={players} mode={game.mode} />
