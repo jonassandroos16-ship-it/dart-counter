@@ -1,5 +1,5 @@
 import type { Game, Settings } from '../types';
-import { getPowerUpInfo } from '../powerups';
+import { getPowerUpInfo, planReroll, type RerollPlan } from '../powerups';
 import { Sound } from '../sound';
 
 export function chargeFromDart(dart: { value: number; isDouble: boolean; mult: number; base: number }, settings: Settings): number {
@@ -48,7 +48,17 @@ export function catchUpBoost(game: Game, playerIdx: number, settings: Settings):
   return 0;
 }
 
-export function activatePowerUp(game: Game, playerIdx: number, settings: Settings, toast: (m: string) => void): Game | null {
+export interface ActivateOptions {
+  // When the equipped power-up is Reroll, the activation flow plans the
+  // reroll (computing the chosen dart up-front), then calls this hook so the
+  // board can show the suspense overlay. The hook receives the planned
+  // result and should resolve to `true` once the overlay has finished
+  // animating (or `false` to cancel the activation without consuming the
+  // charge). If omitted, reroll applies instantly with no overlay.
+  onReroll?: (plan: RerollPlan) => Promise<boolean>;
+}
+
+export async function activatePowerUp(game: Game, playerIdx: number, settings: Settings, toast: (m: string) => void, opts: ActivateOptions = {}): Promise<Game | null> {
   if (!game.powerUpsEnabled) return null;
   const pl = game.players[playerIdx];
   if (!pl) { toast('No player'); return null; }
@@ -61,11 +71,40 @@ export function activatePowerUp(game: Game, playerIdx: number, settings: Setting
   const puId = pl.powerUpId;
   const pu = getPowerUpInfo(puId);
   if (!pu) { toast('No power-up equipped'); return null; }
+
+  // Reroll is special-cased: plan the roll up-front, show the suspense
+  // overlay, then apply the planned result. This keeps the game logic pure
+  // (the chosen value is fixed before the animation runs) while still
+  // giving the player a dramatic reveal.
+  if (puId === 'pu_reroll') {
+    const plan = planReroll(game, playerIdx);
+    if (!plan) { toast('Reroll: no darts to reroll yet.'); return null; }
+    if (opts.onReroll) {
+      const proceed = await opts.onReroll(plan);
+      if (!proceed) return null;
+    }
+    const darts = [...game.darts];
+    darts[plan.idx] = { ...darts[plan.idx], ...plan.newDart };
+    const nextGame = { ...game, darts };
+    const message = `Reroll! Replaced ${plan.oldLabel} with ${plan.newDart.label} (${plan.newDart.value}).`;
+    const withUses = consumeCharge(nextGame, playerIdx, puId);
+    toast(message);
+    Sound.playSfx('impact', settings);
+    return withUses;
+  }
+
   const { game: nextGame, message, ok } = pu.apply(game, playerIdx);
   // If the apply call signalled a failure (ok === false), do NOT consume the
   // charge — the player keeps their full orb and can try again later.
   if (ok === false) { toast(message); return null; }
-  const players = nextGame.players.map((p: any, i: number) => {
+  const withUses = consumeCharge(nextGame, playerIdx, puId);
+  toast(message);
+  Sound.playSfx('impact', settings);
+  return withUses;
+}
+
+function consumeCharge(game: Game, playerIdx: number, puId: string | null | undefined): Game {
+  const players = game.players.map((p: any, i: number) => {
     if (i !== playerIdx) return p;
     const updated: any = { ...p, powerUpCharge: 0, powerUpUses: (p.powerUpUses || 0) + 1 };
     if (puId === 'pu_fourth_dart') updated._fourthDart = true;
@@ -81,7 +120,5 @@ export function activatePowerUp(game: Game, playerIdx: number, settings: Setting
     if (puId === 'pu_cripple') updated._usedCripple = true;
     return updated;
   });
-  toast(message);
-  Sound.playSfx('impact', settings);
-  return { ...nextGame, players };
+  return { ...game, players };
 }

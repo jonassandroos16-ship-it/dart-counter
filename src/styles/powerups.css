@@ -19,3 +19,59 @@
   0%, 100% { filter: brightness(1); }
   50% { filter: brightness(1.15); }
 }
+
+/* ── Reroll suspense overlay ───────────────────────────────────────── */
+.reroll-overlay-bg {
+  position: fixed; inset: 0; z-index: 80;
+  background: rgba(0,0,0,.7);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px; animation: msFade .25s ease;
+}
+.reroll-overlay {
+  width: 100%; max-width: 360px;
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 18px; padding: 20px;
+  box-shadow: var(--shadow);
+  text-align: center;
+  animation: msPop .35s cubic-bezier(.18,.89,.32,1.28);
+}
+.reroll-header {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-bottom: 6px;
+}
+.reroll-icon { font-size: 28px; }
+.reroll-title { font-size: 22px; font-weight: 800; letter-spacing: .02em; }
+.reroll-sub { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+.reroll-value {
+  font-size: 64px; font-weight: 900; line-height: 1;
+  color: var(--text); font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
+  transition: transform .15s ease, color .15s ease;
+  animation: rerollFlicker .12s linear infinite;
+}
+.reroll-value.revealed {
+  animation: rerollLand .55s cubic-bezier(.18,.89,.32,1.28);
+  color: var(--accent);
+}
+@keyframes rerollFlicker {
+  0% { opacity: .85; transform: translateY(-2px); }
+  50% { opacity: 1; transform: translateY(2px); }
+  100% { opacity: .85; transform: translateY(-2px); }
+}
+@keyframes rerollLand {
+  0% { transform: scale(.6); opacity: .4; }
+  60% { transform: scale(1.18); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.reroll-value-num {
+  font-size: 18px; font-weight: 700; margin-top: 6px;
+  color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.reroll-value-num.revealed { color: var(--text); }
+.reroll-behind {
+  margin-top: 12px; font-size: 12px; font-weight: 700;
+  color: var(--accent);
+  padding: 6px 10px; border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-3));
+  display: inline-block;
+}

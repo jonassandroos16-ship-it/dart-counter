@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Game, GameRecord, Player, Settings } from '../../types';
 import { Sound } from '../../sound';
 import type { MusicEngine } from '../../music';
@@ -7,10 +8,14 @@ import { addDartToGame, undoDart } from '../dart';
 import { activatePowerUp } from '../powerups';
 import { finishSimpleGame } from '../finish';
 import { GameOver } from '../GameOver';
+import { RerollOverlay } from '../RerollOverlay';
+import type { RerollPlan } from '../../powerups';
 
 export function KillerBoard({ game, setGame, settings, players, games, toast, music, onQuit, setGames, setPlayers, popups, onGameOver }: {
   game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[]; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void;
 }) {
+  const [reroll, setReroll] = useState<RerollPlan | null>(null);
+  const [rerollResolve, setRerollResolve] = useState<((v: boolean) => void) | null>(null);
   const p = game.players[game.turn];
   const others = [...game.players.slice(game.turn + 1), ...game.players.slice(0, game.turn)];
   const alive = game.players.filter(pl => !pl.eliminated);
@@ -66,7 +71,7 @@ export function KillerBoard({ game, setGame, settings, players, games, toast, mu
     Sound.play('enter', {}, settings);
     if (killedThisVisit) popups.setKill(killedThisVisit);
     let nextTurn = (game.turn + 1) % game.players.length;
-    while (newPlayers[nextTurn].eliminated) nextTurn = (nextTurn + 1) % game.players.length;
+    while (newPlayers[nextTurn].eliminated) nextTurn = (nextTurn + 1) % newPlayers.length;
     if (game.powerUpsEnabled) {
       let guards = 0;
       while (guards < newPlayers.length) {
@@ -125,8 +130,12 @@ export function KillerBoard({ game, setGame, settings, players, games, toast, mu
         <div className="muted small">Lives: <b style={{ color: 'var(--text)' }}>{'❤️'.repeat(p.lives || 0) || 'none'}</b></div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
           <PowerUpOrb game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
-            const next = activatePowerUp(game, game.turn, settings, toast);
-            if (next) setGame(next);
+            activatePowerUp(game, game.turn, settings, toast, {
+              onReroll: (plan) => new Promise<boolean>((resolve) => {
+                setReroll(plan);
+                setRerollResolve(() => resolve);
+              }),
+            }).then((next) => { if (next) setGame(next); });
           }} />
         </div>
       </div>
@@ -170,6 +179,17 @@ export function KillerBoard({ game, setGame, settings, players, games, toast, mu
         </div>
       </div>
       <button className="btn danger sm" style={{ alignSelf: 'flex-end' }} onClick={() => { if (confirm('Quit this game?')) onQuit(); }}>Quit</button>
+      {reroll ? (
+        <RerollOverlay
+          plan={reroll}
+          settings={settings}
+          onDone={() => {
+            setReroll(null);
+            if (rerollResolve) rerollResolve(true);
+            setRerollResolve(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

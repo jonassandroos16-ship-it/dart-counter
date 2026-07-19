@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Game, GameRecord, Player, Settings } from '../../types';
 import { SCORE_POPUPS } from '../../constants';
 import { visitAvg } from '../../logic';
@@ -9,12 +10,16 @@ import { addDartToGame, undoDart, KeypadPad } from '../dart';
 import { activatePowerUp } from '../powerups';
 import { finishSimpleGame } from '../finish';
 import { GameOver } from '../GameOver';
+import { RerollOverlay } from '../RerollOverlay';
+import type { RerollPlan } from '../../powerups';
 
 const HIGH_SCORE_VISITS = 7;
 
 export function HighScoreBoard({ game, setGame, settings, players, games, toast, music, onQuit, setGames, setPlayers, popups, onGameOver }: {
   game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[]; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void;
 }) {
+  const [reroll, setReroll] = useState<RerollPlan | null>(null);
+  const [rerollResolve, setRerollResolve] = useState<((v: boolean) => void) | null>(null);
   const p = game.players[game.turn];
   const others = [...game.players.slice(game.turn + 1), ...game.players.slice(0, game.turn)];
   const visitNum = p.visits.length + 1;
@@ -111,8 +116,12 @@ export function HighScoreBoard({ game, setGame, settings, players, games, toast,
         <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{game.darts.reduce((a, d) => a + d.value, 0)}</b></div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
           <PowerUpOrb game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
-            const next = activatePowerUp(game, game.turn, settings, toast);
-            if (next) setGame(next);
+            activatePowerUp(game, game.turn, settings, toast, {
+              onReroll: (plan) => new Promise<boolean>((resolve) => {
+                setReroll(plan);
+                setRerollResolve(() => resolve);
+              }),
+            }).then((next) => { if (next) setGame(next); });
           }} />
         </div>
       </div>
@@ -139,6 +148,17 @@ export function HighScoreBoard({ game, setGame, settings, players, games, toast,
         <KeypadPad game={game} setGame={setGame as any} onAdd={addDart} onUndo={() => setGame(undoDart(game))} onEnter={enterVisit} />
       </div>
       <button className="btn danger sm" style={{ alignSelf: 'flex-end' }} onClick={() => { if (confirm('Quit this game?')) onQuit(); }}>Quit</button>
+      {reroll ? (
+        <RerollOverlay
+          plan={reroll}
+          settings={settings}
+          onDone={() => {
+            setReroll(null);
+            if (rerollResolve) rerollResolve(true);
+            setRerollResolve(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

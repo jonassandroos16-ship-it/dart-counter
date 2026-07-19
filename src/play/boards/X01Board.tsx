@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Game, GamePlayer, GameRecord, Player, Settings } from '../../types';
 import { MODES, TEAM_COLORS, getTitleInfo } from '../../constants';
 import { recordFromGame, checkoutHint, leadTrailBadge, visitAvg, levelFromXP, getPlayerXPById } from '../../logic';
@@ -9,12 +10,17 @@ import { addDartToGame, undoDart, KeypadPad } from '../dart';
 import { activatePowerUp } from '../powerups';
 import { runMilestones, awardXP, checkTitleUnlocks, awardBadges } from '../rewards';
 import { GameOver } from '../GameOver';
+import { RerollOverlay } from '../RerollOverlay';
+import type { RerollPlan } from '../../powerups';
 
 export function X01Board({ game, setGame, settings, players, games, setGames, setPlayers, toast, music, onQuit, onGameOver, popups }: {
   game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[];
   setGames: (updater: any) => void; setPlayers: (updater: any) => void; toast: (m: string) => void;
   music: MusicEngine; onQuit: () => void; onGameOver: () => void; popups: PopupControls;
 }) {
+  const [reroll, setReroll] = useState<RerollPlan | null>(null);
+  const [rerollResolve, setRerollResolve] = useState<((v: boolean) => void) | null>(null);
+
   if (game.finished) return <GameOver game={game} onNewGame={() => { setGame(null); onGameOver(); music.startContext('setup', settings); }} onViewStats={() => { setGame(null); onGameOver(); }} />;
 
   const p = game.players[game.turn];
@@ -264,8 +270,12 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
         <AttributeStrip playerId={p.id} players={players} mode={game.mode} />
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
           <PowerUpOrb game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
-            const next = activatePowerUp(game, game.turn, settings, toast);
-            if (next) setGame(next);
+            activatePowerUp(game, game.turn, settings, toast, {
+              onReroll: (plan) => new Promise<boolean>((resolve) => {
+                setReroll(plan);
+                setRerollResolve(() => resolve);
+              }),
+            }).then((next) => { if (next) setGame(next); });
           }} />
         </div>
       </div>
@@ -307,6 +317,17 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
         <KeypadPad game={game} setGame={setGame as any} onAdd={addDart} onUndo={() => setGame(undoDart(game))} onEnter={enterVisit} />
       </div>
       <button className="btn danger sm" style={{ alignSelf: 'flex-end' }} onClick={() => { if (confirm('Quit this game? Progress will not be saved.')) onQuit(); }}>Quit</button>
+      {reroll ? (
+        <RerollOverlay
+          plan={reroll}
+          settings={settings}
+          onDone={() => {
+            setReroll(null);
+            if (rerollResolve) rerollResolve(true);
+            setRerollResolve(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
