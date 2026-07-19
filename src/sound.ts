@@ -106,7 +106,8 @@ function playSfxByName(ctx: AudioContext, name: string, vol: number, startOffset
       osc(ctx, master, 180, t, 0.14, 'sine', 0.6);
       noiseBurst(ctx, master, t, 0.06, 0.3, 2000, 1500);
       break;
-    case 'win': {\n      const notes = [523, 659, 784, 1047];
+    case 'win': {
+      const notes = [523, 659, 784, 1047];
       notes.forEach((f, i) => osc(ctx, master, f, t + i * 0.12, 0.4, 'triangle', 0.4));
       break;
     }
@@ -134,7 +135,8 @@ function playSfxByName(ctx: AudioContext, name: string, vol: number, startOffset
       sweep(ctx, master, t, 0.6, 180, 50, 'sine', 0.7);
       noiseBurst(ctx, master, t, 0.4, 0.4, 500, 100);
       break;
-    case 'record': {\n      const notes = [392, 523, 659, 784, 1047, 1319];
+    case 'record': {
+      const notes = [392, 523, 659, 784, 1047, 1319];
       notes.forEach((f, i) => osc(ctx, master, f, t + i * 0.10, 0.3, 'triangle', 0.4));
       break;
     }
