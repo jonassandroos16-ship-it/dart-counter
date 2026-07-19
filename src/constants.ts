@@ -38,6 +38,12 @@ export function showdownBgFor(players: { showdownBg?: string }[]): string {
   return SHOWDOWN_BGS[0].css;
 }
 
+export function showdownBgCssForId(id?: string | null): string | null {
+  if (!id) return null;
+  const found = SHOWDOWN_BGS.find(b => b.id === id);
+  return found ? found.css : null;
+}
+
 export const CHECKOUTS: Record<number, string[]> = {
   170:['T20','T20','Bull'],167:['T20','T19','Bull'],164:['T20','T18','Bull'],161:['T20','T17','Bull'],
   160:['T20','T20','D20'],158:['T20','T20','D19'],157:['T20','T19','D20'],156:['T20','T20','D18'],
