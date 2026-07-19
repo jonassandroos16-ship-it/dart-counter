@@ -16,9 +16,10 @@ import {
   computeUnlockedTitlesForPlayer,
   retroUnlockAll,
   reconcilePlayerPoints,
+  computeBattleDartDamage,
 } from './logic';
 import { defaultSettings } from './constants';
-import type { Game, GamePlayer, GameRecord, Player, Visit } from './types';
+import type { Game, GamePlayer, GameRecord, Player, Settings, Visit } from './types';
 
 const settings = defaultSettings();
 
@@ -508,5 +509,48 @@ describe('reconcilePlayerPoints — health recalculation from base stats', () =>
     // Level 2 → 5 attribute points. All 5 go to health (since armor/power are 0).
     expect(out.attributes?.health).toBe(cfg.attributeStartHealth + 5 * cfg.healthPerPoint);
     expect(out.attributes?.pointsAvailable).toBe(0);
+  });
+});
+
+// Regression: a real backup had a `powerUpScaling` block that predated the
+// `healthMax` and `battleMinDamage` fields. Loading that backup produced
+// `undefined` for those fields, and `Math.min(undefined, hp)` → NaN, which
+// corrupted battle-mode HP (showed as NaN, became 0 after spending a point).
+describe('battle mode — missing powerUpScaling fields (NaN regression)', () => {
+  function makePartialSettings(): Settings {
+    // Mirrors the user's imported backup: no `healthMax`, no `battleMinDamage`.
+    const s = defaultSettings();
+    const partial: any = { ...s.powerUpScaling };
+    delete partial.healthMax;
+    delete partial.battleMinDamage;
+    return { ...s, powerUpScaling: partial };
+  }
+
+  it('createGame never produces NaN hp/maxHp/armorPct/powerPct when healthMax is missing', () => {
+    const s = makePartialSettings();
+    const player: Player = {
+      id: 'p1', name: 'P1', color: '#22c55e',
+      attributes: { health: 400, armor: 5, power: 5, pointsAvailable: 10 },
+    };
+    const game = createGame('battle', ['p1'], [player], false, 1, false, [], false, s);
+    const gp = game.players[0];
+    expect(Number.isFinite(gp.hp)).toBe(true);
+    expect(Number.isFinite(gp.maxHp)).toBe(true);
+    expect(Number.isFinite(gp.armorPct)).toBe(true);
+    expect(Number.isFinite(gp.powerPct)).toBe(true);
+    expect(gp.hp).toBe(400);
+    expect(gp.maxHp).toBe(400);
+  });
+
+  it('computeBattleDartDamage never returns NaN when battleMinDamage is missing', () => {
+    const s = makePartialSettings();
+    const dmg = computeBattleDartDamage(20, 5, 0, s);
+    expect(Number.isFinite(dmg)).toBe(true);
+    expect(dmg).toBeGreaterThan(0);
+  });
+
+  it('computeBattleDartDamage on a miss returns 0 even with missing fields', () => {
+    const s = makePartialSettings();
+    expect(computeBattleDartDamage(0, 5, 0, s)).toBe(0);
   });
 });
