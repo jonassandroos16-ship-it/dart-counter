@@ -82,8 +82,8 @@ export interface GamePlayer {
   // Battle mode state (only present when game.mode === 'battle').
   hp?: number;              // current health points (decreases when attacked)
   maxHp?: number;           // snapshot of max HP at game start
-  armorPct?: number;        // snapshot of armor % at game start
-  powerPct?: number;        // snapshot of power % at game start
+  armorPct?: number;        // snapshot of armor (flat reduction per dart) at game start
+  powerPct?: number;        // snapshot of power (flat bonus per dart) at game start
   defeated?: boolean;       // true when HP hits 0
   attacks?: { target: string; damage: number; visit: number; date: string }[];
   damageDealt?: number;     // total damage dealt this match
@@ -184,12 +184,12 @@ export interface PowerUpScalingConfig {
   attributeStartArmor: number;
   attributeStartPower: number;
   healthPerPoint: number;   // HP gained per point spent on health
-  armorPerPoint: number;     // armor % gained per point spent on armor
-  powerPerPoint: number;     // power % gained per point spent on power
-  armorMax: number;          // hard cap for armor % (default 60)
-  powerMax: number;          // hard cap for power % (default 100)
-  battleBaseDamage: number;  // base attack damage per visit in battle mode
-  battlePowerBonus: number;  // extra damage per point of power %
+  armorPerPoint: number;     // armor gained per point spent on armor (flat, per dart)
+  powerPerPoint: number;     // power gained per point spent on power (flat, per dart)
+  armorMax: number;          // hard cap for armor (flat reduction per dart)
+  powerMax: number;          // hard cap for power (flat bonus per dart)
+  healthMax: number;          // hard cap for HP at max level progression
+  battleMinDamage: number;    // minimum damage on a successful hit (default 1)
 }
 
 export interface Settings {
