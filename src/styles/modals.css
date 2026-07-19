@@ -1,0 +1,27 @@
+.modal-bg { position: fixed; inset:0; background: rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center; z-index:50; padding:16px; }
+.modal { width:100%; max-width: 420px; background: var(--bg-2); border:1px solid var(--border); border-radius:18px; padding:18px; box-shadow: var(--shadow); max-height: 80vh; overflow-y: auto; }
+
+.milestone-bg { position: fixed; inset:0; background: rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; z-index:70; padding:16px; animation: msFade .3s ease; }
+.milestone { text-align:center; animation: msPop .4s cubic-bezier(.18,.89,.32,1.28); }
+.milestone .ms-emoji { font-size:64px; line-height:1; }
+.milestone .ms-title { font-size:28px; font-weight:900; margin:8px 0 4px; }
+.milestone .ms-sub { font-size:15px; color: var(--muted); }
+.milestone .ms-record { font-size:14px; font-weight:700; color: var(--accent); margin-top:6px; }
+@keyframes msPop { 0%{transform:scale(.5);opacity:0} 60%{transform:scale(1.08);opacity:1} 100%{transform:scale(1)} }
+@keyframes msFade { from{opacity:0} to{opacity:1} }
+
+.levelup-bg { position:fixed; inset:0; background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; z-index:70; padding:16px; animation:msFade .3s ease; }
+.levelup { text-align:center; animation:msPop .4s cubic-bezier(.18,.89,.32,1.28); }
+.levelup .lu-ring { width:100px; height:100px; border-radius:50%; background:color-mix(in srgb,var(--accent) 20%,var(--bg-2)); display:flex; align-items:center; justify-content:center; margin:0 auto 12px; border:3px solid var(--accent); }
+.levelup .lu-level { font-size:36px; font-weight:900; color:var(--accent); }
+.levelup .lu-title { font-size:22px; font-weight:900; }
+.levelup .lu-sub { font-size:14px; color: var(--muted); margin-top:4px; }
+.levelup .lu-xp { font-size:13px; font-weight:700; color:var(--accent); margin-top:8px; }
+
+.kill-bg { position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:center; justify-content:center; z-index:75; padding:16px; animation:msFade .3s ease; }
+.kill { text-align:center; animation: killPop .5s cubic-bezier(.18,.89,.32,1.28); }
+.kill .kill-emoji { font-size:72px; line-height:1; animation: killShake .5s ease-in-out; }
+.kill .kill-title { font-size:32px; font-weight:900; letter-spacing:.04em; color:#ef4444; text-shadow: 0 0 24px color-mix(in srgb,#ef4444 50%, transparent); margin:6px 0; }
+.kill .kill-sub { font-size:16px; color: var(--text); }
+@keyframes killPop { 0%{transform:scale(.3);opacity:0} 50%{transform:scale(1.15);opacity:1} 100%{transform:scale(1)} }
+@keyframes killShake { 0%,100%{transform:translateX(0) rotate(0)} 20%{transform:translateX(-8px) rotate(-6deg)} 40%{transform:translateX(8px) rotate(6deg)} 60%{transform:translateX(-5px) rotate(-3deg)} 80%{transform:translateX(5px) rotate(3deg)} }

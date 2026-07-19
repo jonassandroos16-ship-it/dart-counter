@@ -1,0 +1,5 @@
+.pu-orb-charged-waiting { animation: puOrbWaiting 1.4s ease-in-out infinite; }
+@keyframes puOrbWaiting {
+  0%, 100% { box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 30%, transparent); }
+  50% { box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 70%, transparent); }
+}

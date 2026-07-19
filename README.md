@@ -132,9 +132,18 @@ The #1 React bug: **mutating state instead of replacing it.** If you see stale U
 src/
 ├── App.tsx                # Root component — nav, view switching, global effect, audio unlock
 ├── main.tsx               # Entry point — mounts <App/> to #root
-├── index.css              # Global styles + CSS variables (theme, accent, spacing)
+├── index.css              # Entry stylesheet — @imports the styles/ partials below
+├── styles/                # CSS split by concern (base, layout, buttons, cards, play, modals, dartboard, battle, calendar, showdown, powerups)
 ├── types.ts               # All TypeScript interfaces (Player, Game, Settings, etc.)
-├── constants.ts           # Game modes, titles, showdown backgrounds, checkout table, defaults
+├── constants/             # Game data split by domain — barrel re-exported via constants/index.ts
+│   ├── colors.ts          # COLORS, TEAM_COLORS, TEAM_NAMES
+│   ├── sounds.ts          # PLAYER_SOUNDS
+│   ├── showdown.ts        # SHOWDOWN_BGS + helpers
+│   ├── checkouts.ts       # CHECKOUTS table
+│   ├── modes.ts           # MODES, MODE_KEYS, ATC_TARGETS, atcLabel, DARTBOARD_NUMBERS
+│   ├── popups.ts          # SCORE_POPUPS, MILESTONES
+│   ├── titles.ts          # TitleCtx, TitleDef, BUILTIN_TITLES, buildTitleCheck, conditionLabel, allTitles, getTitleInfo, titleProgressInfo
+│   └── settings.ts        # defaultSettings()
 ├── logic.ts               # Pure game logic: createGame, recordFromGame, stats, XP, battle damage
 ├── badges.ts              # Badge definitions, lifetime aggregations, and award logic
 ├── powerups.ts            # Power-up definitions and apply hooks (returns PowerUpResult)
@@ -239,7 +248,7 @@ All audio is synthesized at runtime via the Web Audio API — no `.mp3` or `.wav
 
 ### Add a New Game Mode
 
-1. **`src/constants.ts`** — Add an entry to the `MODES` record:
+1. **`src/constants/modes.ts`** — Add an entry to the `MODES` record:
    ```ts
    'mymode': {
      start: 0, label: 'My Mode',
@@ -255,7 +264,7 @@ All audio is synthesized at runtime via the Web Audio API — no `.mp3` or `.wav
 
 ### Add a New Title
 
-Titles are in `src/constants.ts` in the `BUILTIN_TITLES` array. Each title has a `check` function:
+Titles are in `src/constants/titles.ts` in the `BUILTIN_TITLES` array. Each title has a `check` function:
 
 ```ts
 {
@@ -356,7 +365,7 @@ Then add the id to `VOICE_PACK_LIST` so it appears in Settings. The `playVoiceBy
 
 ### Add a New Showdown Background
 
-Showdown backgrounds are in `src/constants.ts` in the `SHOWDOWN_BGS` array:
+Showdown backgrounds are in `src/constants/showdown.ts` in the `SHOWDOWN_BGS` array:
 
 ```ts
 { id: 'mybg', label: 'My BG', css: 'radial-gradient(circle at 50% 40%, #1a2a3a 0%, #0a0c12 70%)' },
@@ -505,7 +514,7 @@ This only closes when the click lands on the backdrop itself (not its children),
 
 When adding a new field to `Player`, `Game`, or `Settings`:
 - Add it to `src/types.ts` as an optional field (`field?: Type`) if old data might not have it.
-- Add a default in `defaultSettings()` (in `constants.ts`) for new Settings fields.
+- Add a default in `defaultSettings()` (in `constants/settings.ts`) for new Settings fields.
 - Update `loadSettings()` in `store.ts` to merge the new field with defaults.
 - For Supabase-backed fields, the merge functions in `store.ts` (`mergePlayers`, `mergeSettings`) should handle missing fields gracefully.
 
@@ -593,7 +602,7 @@ Before committing, verify that the README still describes a working, building pr
 ### Quick checklist for every PR
 
 - [ ] Features section lists any new/changed feature by name
-- [ ] "How to Add" snippets match the real interfaces in `types.ts`, `badges.ts`, `powerups.ts`, `constants.ts`
+- [ ] "How to Add" snippets match the real interfaces in `types.ts`, `badges.ts`, `powerups.ts`, `constants/`
 - [ ] Project Architecture tree matches `src/` (including `play/` and `play/boards/`)
 - [ ] Data Flow diagram still matches the actual state flow
 - [ ] Common React Bugs section includes any new bug class you encountered
