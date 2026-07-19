@@ -135,3 +135,66 @@
 .battle-shake-light { animation: battleShakeLight .4s ease; }
 .battle-shake-medium { animation: battleShakeMedium .55s ease; }
 .battle-shake-heavy { animation: battleShakeHeavy .7s ease; }
+
+/* ── Frozen overlay (enemy phase skipped due to freeze) ────────────── */
+.battle-overlay.frozen-overlay {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, #1e3a8a 38%, var(--bg-2)) 0%,
+    color-mix(in srgb, #0ea5e9 18%, var(--bg-2)) 100%);
+  border: 1px solid color-mix(in srgb, #60a5fa 55%, var(--border));
+  box-shadow: 0 0 30px color-mix(in srgb, #60a5fa 35%, transparent),
+              var(--shadow);
+}
+.frozen-icon {
+  font-size: 44px;
+  text-align: center;
+  margin-bottom: 6px;
+  animation: frostPulse 1.8s ease-in-out infinite;
+  text-shadow: 0 0 18px color-mix(in srgb, #bae6fd 70%, transparent);
+}
+.frozen-title {
+  text-align: center;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  color: #e0f2fe;
+  margin-bottom: 4px;
+  text-shadow: 0 0 14px color-mix(in srgb, #60a5fa 60%, transparent);
+}
+.frozen-subtitle {
+  text-align: center;
+  font-size: 12px;
+  color: #bae6fd;
+  margin-bottom: 12px;
+  font-style: italic;
+}
+.frozen-enemy-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, #60a5fa 14%, var(--bg-3));
+  border: 1px solid color-mix(in srgb, #60a5fa 40%, var(--border));
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: #e0f2fe;
+}
+.frozen-enemy-row .frozen-badge {
+  font-size: 11px; font-weight: 800;
+  padding: 2px 8px; border-radius: 999px;
+  background: #60a5fa; color: #0b0e13;
+}
+@keyframes frostPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.08); opacity: 0.85; }
+}
+/* Battle view frosty tint applied while a frozen popup is showing. */
+.battle-frost-tint {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(circle at 50% 30%,
+    color-mix(in srgb, #60a5fa 22%, transparent) 0%,
+    color-mix(in srgb, #1e3a8a 10%, transparent) 60%,
+    transparent 100%);
+  animation: msFade .4s ease;
+  z-index: 1;
+}

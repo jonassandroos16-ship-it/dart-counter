@@ -286,6 +286,11 @@ export interface CampaignBattleState {
   // Phantom Darts power-up: when > 0, the next darts thrown by the current
   // player are auto-converted to bullseyes (50 each).
   phantomDarts: number;
+  // Enemies that were frozen (skipped) during the current enemy phase. The
+  // UI shows a "frozen" popup listing these enemies and their remaining
+  // frozen turns, then advances to the player phase on Continue. Cleared
+  // at the start of each enemy phase by `prepareEnemyTurn`.
+  frozenEnemiesThisRound: { id: string; name: string; frozenTurns: number }[];
 }
 
 // Persisted progress (also stored to localStorage + Supabase).
