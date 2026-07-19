@@ -20,6 +20,11 @@ export interface BadgeDef {
   context?: (playerId: string, games: any[]) => number | string | null;
   // Short label describing what the context value represents (used in UI).
   contextLabel?: string;
+  // When true, this badge is only awarded in matches where power ups were
+  // enabled. When false (default), the badge is only awarded in standard
+  // (non-power-up) matches. This keeps the two pools mutually exclusive so
+  // power-up games surface their own dedicated badge set.
+  powerUpOnly?: boolean;
 }
 
 const dartsOf = (visits: any[]) => visits.flatMap((v: any) => v.darts || []);
@@ -51,7 +56,7 @@ function aggregate(
 // Total kills across all killer-mode games for this player.
 export function lifetimeKills(playerId: string, games: any[]): number {
   return (games || []).reduce((acc: number, g: any) => {
-    if (!g || !g.players || g.mode !== 'killer') return acc;
+    if (!g || g.players || g.mode !== 'killer') return acc;
     const pl = (g.players as any[]).find((p) => p.id === playerId);
     return acc + ((pl?.kills as string[])?.length || 0);
   }, 0);
@@ -218,7 +223,57 @@ export const BADGES: BadgeDef[] = [
       return slayers.length === 1 ? slayers[0].id : slayers.map((p: any) => p.id);
     },
     context: lifetimeKills, contextLabel: 'kills' },
+
+  // ============ Power-up matches (only awarded when powerUpsEnabled) ============
+  { id: 'b_power_charged', name: 'Fully Charged', desc: 'Charge your power-up to 100% during a power-up match', icon: '🔋', kind: 'post-game', powerUpOnly: true,
+    pick: (game) => {
+      if (!game || !game.powerUpsEnabled) return null;
+      const charged = (game.players || []).filter((p: any) => (p.powerUpCharge || 0) >= 100).map((p: any) => p.id);
+      if (!charged.length) return null;
+      return charged.length === 1 ? charged[0] : charged;
+    } },
+  { id: 'b_power_used', name: 'Unleashed', desc: 'Activate your equipped power-up during a power-up match', icon: '⚡', kind: 'post-game', powerUpOnly: true,
+    pick: (game) => {
+      if (!game || !game.powerUpsEnabled) return null;
+      const used = (game.players || []).filter((p: any) => p.powerUpUsed).map((p: any) => p.id);
+      if (!used.length) return null;
+      return used.length === 1 ? used[0] : used;
+    } },
+  { id: 'b_power_blocker', name: 'Wall Builder', desc: 'Win a power-up match after activating Blocker', icon: '🛡️', kind: 'post-game', powerUpOnly: true,
+    pick: (game) => pickPowerUpWinner(game, 'pu_blocker') },
+  { id: 'b_power_surge', name: 'Surge Rider', desc: 'Win a power-up match after activating Surge', icon: '⚡', kind: 'post-game', powerUpOnly: true,
+    pick: (game) => pickPowerUpWinner(game, 'pu_surge') },
+  { id: 'b_power_steal', name: 'Thief', desc: 'Win a power-up match after activating Steal', icon: '🥷', kind: 'post-game', powerUpOnly: true,
+    pick: (game) => pickPowerUpWinner(game, 'pu_steal') },
+  { id: 'b_power_freeze', name: 'Cold Snap', desc: 'Win a power-up match after activating Freeze', icon: '❄️', kind: 'post-game', powerUpOnly: true,
+    pick: (game) => pickPowerUpWinner(game, 'pu_freeze') },
+  { id: 'b_power_reroll', name: 'Lucky Hand', desc: 'Win a power-up match after activating Reroll', icon: '🎲', kind: 'post-game', powerUpOnly: true,
+    pick: (game) => pickPowerUpWinner(game, 'pu_reroll') },
+  { id: 'b_power_lucky', name: 'Saved', desc: 'Win a power-up match after activating Lucky Miss', icon: '🍀', kind: 'post-game', powerUpOnly: true,
+    pick: (game) => pickPowerUpWinner(game, 'pu_lucky_miss') },
+  { id: 'b_power_fourth', name: 'Quad Squad', desc: 'Win a power-up match after activating Fourth Dart', icon: '🎯', kind: 'post-game', powerUpOnly: true,
+    pick: (game) => pickPowerUpWinner(game, 'pu_fourth_dart') },
 ];
+
+// Awards a power-up badge to the winner of a power-up match if they activated
+// the given power-up. Works for both in-progress games (which carry `_usedX`
+// flags on the player) and stored GameRecords (which carry `usedPowerUp`).
+function pickPowerUpWinner(game: any, puId: string): string | null {
+  if (!game || !game.powerUpsEnabled || !game.winner) return null;
+  const w = (game.players || []).find((p: any) => p.id === game.winner);
+  if (!w) return null;
+  const flagMap: Record<string, string> = {
+    pu_blocker: '_usedBlocker',
+    pu_surge: '_usedSurge',
+    pu_steal: '_usedSteal',
+    pu_freeze: '_usedFreeze',
+    pu_reroll: '_usedReroll',
+    pu_lucky_miss: '_usedLuckyMiss',
+    pu_fourth_dart: '_usedFourthDart',
+  };
+  const used = (w as any).usedPowerUp === puId || (w as any)[flagMap[puId]] === true;
+  return used ? game.winner : null;
+}
 
 function pickExtreme(game: any, score: (pl: any) => number, mode: 'max' | 'min'): string | string[] | null {
   const players = (game?.players || []).filter((p: any) => (p.visits || []).length > 0);
@@ -269,7 +324,12 @@ export function computeGameBadges(game: any): Record<string, string[]> {
   // Solo games (playing against yourself) don't earn badges — there's no
   // opponent to compete against, so comparative awards are meaningless.
   if ((game?.players || []).length < 2) return out;
+  const powerUpsOn = !!(game && game.powerUpsEnabled);
   for (const badge of BADGES) {
+    // Power-up-only badges only fire in power-up matches; standard badges
+    // are disabled when power ups are on so the two pools stay separate.
+    if (badge.powerUpOnly && !powerUpsOn) continue;
+    if (!badge.powerUpOnly && powerUpsOn) continue;
     if (badge.kind === 'in-game') {
       for (const pl of game.players || []) {
         try {
