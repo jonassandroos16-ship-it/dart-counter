@@ -434,6 +434,7 @@ export function computeUnlockedTitlesForPlayer(
   playerId: string,
   games: GameRecord[],
   customTitles: CustomTitle[] = [],
+  campaignProgress: { highest_level_beaten: number } | null = null,
 ): string[] {
   const playerGames = games.filter(g => g.players.some(p => p.id === playerId));
   const gamesWon = playerGames.filter(g => g.players.length >= 2 && g.winner === playerId).length;
@@ -451,7 +452,7 @@ export function computeUnlockedTitlesForPlayer(
   ];
   const unlocked = new Set<string>();
 
-  const ctx: TitleCtx = { playerId, games: playerGames, gamesPlayed, gamesWon, lifetimeVisits };
+  const ctx: TitleCtx = { playerId, games: playerGames, gamesPlayed, gamesWon, lifetimeVisits, campaignProgress };
 
   titles.forEach(t => {
     try { if (t.check(lifetimeVisits, [], null, ctx)) unlocked.add(t.id); } catch { /* ignore */ }
@@ -475,9 +476,10 @@ export function retroUnlockPlayerTitles(
   player: Player,
   games: GameRecord[],
   customTitles: CustomTitle[] = [],
+  campaignProgress: { highest_level_beaten: number } | null = null,
 ): Player {
   const existing = new Set(player.unlockedTitles || []);
-  const found = computeUnlockedTitlesForPlayer(player.id, games, customTitles);
+  const found = computeUnlockedTitlesForPlayer(player.id, games, customTitles, campaignProgress);
   let changed = false;
   found.forEach(id => { if (!existing.has(id)) { existing.add(id); changed = true; } });
   return changed ? { ...player, unlockedTitles: Array.from(existing) } : player;
@@ -487,10 +489,11 @@ export function retroUnlockAll(
   players: Player[],
   games: GameRecord[],
   customTitles: CustomTitle[] = [],
+  campaignProgress: { highest_level_beaten: number } | null = null,
 ): { players: Player[]; changed: boolean } {
   let changed = false;
   const next = players.map(p => {
-    const updated = retroUnlockPlayerTitles(p, games, customTitles);
+    const updated = retroUnlockPlayerTitles(p, games, customTitles, campaignProgress);
     if (updated !== p) changed = true;
     return updated;
   });

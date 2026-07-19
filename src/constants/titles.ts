@@ -6,6 +6,7 @@ export interface TitleCtx {
   gamesPlayed?: number;
   gamesWon?: number;
   lifetimeVisits?: any[];
+  campaignProgress?: { highest_level_beaten: number } | null;
 }
 
 export interface TitleDef {
@@ -284,6 +285,25 @@ export const BUILTIN_TITLES: TitleDef[] = [
     check: (_v, _gv, g) => !!(g?.teamMode && g.legsBestOf > 1 && g.winningTeam != null && g.players.some((p:any) => p.team === g.winningTeam)) },
   { id: 'team_rivalry', name: 'Rivalry', desc: 'Play a team match against at least 2 other teams', icon: '⚔️',
     check: (_v, _gv, g) => !!(g?.teamMode && (g.teamCount || 0) >= 2 && g.players.some((p:any) => p.id === (g.players.find((pp:any) => pp.team === g.winningTeam)?.id))) },
+
+  // ============ Co-op Campaign ============
+  // Coop titles are awarded based on campaign progress stored under the
+  // `dc_campaign_progress` localStorage key. We read it via the ctx's
+  // `campaignProgress` field (passed in by the caller). Since campaign
+  // progress isn't tied to a specific game record, these titles use the
+  // lifetime/ctx form of the check.
+  { id: 'coop_first_clear', name: 'First Strike', desc: 'Clear your first Co-op Campaign level', icon: '🛡️',
+    check: (_v, _gv, _g, ctx) => (ctx?.campaignProgress?.highest_level_beaten || 0) >= 1,
+    progress: (ctx) => ({ current: Math.min(ctx?.campaignProgress?.highest_level_beaten || 0, 1), target: 1 }) },
+  { id: 'coop_3_clears', name: 'Campaigner', desc: 'Clear 3 Co-op Campaign levels', icon: '🗺️',
+    check: (_v, _gv, _g, ctx) => (ctx?.campaignProgress?.highest_level_beaten || 0) >= 3,
+    progress: (ctx) => ({ current: Math.min(ctx?.campaignProgress?.highest_level_beaten || 0, 3), target: 3 }) },
+  { id: 'coop_boss_slayer', name: 'Boss Slayer', desc: 'Defeat the final boss of the Co-op Campaign', icon: '☠️',
+    check: (_v, _gv, _g, ctx) => (ctx?.campaignProgress?.highest_level_beaten || 0) >= 5,
+    progress: (ctx) => ({ current: Math.min(ctx?.campaignProgress?.highest_level_beaten || 0, 5), target: 5 }) },
+  { id: 'coop_full_clear', name: 'Campaign Conqueror', desc: 'Clear every Co-op Campaign level', icon: '👑',
+    check: (_v, _gv, _g, ctx) => (ctx?.campaignProgress?.highest_level_beaten || 0) >= 99,
+    progress: (ctx) => ({ current: Math.min(ctx?.campaignProgress?.highest_level_beaten || 0, 99), target: 99 }) },
 ];
 
 

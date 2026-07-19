@@ -17,7 +17,7 @@ export interface BadgeDef {
   // Optional context value shown alongside the badge icon when equipped.
   // Returns the lifetime aggregate for this player across the given games
   // (e.g. total kills, lifetime high score). Return null/undefined to hide.
-  context?: (playerId: string, games: any[]) => number | string | null;
+  context?: (playerId: string, games: any[], ctx?: any) => number | string | null;
   // Short label describing what the context value represents (used in UI).
   contextLabel?: string;
   // When true, this badge is only awarded in matches where power ups were
@@ -25,6 +25,10 @@ export interface BadgeDef {
   // (non-power-up) matches. This keeps the two pools mutually exclusive so
   // power-up games surface their own dedicated badge set.
   powerUpOnly?: boolean;
+  // When true, this badge is a Co-op Campaign badge. It is never earned from
+  // a game record; instead its `context` function reads from the campaign
+  // progress / coop stats passed via the ctx parameter.
+  coopOnly?: boolean;
 }
 
 const dartsOf = (visits: any[]) => visits.flatMap((v: any) => v.darts || []);
@@ -254,6 +258,28 @@ export const BADGES: BadgeDef[] = [
     pick: (game) => pickPowerUpWinner(game, 'pu_rethrow') },
   { id: 'b_power_cripple', name: 'Saboteur', desc: 'Win a power-up match after activating Cripple', icon: '🦾', kind: 'post-game', powerUpOnly: true,
     pick: (game) => pickPowerUpWinner(game, 'pu_cripple') },
+
+  // ============ Co-op Campaign ============
+  // Coop badges are awarded based on the campaign progress stored under
+  // `dc_campaign_progress`. Since campaign progress isn't tied to a specific
+  // game record, these badges use the `context` function form to surface
+  // the highest level beaten as the badge context value.
+  { id: 'b_coop_first_clear', name: 'First Strike', desc: 'Clear your first Co-op Campaign level', icon: '🛡️', kind: 'in-game', coopOnly: true,
+    check: (_v, _game) => false, // coop badges are never earned from a game record
+    context: (_playerId, _games, ctx?: any) => (ctx?.campaignProgress?.highest_level_beaten || 0) >= 1 ? 1 : 0,
+    contextLabel: 'levels' },
+  { id: 'b_coop_boss_slayer', name: 'Boss Slayer', desc: 'Defeat the final boss of the Co-op Campaign', icon: '☠️', kind: 'in-game', coopOnly: true,
+    check: (_v, _game) => false,
+    context: (_playerId, _games, ctx?: any) => (ctx?.campaignProgress?.highest_level_beaten || 0) >= 5 ? 1 : 0,
+    contextLabel: 'boss' },
+  { id: 'b_coop_healer', name: 'Field Medic', desc: 'Use the Heal power-up in a Co-op battle', icon: '❤️', kind: 'in-game', coopOnly: true,
+    check: (_v, _game) => false,
+    context: (_playerId, _games, ctx?: any) => (ctx?.coopStats?.healsUsed || 0),
+    contextLabel: 'heals' },
+  { id: 'b_coop_freezer', name: 'Cold Front', desc: 'Use the Freeze power-up in a Co-op battle', icon: '❄️', kind: 'in-game', coopOnly: true,
+    check: (_v, _game) => false,
+    context: (_playerId, _games, ctx?: any) => (ctx?.coopStats?.freezesUsed || 0),
+    contextLabel: 'freezes' },
 ];
 
 // Awards a power-up badge to the winner of a power-up match if they activated
@@ -304,12 +330,13 @@ export function getBadgeContext(
   badgeId: string | null | undefined,
   playerId: string,
   games: any[],
+  ctx?: any,
 ): { value: number | string; label: string } | null {
   if (!badgeId) return null;
   const b = getBadgeInfo(badgeId);
   if (!b || !b.context) return null;
   try {
-    const v = b.context(playerId, games || []);
+    const v = b.context(playerId, games || [], ctx);
     if (v == null) return null;
     if (typeof v === 'number' && v <= 0) return null;
     if (typeof v === 'string' && !v) return null;
@@ -317,6 +344,23 @@ export function getBadgeContext(
   } catch {
     return null;
   }
+}
+
+// Build the extra ctx object (campaign progress + coop stats) that coop
+// badge context functions read from. Reads from localStorage so callers
+// don't need to thread the data through manually.
+export function buildCoopBadgeCtx(): any {
+  let campaignProgress: { highest_level_beaten: number } | null = null;
+  let coopStats: any = null;
+  try {
+    const raw = localStorage.getItem('dc_campaign_progress');
+    if (raw) campaignProgress = JSON.parse(raw);
+  } catch { /* ignore */ }
+  try {
+    const raw = localStorage.getItem('dc_coop_stats');
+    if (raw) coopStats = JSON.parse(raw);
+  } catch { /* ignore */ }
+  return { campaignProgress, coopStats };
 }
 
 export function computeGameBadges(game: any): Record<string, string[]> {
@@ -333,6 +377,8 @@ export function computeGameBadges(game: any): Record<string, string[]> {
     // are disabled when power ups are on so the two pools stay separate.
     if (badge.powerUpOnly && !powerUpsOn) continue;
     if (!badge.powerUpOnly && powerUpsOn) continue;
+    // Co-op Campaign badges are never earned from a game record.
+    if (badge.coopOnly) continue;
     if (badge.kind === 'in-game') {
       for (const pl of game.players || []) {
         try {
