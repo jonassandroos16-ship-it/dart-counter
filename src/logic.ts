@@ -56,7 +56,22 @@ export function recordFromGame(game: Game): GameRecord {
     tied: !!game.tied, tiedPlayers: game.tiedPlayers ?? null,
     teamMode: !!game.teamMode, teamCount: game.teamCount, winningTeam: game.winningTeam ?? null,
     powerUpsEnabled: !!game.powerUpsEnabled,
-    players: game.players.map(pl => ({ id: pl.id, name: pl.name, color: pl.color, legsWon: pl.legsWon, dartsThrown: pl.dartsThrown || 0, visits: pl.visits, team: pl.team, kills: pl.kills, defeated: pl.defeated })),
+    players: game.players.map(pl => {
+      const r: any = { id: pl.id, name: pl.name, color: pl.color, legsWon: pl.legsWon, dartsThrown: pl.dartsThrown || 0, visits: pl.visits, team: pl.team, kills: pl.kills, defeated: pl.defeated };
+      if (game.powerUpsEnabled) {
+        const pu = (pl as any);
+        const used = pu._usedBlocker ? 'pu_blocker'
+          : pu._usedSurge ? 'pu_surge'
+          : pu._usedSteal ? 'pu_steal'
+          : pu._usedFreeze ? 'pu_freeze'
+          : pu._usedReroll ? 'pu_reroll'
+          : pu._usedLuckyMiss ? 'pu_lucky_miss'
+          : pu._usedFourthDart ? 'pu_fourth_dart'
+          : null;
+        r.usedPowerUp = used;
+      }
+      return r;
+    }),
   };
 }
 
