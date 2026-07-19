@@ -3,7 +3,7 @@ import type { Player } from '../types';
 import { MODES, TEAM_COLORS } from '../constants';
 import { initials } from '../store';
 
-export function SetupView({ players, onStart, onOpenCampaign }: { players: Player[]; onStart: (mode: string, ids: string[], dbl: boolean, legs: number, teamMode: boolean, teamAssignment: number[], powerUps: boolean) => void; onOpenCampaign?: () => void }) {
+export function SetupView({ players, onStart, onOpenCampaign, onBackToModeSelect }: { players: Player[]; onStart: (mode: string, ids: string[], dbl: boolean, legs: number, teamMode: boolean, teamAssignment: number[], powerUps: boolean) => void; onOpenCampaign?: () => void; onBackToModeSelect?: () => void }) {
   const [mode, setMode] = useState('301');
   const [doubleOut, setDoubleOut] = useState(false);
   const [legs, setLegs] = useState(1);
@@ -33,7 +33,12 @@ export function SetupView({ players, onStart, onOpenCampaign }: { players: Playe
   return (
     <div className="view-scroll">
       <div className="card">
-        <h2 style={{ marginBottom: 14 }}>New Game</h2>
+        <div className="row between" style={{ marginBottom: 14, alignItems: 'center' }}>
+          <h2 style={{ margin: 0 }}>New Game</h2>
+          {onBackToModeSelect && (
+            <button className="btn ghost sm" onClick={onBackToModeSelect}>← Modes</button>
+          )}
+        </div>
         {onOpenCampaign && (
           <button className="btn block" style={{ marginBottom: 12, background: 'linear-gradient(135deg, color-mix(in srgb,#ef4444 30%,var(--bg-3)) 0%, var(--bg-3) 80%)', borderColor: 'color-mix(in srgb,#ef4444 50%,var(--border))' }} onClick={onOpenCampaign}>
             ⚔️ Co-op Campaign

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Game, GameRecord, Player, Settings } from '../types';
 import { getPowerUpInfo } from '../powerups';
-import { getBadgeInfo, getBadgeContext } from '../badges';
+import { getBadgeInfo, getBadgeContext, buildCoopBadgeCtx } from '../badges';
 import { getPlayerXPById } from '../logic';
 import { initials } from '../store';
 import { Modal } from '../Popups';
@@ -16,7 +16,7 @@ export function BadgeAvatar({ playerId, players, games, size = 32, fontSize, col
 }) {
   const xp = getPlayerXPById(playerId, players);
   const bi = getBadgeInfo(xp.selectedBadge);
-  const ctx = xp.showBadgeContext && games ? getBadgeContext(xp.selectedBadge, playerId, games as any) : null;
+  const ctx = xp.showBadgeContext && games ? getBadgeContext(xp.selectedBadge, playerId, games as any, buildCoopBadgeCtx()) : null;
   const content = bi ? bi.icon : initials(players.find(p => p.id === playerId)?.name || '');
   const radius = shape === 'circle' ? '50%' : '6px';
   return (
