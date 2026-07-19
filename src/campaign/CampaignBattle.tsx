@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { CampaignBattleState, CampaignProgress, CoopPowerUpId, ResolvedDart, EnemyAttackStep } from './types';
+import type { CampaignBattleState, CampaignProgress, CoopPowerUpId, EnemyAttackStep } from './types';
 import {
-  addDart, undoDart, resolvePlayerVisit, applyNextPlayerDart,
+  addDart, undoDart, resolvePlayerVisit,
   prepareEnemyTurn, applyNextEnemyAttack, setTarget, startBattle, getLevel,
   describeShield, getCoopPowerUp, canActivateCoopPowerUp, activateCoopPowerUp,
   levelRewardPowerUp,
@@ -55,12 +55,13 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
     if (state.phase !== 'enemy') return;
     if (state.outcome !== 'ongoing') return;
     if (state.pendingEnemyAttacks.length) return;
+    if (state.appliedEnemyAttacks.length) return;
     const t = setTimeout(() => {
       setState(prev => prepareEnemyTurn(prev));
       Sound.play('impact', {}, settings);
     }, 600);
     return () => clearTimeout(t);
-  }, [state.phase, state.outcome, state.pendingEnemyAttacks.length, settings]);
+  }, [state.phase, state.outcome, state.pendingEnemyAttacks.length, state.appliedEnemyAttacks.length, settings]);
 
   const aliveEnemies = state.enemies.filter(e => !e.defeated);
   const target = state.enemies[state.targetIdx];
@@ -70,6 +71,7 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
   const onAdd = (base: number, m: number, labelOverride?: string, isBull?: boolean) => {
     setState(prev => addDart(prev, base, m, labelOverride, isBull));
     Sound.play('dart', { score: base * m }, settings);
+    if (base > 0) Sound.play('impact', {}, settings);
   };
 
   const onUndo = () => setState(prev => undoDart(prev));
@@ -80,10 +82,7 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
   };
 
   const onContinue = () => {
-    if (state.pendingPlayerDarts.length) {
-      setState(prev => applyNextPlayerDart(prev));
-      Sound.play('impact', {}, settings);
-    } else if (state.pendingEnemyAttacks.length) {
+    if (state.pendingEnemyAttacks.length) {
       setState(prev => applyNextEnemyAttack(prev));
       Sound.play('impact', {}, settings);
     }
@@ -103,7 +102,13 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
   };
 
   const partyHpPct = Math.max(0, Math.min(100, (state.partyHp / state.partyMaxHp) * 100));
-  const showingOverlay = state.pendingPlayerDarts.length > 0 || state.pendingEnemyAttacks.length > 0;
+  // Show the player summary overlay once the player has thrown all 3 darts
+  // (or fewer, if every enemy is already defeated). The enemy overlay shows
+  // whenever there are pending enemy attacks to animate.
+  const playerVisitDone = state.phase === 'player'
+    && state.darts.length >= 3
+    && state.outcome === 'ongoing';
+  const showingOverlay = playerVisitDone || state.pendingEnemyAttacks.length > 0;
 
   return (
     <div className="view-noscroll">
@@ -160,11 +165,27 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
             <div className="pc-slots" style={{ marginTop: 6 }}>
               {[0, 1, 2].map(i => {
                 const d = state.darts[i];
-                return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>;
+                const r = state.resolvedDarts[i];
+                if (!d) return <div key={i} className="pc-slot">–</div>;
+                const isDefeated = r?.kind === 'defeated';
+                return (
+                  <div key={i} className="pc-slot filled" style={{
+                    borderColor: isDefeated ? '#ef4444' : undefined,
+                    background: isDefeated ? 'color-mix(in srgb,#ef4444 18%,var(--bg-3))' : undefined,
+                  }}>
+                    <div style={{ fontWeight: 800 }}>{d.label}</div>
+                    {r && (
+                      <div style={{ fontSize: 9, marginTop: 2, opacity: 0.85 }}>
+                        → {r.enemyName}{r.damage > 0 ? ` · -${r.damage}` : r.kind === 'shield_break' ? ' · 🛡' : ''}
+                        {isDefeated ? ' · ☠' : ''}
+                      </div>
+                    )}
+                  </div>
+                );
               })}
             </div>
             <div className="muted small">
-              <b style={{ color: 'var(--text)' }}>{thrower.name}</b> is throwing · this visit: <b style={{ color: 'var(--text)' }}>{state.darts.reduce((a, d) => a + d.value, 0)}</b>
+              <b style={{ color: 'var(--text)' }}>{thrower.name}</b> is throwing · this visit: <b style={{ color: 'var(--text)' }}>{state.resolvedDarts.reduce((a, d) => a + d.damage, 0)} dmg</b>
               {validTarget && validTarget.shields.length > 0 && (
                 <span style={{ marginLeft: 8, color: '#fbbf24' }}>
                   🛡 {validTarget.name} shields: {validTarget.shields.map(describeShield).join(' → ')}
@@ -185,7 +206,7 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
         {state.enemies.map((e, i) => {
           const hpPct = Math.max(0, Math.min(100, (e.hp / e.maxHp) * 100));
           const isTarget = i === state.targetIdx && !e.defeated;
-          const canTarget = state.phase === 'player' && !e.defeated && !state.pendingPlayerDarts.length;
+          const canTarget = state.phase === 'player' && !e.defeated && state.darts.length < 3 && state.outcome === 'ongoing';
           const frozen = e.frozenTurns > 0;
           const vulnerable = e.vulnerableTurns > 0;
           return (
@@ -231,7 +252,7 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
       {/* Coop power-up bar — shows the current thrower's equipped Coop
           power-up. Each player equips a single Coop power-up from the
           Players tab; that's the one they can activate during their turn. */}
-      {state.phase === 'player' && !state.pendingPlayerDarts.length && state.darts.length === 0 && thrower && (() => {
+      {state.phase === 'player' && state.darts.length === 0 && thrower && (() => {
         const srcPlayer = players.find(p => p.id === thrower.id);
         const equippedId = srcPlayer?.powerUps?.coopActive ?? null;
         const pu = equippedId ? getCoopPowerUp(equippedId as CoopPowerUpId) : null;
@@ -263,7 +284,7 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
         </div>
       )}
 
-      {state.phase === 'player' && state.outcome === 'ongoing' && !state.pendingPlayerDarts.length && (
+      {state.phase === 'player' && state.outcome === 'ongoing' && state.darts.length < 3 && (
         <div className="play-input">
           <div className="pad-card">
             <div className="mult">
@@ -280,8 +301,8 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
               <button className="key" style={{ gridColumn: 'span 2', color: 'var(--muted)' }} onClick={() => onAdd(0, 1, '0')}>Miss</button>
             </div>
             <div className="row" style={{ gap: 8, marginTop: 8 }}>
-              <button className="btn block ghost" onClick={onUndo}>↶ Undo dart</button>
-              <button className="btn block primary" onClick={onEnter} disabled={!state.darts.length}>Throw darts</button>
+              <button className="btn block ghost" onClick={onUndo} disabled={!state.darts.length}>↶ Undo dart</button>
+              <button className="btn block primary" onClick={onEnter} disabled={!state.darts.length}>End visit</button>
             </div>
           </div>
         </div>
@@ -293,37 +314,60 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
         <DartOverlay
           state={state}
           onContinue={onContinue}
+          onEndVisit={onEnter}
         />
       )}
     </div>
   );
 }
 
-// ── Dart-by-dart overlay ──────────────────────────────────────────────
+// ── Post-visit / enemy-turn overlay ───────────────────────────────────
 //
-// Shows the current dart being resolved (either a player's attack dart or
-// an enemy's attack dart) with the damage formula and HP bar animation.
-// The overlay waits for the player to tap "Continue" before advancing —
-// this gives the player time to see what happened.
+// For the player phase: shows a summary of every dart the thrower just
+// threw this visit — each dart's target, the damage dealt (or shield-break
+// / miss), and the resulting HP of each enemy hit. Defeated enemies are
+// called out. The player taps "Continue" to advance to the next player
+// or the enemy phase.
+//
+// For the enemy phase: shows every enemy dart thrown so far cumulatively
+// (dart 1, 2, 3…) with the running party HP, plus the current dart
+// highlighted. The player taps "Continue" to advance to the next dart.
 
-function DartOverlay({ state, onContinue }: { state: CampaignBattleState; onContinue: () => void }) {
-  const isPlayer = state.pendingPlayerDarts.length > 0;
-  const step = isPlayer ? state.pendingPlayerDarts[0] : state.pendingEnemyAttacks[0];
-
-  // Re-render shake on each step.
+function DartOverlay({ state, onContinue, onEndVisit }: {
+  state: CampaignBattleState;
+  onContinue: () => void;
+  onEndVisit: () => void;
+}) {
+  const isPlayer = state.phase === 'player' && state.darts.length >= 3;
   const [shakeKey, setShakeKey] = useState(0);
-  useEffect(() => { setShakeKey(k => k + 1); }, [step]);
-
-  if (!step) return null;
+  const currentEnemyStep = state.pendingEnemyAttacks[0];
+  useEffect(() => {
+    if (!isPlayer) setShakeKey(k => k + 1);
+  }, [currentEnemyStep, isPlayer]);
 
   if (isPlayer) {
-    const s = step as ResolvedDart;
-    const enemy = state.enemies.find(e => e.id === s.enemyId);
-    const maxHp = enemy?.maxHp || 1;
-    const hpPct = Math.max(0, Math.min(100, (s.hpAfter / maxHp) * 100));
-    const intensity = s.damage <= 0 ? 0 : s.damage < 20 ? 1 : s.damage < 50 ? 2 : 3;
-    const shakeClass = intensity === 0 ? '' : intensity === 1 ? 'battle-shake-light' : intensity === 2 ? 'battle-shake-medium' : 'battle-shake-heavy';
     const thrower = state.players[state.playerTurnIdx];
+    const steps = state.resolvedDarts;
+    // Group consecutive darts by the enemy they hit for the HP display.
+    const totalDamage = steps.reduce((a, s) => a + s.damage, 0);
+    // Unique enemies hit this visit, preserving order.
+    const enemiesHit = steps.reduce((acc: { id: string; name: string; maxHp: number; finalHp: number; defeated: boolean }[], s) => {
+      const existing = acc.find(e => e.id === s.enemyId);
+      if (existing) {
+        existing.finalHp = s.hpAfter;
+        if (s.kind === 'defeated') existing.defeated = true;
+      } else {
+        const enemy = state.enemies.find(e => e.id === s.enemyId);
+        acc.push({
+          id: s.enemyId,
+          name: s.enemyName,
+          maxHp: enemy?.maxHp || 1,
+          finalHp: s.hpAfter,
+          defeated: s.kind === 'defeated',
+        });
+      }
+      return acc;
+    }, []);
     return (
       <div className="battle-overlay-bg">
         <div className="battle-overlay" onClick={(e) => e.stopPropagation()}>
@@ -332,34 +376,56 @@ function DartOverlay({ state, onContinue }: { state: CampaignBattleState; onCont
               <span className="avatar" style={{ width: 28, height: 28, fontSize: 12, background: thrower?.color }}>{thrower ? initials(thrower.name) : '?'}</span>
               <span className="bo-name">{thrower?.name || 'Player'}</span>
             </span>
-            <span className="bo-vs">→</span>
+            <span className="bo-vs">·</span>
             <span className="bo-target">
-              <span className="bo-name">{s.enemyName}</span>
+              <span className="bo-name">Visit summary</span>
             </span>
           </div>
-          <div className={`bo-target-card ${shakeClass}`} key={shakeKey}>
-            <div className="bo-hp-row">
-              <span className="bo-hp-label">Enemy HP</span>
-              <span className="bo-hp-value">{s.hpAfter}</span>
-            </div>
-            <div className="bo-hp-track">
-              <div className="bo-hp-fill" style={{ width: `${hpPct}%`, background: '#ef4444', color: '#ef4444' }} />
-            </div>
-            {s.kind === 'defeated' && <div className="bo-defeated">DEFEATED</div>}
+
+          {/* Per-dart list — all darts thrown this visit with their target. */}
+          <div className="bo-steps" style={{ marginTop: 4 }}>
+            {steps.map((s, i) => (
+              <div key={i} className={`bo-step current${s.damage <= 0 ? ' miss' : ''}`}>
+                <span className="bo-step-dart">{s.dart.label}</span>
+                <span className="bo-step-formula">
+                  → {s.enemyName} ·{' '}
+                  {s.kind === 'shield_break' ? `Broke ${s.shieldTarget} — 0 dmg`
+                    : s.kind === 'miss' ? 'Absorbed by shield — 0 dmg'
+                    : s.dart.value <= 0 ? 'Miss · 0 dmg'
+                    : `${s.dart.value} dmg`}
+                  {s.kind === 'defeated' ? ' · DEFEATED' : ''}
+                </span>
+                <span className="bo-step-dmg">{s.damage > 0 ? `-${s.damage}` : '0'}</span>
+              </div>
+            ))}
           </div>
-          <div className="bo-steps">
-            <div className="bo-step current">
-              <span className="bo-step-dart">{s.dart.label}</span>
-              <span className="bo-step-formula">
-                {s.kind === 'shield_break' ? `Broke shield: ${s.shieldTarget} — 0 dmg`
-                  : s.kind === 'miss' ? 'Absorbed by shield — 0 dmg'
-                  : s.dart.value <= 0 ? 'Miss · 0 dmg'
-                  : `${s.dart.value} dmg`}
-              </span>
-              <span className="bo-step-dmg">{s.damage > 0 ? `-${s.damage}` : '0'}</span>
-            </div>
+
+          {/* Per-enemy HP summary — final HP after this visit's darts. */}
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {enemiesHit.map(e => {
+              const hpPct = Math.max(0, Math.min(100, (e.finalHp / e.maxHp) * 100));
+              return (
+                <div key={e.id} style={{ padding: '6px 8px', borderRadius: 8, background: 'var(--bg-3)', border: '1px solid var(--border)' }}>
+                  <div className="row between" style={{ marginBottom: 4 }}>
+                    <span className="bo-name" style={{ fontSize: 13 }}>{e.name}</span>
+                    <span className="muted small">
+                      {e.defeated ? <span style={{ color: '#ef4444', fontWeight: 800 }}>DEFEATED</span> : `${e.finalHp} / ${e.maxHp} HP`}
+                    </span>
+                  </div>
+                  <div className="bo-hp-track">
+                    <div className="bo-hp-fill" style={{ width: `${hpPct}%`, background: e.defeated ? 'var(--muted)' : '#ef4444' }} />
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <button className="btn primary block" style={{ marginTop: 12 }} onClick={onContinue}>
+
+          <div className="bo-footer" style={{ marginTop: 10 }}>
+            <span className="muted small">Total this visit</span>
+            <span className="bo-total">-{totalDamage} HP</span>
+          </div>
+
+          <button className="btn primary block" style={{ marginTop: 12 }} onClick={onEndVisit}>
             Continue
           </button>
         </div>
@@ -367,10 +433,12 @@ function DartOverlay({ state, onContinue }: { state: CampaignBattleState; onCont
     );
   }
 
-  const a = step as EnemyAttackStep;
+  // Enemy phase overlay — show all darts thrown so far cumulatively.
+  const allSteps = [...state.appliedEnemyAttacks, ...(currentEnemyStep ? [currentEnemyStep] : [])];
+  const a = currentEnemyStep as EnemyAttackStep | undefined;
   const maxHp = state.partyMaxHp || 1;
-  const hpPct = Math.max(0, Math.min(100, (a.partyHpAfter / maxHp) * 100));
-  const intensity = a.damage <= 0 ? 0 : a.damage < 20 ? 1 : a.damage < 50 ? 2 : 3;
+  const hpPct = a ? Math.max(0, Math.min(100, (a.partyHpAfter / maxHp) * 100)) : 0;
+  const intensity = !a || a.damage <= 0 ? 0 : a.damage < 20 ? 1 : a.damage < 50 ? 2 : 3;
   const shakeClass = intensity === 0 ? '' : intensity === 1 ? 'battle-shake-light' : intensity === 2 ? 'battle-shake-medium' : 'battle-shake-heavy';
   return (
     <div className="battle-overlay-bg">
@@ -378,7 +446,7 @@ function DartOverlay({ state, onContinue }: { state: CampaignBattleState; onCont
         <div className="bo-header">
           <span className="bo-attacker">
             <span className="avatar" style={{ width: 28, height: 28, fontSize: 12, background: '#ef4444' }}>👹</span>
-            <span className="bo-name">{a.enemyName}</span>
+            <span className="bo-name">{a?.enemyName || 'Enemy'}</span>
           </span>
           <span className="bo-vs">→</span>
           <span className="bo-target">
@@ -388,22 +456,29 @@ function DartOverlay({ state, onContinue }: { state: CampaignBattleState; onCont
         <div className={`bo-target-card ${shakeClass}`} key={shakeKey}>
           <div className="bo-hp-row">
             <span className="bo-hp-label">Party HP</span>
-            <span className="bo-hp-value">{a.partyHpAfter}</span>
+            <span className="bo-hp-value">{a?.partyHpAfter ?? state.partyHp}</span>
           </div>
           <div className="bo-hp-track">
             <div className="bo-hp-fill" style={{ width: `${hpPct}%`, background: '#ef4444', color: '#ef4444' }} />
           </div>
-          {a.partyHpAfter <= 0 && <div className="bo-defeated">DEFEATED</div>}
+          {a && a.partyHpAfter <= 0 && <div className="bo-defeated">DEFEATED</div>}
         </div>
         <div className="bo-steps">
-          <div className="bo-step current">
-            <span className="bo-step-dart">{a.dart.label}</span>
-            <span className="bo-step-formula">{a.dart.value <= 0 ? 'Miss · 0 dmg' : `${a.dart.value} dmg`}</span>
-            <span className="bo-step-dmg">{a.damage > 0 ? `-${a.damage}` : '0'}</span>
-          </div>
+          {allSteps.map((s, i) => {
+            const isCurrent = i === allSteps.length - 1 && !!currentEnemyStep;
+            return (
+              <div key={i} className={`bo-step ${isCurrent ? 'current' : 'past'}${s.damage <= 0 ? ' miss' : ''}`}>
+                <span className="bo-step-dart">{s.dart.label}</span>
+                <span className="bo-step-formula">
+                  {s.enemyName} · {s.dart.value <= 0 ? 'Miss · 0 dmg' : `${s.dart.value} dmg`}
+                </span>
+                <span className="bo-step-dmg">{s.damage > 0 ? `-${s.damage}` : '0'}</span>
+              </div>
+            );
+          })}
         </div>
-        <button className="btn primary block" style={{ marginTop: 12 }} onClick={onContinue}>
-          Continue
+        <button className="btn primary block" style={{ marginTop: 12 }} onClick={onContinue} disabled={!currentEnemyStep}>
+          {currentEnemyStep ? 'Continue' : 'Done'}
         </button>
       </div>
     </div>

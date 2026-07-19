@@ -190,8 +190,10 @@ export function startBattle(
     visitNumber: 1,
     outcome: 'ongoing',
     powerUpCharge: 0,
-    pendingPlayerDarts: [],
+    resolvedDarts: [],
+    visitEnemiesSnapshot: [],
     pendingEnemyAttacks: [],
+    appliedEnemyAttacks: [],
     awaitContinue: false,
     phantomDarts: 0,
   };
@@ -279,6 +281,17 @@ export function describeShield(shield: ShieldLayer): string {
 }
 
 // ── Player turn ───────────────────────────────────────────────────────
+//
+// In Coop mode, each dart a player throws is resolved immediately against
+// the targeted enemy — shields are checked, damage is applied, and the
+// enemy may be defeated mid-visit. The thrower can keep throwing darts (up
+// to 3) at any alive enemy. After the 3rd dart, the player taps "Continue"
+// to see a summary of all darts thrown this visit (with per-dart target,
+// damage, and resulting HP) and then advance to the next player or the
+// enemy phase.
+//
+// `undoDart` reverts the most recent dart by restoring the enemy snapshot
+// taken when the first dart of the visit was thrown.
 
 export function addDart(
   state: CampaignBattleState,
@@ -302,22 +315,112 @@ export function addDart(
     isDouble: !!(isBull || (base === 25 && value === 50) || mult === 2),
     isBull: !!isBull || base === 25,
   };
-  let nextDarts = [...state.darts, dart];
   let phantomDarts = state.phantomDarts;
   // Phantom Darts power-up: convert thrown darts into bullseyes. Each
   // consumed dart decrements the counter. Misses (base 0) are not converted
   // so the player can still intentionally miss if they want.
   if (phantomDarts > 0 && base !== 0) {
     dart = { value: 50, label: '👻 Bull', base: 50, mult: 2, isDouble: true, isBull: true };
-    nextDarts = [...state.darts, dart];
     phantomDarts = phantomDarts - 1;
   }
-  return { ...state, darts: nextDarts, phantomDarts };
+
+  // Snapshot enemies at the start of the visit so undo can restore them.
+  const visitEnemiesSnapshot = state.darts.length === 0
+    ? state.enemies.map(e => ({ ...e, shields: e.shields.map(s => ({ ...s })) }))
+    : state.visitEnemiesSnapshot;
+
+  // Resolve this dart immediately against the targeted enemy.
+  const thrower = state.players[state.playerTurnIdx];
+  if (!thrower) {
+    return { ...state, darts: [...state.darts, dart], phantomDarts, visitEnemiesSnapshot };
+  }
+  const power = effectivePower(thrower);
+
+  // Find a valid target (auto-pick first alive if the chosen one is dead).
+  let targetIdx = state.targetIdx;
+  let target = state.enemies[targetIdx];
+  if (!target || target.defeated) {
+    const firstAlive = state.enemies.findIndex(e => !e.defeated);
+    if (firstAlive < 0) {
+      // No alive enemies — just record the dart.
+      return {
+        ...state,
+        darts: [...state.darts, dart],
+        phantomDarts,
+        visitEnemiesSnapshot,
+      };
+    }
+    targetIdx = firstAlive;
+    target = state.enemies[targetIdx];
+  }
+
+  const enemies = state.enemies.map(e => ({ ...e, shields: [...e.shields] }));
+  const t = enemies[targetIdx];
+  let step: ResolvedDart;
+  if (t.shields.length > 0) {
+    const shieldIdx = 0;
+    const shield = t.shields[shieldIdx];
+    if (dartMatchesShield(dart, shield)) {
+      t.shields = t.shields.filter((_, i) => i !== shieldIdx);
+      step = {
+        dart, damage: 0, kind: 'shield_break',
+        shieldTarget: describeShield(shield),
+        enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
+      };
+    } else {
+      step = {
+        dart, damage: 0, kind: 'miss',
+        enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
+      };
+    }
+  } else {
+    const dmg = computePlayerDartDamage(dart, power, t.armor);
+    const finalDmg = t.vulnerableTurns > 0 ? Math.round(dmg * 1.5) : dmg;
+    t.hp = Math.max(0, t.hp - finalDmg);
+    const defeated = t.hp <= 0;
+    if (defeated) t.defeated = true;
+    step = {
+      dart, damage: finalDmg, kind: defeated ? 'defeated' : 'damage',
+      enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
+    };
+  }
+
+  const anyAlive = enemies.some(e => !e.defeated);
+  const outcome: CampaignBattleState['outcome'] = !anyAlive ? 'victory' : state.outcome;
+
+  return {
+    ...state,
+    enemies,
+    darts: [...state.darts, dart],
+    resolvedDarts: [...state.resolvedDarts, step],
+    targetIdx,
+    phantomDarts,
+    visitEnemiesSnapshot,
+    outcome,
+  };
 }
 
 export function undoDart(state: CampaignBattleState): CampaignBattleState {
   if (!state.darts.length) return state;
-  return { ...state, darts: state.darts.slice(0, -1) };
+  // Restore enemies from the visit snapshot (taken when the first dart was
+  // thrown). If this was the first dart, clear the snapshot.
+  const enemies = state.visitEnemiesSnapshot.length
+    ? state.visitEnemiesSnapshot.map(e => ({ ...e, shields: e.shields.map(s => ({ ...s })) }))
+    : state.enemies;
+  const resolvedDarts = state.resolvedDarts.slice(0, -1);
+  const darts = state.darts.slice(0, -1);
+  const visitEnemiesSnapshot = darts.length === 0 ? [] : state.visitEnemiesSnapshot;
+  // Recompute outcome — undoing a dart could un-defeat an enemy.
+  const anyAlive = enemies.some(e => !e.defeated);
+  const outcome: CampaignBattleState['outcome'] = !anyAlive ? 'victory' : 'ongoing';
+  return {
+    ...state,
+    enemies,
+    darts,
+    resolvedDarts,
+    visitEnemiesSnapshot,
+    outcome,
+  };
 }
 
 export function setTarget(state: CampaignBattleState, enemyId: string): CampaignBattleState {
@@ -339,129 +442,29 @@ export function computePlayerDartDamage(dart: CampaignDart, attackerPower: numbe
   return Math.max(1, raw);
 }
 
-// Resolve a player's visit dart-by-dart against the targeted enemy. Each
-// dart is checked against the front shield first; a matching dart breaks
-// the shield and deals 0 damage. Once shields are gone, each dart deals
-// damage to the targeted enemy. If the targeted enemy is defeated mid-visit,
-// remaining darts auto-target the next alive enemy (so a player can kill
-// one enemy and damage another in the same visit). Returns a state with
-// `pendingPlayerDarts` populated; the UI animates through them one at a
-// time, calling `applyNextPlayerDart` to actually mutate enemy HP.
+// After a player has thrown all their darts (and the damage has already
+// been applied dart-by-dart via `addDart`), `resolvePlayerVisit` finalizes
+// the visit: it logs the visit, clears the dart slots, and advances to the
+// next player or to the enemy phase. The UI shows a summary overlay of all
+// darts thrown this visit before calling this.
 export function resolvePlayerVisit(state: CampaignBattleState): CampaignBattleState {
   if (state.phase !== 'player') return state;
   if (!state.darts.length) return state;
-
-  const thrower = state.players[state.playerTurnIdx];
-  if (!thrower) return state;
-
-  // Find a valid target (auto-pick first alive if the chosen one is dead).
-  let targetIdx = state.targetIdx;
-  let target = state.enemies[targetIdx];
-  if (!target || target.defeated) {
-    const firstAlive = state.enemies.findIndex(e => !e.defeated);
-    if (firstAlive < 0) return state;
-    targetIdx = firstAlive;
-    target = state.enemies[targetIdx];
-  }
-
-  const power = effectivePower(thrower);
-  const steps: ResolvedDart[] = [];
-  // Work on a deep copy so we can simulate HP changes locally.
-  const enemies = state.enemies.map(e => ({ ...e, shields: [...e.shields] }));
-
-  for (const dart of state.darts) {
-    let t = enemies[targetIdx];
-    if (t.defeated) {
-      // Auto-retarget to the next alive enemy.
-      const next = enemies.findIndex(e => !e.defeated);
-      if (next < 0) break;
-      targetIdx = next;
-      t = enemies[targetIdx];
-    }
-    if (t.shields.length > 0) {
-      const shieldIdx = 0;
-      const shield = t.shields[shieldIdx];
-      if (dartMatchesShield(dart, shield)) {
-        t.shields = t.shields.filter((_, i) => i !== shieldIdx);
-        steps.push({
-          dart, damage: 0, kind: 'shield_break',
-          shieldTarget: describeShield(shield),
-          enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
-        });
-        continue;
-      }
-      // Absorbed by shield — 0 damage.
-      steps.push({
-        dart, damage: 0, kind: 'miss',
-        enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
-      });
-      continue;
-    }
-    const dmg = computePlayerDartDamage(dart, power, t.armor);
-    // Time Warp: vulnerable enemies take +50% damage.
-    const finalDmg = t.vulnerableTurns > 0 ? Math.round(dmg * 1.5) : dmg;
-    t.hp = Math.max(0, t.hp - finalDmg);
-    const defeated = t.hp <= 0;
-    if (defeated) t.defeated = true;
-    steps.push({
-      dart, damage: finalDmg, kind: defeated ? 'defeated' : 'damage',
-      enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
-    });
-    if (defeated) {
-      // Continue to next dart (auto-retarget on next iteration).
-      // But if no other alive enemy remains, stop.
-      const anyAlive = enemies.some(e => !e.defeated);
-      if (!anyAlive) break;
-    }
-  }
-
-  return {
-    ...state,
-    enemies,
-    darts: [],
-    targetIdx,
-    pendingPlayerDarts: steps,
-    awaitContinue: true,
-  };
-}
-
-// Apply the next pending player dart (called by the UI after each animation
-// step). When the queue empties, advance to the next player or the enemy
-// phase.
-export function applyNextPlayerDart(state: CampaignBattleState): CampaignBattleState {
-  if (!state.pendingPlayerDarts.length) {
-    return advanceAfterPlayerVisit(state);
-  }
-  const [step, ...rest] = state.pendingPlayerDarts;
-  const log: VisitLogEntry[] = [...state.lastVisitLog];
-  if (step.kind === 'shield_break') {
-    log.push({ kind: 'shield_break', dartLabel: step.dart.label, shieldIndex: 0, shieldTarget: step.shieldTarget || '' });
-  } else if (step.kind === 'damage') {
-    log.push({ kind: 'damage', dartLabel: step.dart.label, damage: step.damage, enemyId: step.enemyId });
-  } else if (step.kind === 'defeated') {
-    log.push({ kind: 'damage', dartLabel: step.dart.label, damage: step.damage, enemyId: step.enemyId });
-    log.push({ kind: 'enemy_defeated', enemyId: step.enemyId, enemyName: step.enemyName });
-  }
-  const anyAlive = state.enemies.some(e => !e.defeated);
-  const outcome: CampaignBattleState['outcome'] = !anyAlive ? 'victory' : state.outcome;
-  const next: CampaignBattleState = {
-    ...state,
-    pendingPlayerDarts: rest,
-    lastVisitLog: log,
-    outcome,
-    awaitContinue: rest.length > 0 && outcome === 'ongoing',
-  };
-  if (!rest.length) {
-    return advanceAfterPlayerVisit({ ...next, awaitContinue: false });
-  }
-  return next;
+  return advanceAfterPlayerVisit({ ...state, darts: [], resolvedDarts: [], visitEnemiesSnapshot: [] });
 }
 
 // After a player's visit is fully animated, either pass to the next player
 // or start the enemy phase.
 function advanceAfterPlayerVisit(state: CampaignBattleState): CampaignBattleState {
   if (state.outcome === 'victory') {
-    return { ...state, phase: 'player', awaitContinue: false };
+    return {
+      ...state,
+      phase: 'player',
+      darts: [],
+      resolvedDarts: [],
+      visitEnemiesSnapshot: [],
+      awaitContinue: false,
+    };
   }
   const nextIdx = state.playerTurnIdx + 1;
   if (nextIdx < state.players.length) {
@@ -469,6 +472,8 @@ function advanceAfterPlayerVisit(state: CampaignBattleState): CampaignBattleStat
       ...state,
       playerTurnIdx: nextIdx,
       darts: [],
+      resolvedDarts: [],
+      visitEnemiesSnapshot: [],
       awaitContinue: false,
     };
   }
@@ -477,6 +482,8 @@ function advanceAfterPlayerVisit(state: CampaignBattleState): CampaignBattleStat
     ...state,
     phase: 'enemy',
     darts: [],
+    resolvedDarts: [],
+    visitEnemiesSnapshot: [],
     awaitContinue: false,
   };
 }
@@ -549,12 +556,15 @@ export function prepareEnemyTurn(state: CampaignBattleState, rng: () => number =
     ...state,
     enemies,
     pendingEnemyAttacks: steps,
+    appliedEnemyAttacks: [],
     awaitContinue: true,
   };
 }
 
 // Apply the next pending enemy attack step. When the queue empties, return
-// to the player phase (or defeat if party HP is 0).
+// to the player phase (or defeat if party HP is 0). Each applied step is
+// moved to `appliedEnemyAttacks` so the overlay can show all darts thrown
+// so far cumulatively (dart 1, 2, 3…) rather than only the current one.
 export function applyNextEnemyAttack(state: CampaignBattleState): CampaignBattleState {
   if (!state.pendingEnemyAttacks.length) {
     return finishEnemyTurn(state);
@@ -565,11 +575,12 @@ export function applyNextEnemyAttack(state: CampaignBattleState): CampaignBattle
     ...state,
     partyHp: step.partyHpAfter,
     pendingEnemyAttacks: rest,
+    appliedEnemyAttacks: [...state.appliedEnemyAttacks, step],
     lastVisitLog: log,
     awaitContinue: rest.length > 0,
   };
   if (next.partyHp <= 0) {
-    return { ...next, outcome: 'defeat', phase: 'player', pendingEnemyAttacks: [], awaitContinue: false };
+    return { ...next, outcome: 'defeat', phase: 'player', pendingEnemyAttacks: [], appliedEnemyAttacks: [], awaitContinue: false };
   }
   if (!rest.length) {
     return finishEnemyTurn({ ...next, awaitContinue: false });
@@ -600,6 +611,10 @@ function finishEnemyTurn(state: CampaignBattleState): CampaignBattleState {
     phase: 'player',
     playerTurnIdx: 0,
     darts: [],
+    resolvedDarts: [],
+    visitEnemiesSnapshot: [],
+    pendingEnemyAttacks: [],
+    appliedEnemyAttacks: [],
     visitNumber: state.visitNumber + 1,
     awaitContinue: false,
   };

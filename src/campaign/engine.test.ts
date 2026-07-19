@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   addDart, computePlayerDartDamage, dartMatchesShield, describeShield, getLevel,
   isLevelUnlocked, prepareEnemyTurn, applyNextEnemyAttack, resolvePlayerVisit,
-  applyNextPlayerDart, setTarget, startBattle, totalLevels,
+  setTarget, startBattle, totalLevels,
   partyMaxHpFor, partyArmorFor, partyPowerFor, COOP_POWER_UPS,
   canActivateCoopPowerUp, activateCoopPowerUp,
 } from './engine';
@@ -81,15 +81,14 @@ describe('campaign engine', () => {
     const orcIdx = state.enemies.findIndex(e => e.id === orc.id);
     const targeted = setTarget(state, orc.id);
     expect(targeted.targetIdx).toBe(orcIdx);
+    // Each dart is resolved immediately as it is thrown.
     let s = addDart(targeted, 20, 3);
+    expect(s.resolvedDarts.length).toBe(1);
+    expect(s.resolvedDarts[0].kind).toBe('shield_break');
     s = addDart(s, 20, 3);
     s = addDart(s, 20, 3);
-    const resolved = resolvePlayerVisit(s);
-    expect(resolved.pendingPlayerDarts.length).toBe(3);
-    // Apply each dart step.
-    let applied = resolved;
-    for (let i = 0; i < 3; i++) applied = applyNextPlayerDart(applied);
-    const resolvedOrc = applied.enemies.find(e => e.id === orc.id)!;
+    expect(s.resolvedDarts.length).toBe(3);
+    const resolvedOrc = s.enemies.find(e => e.id === orc.id)!;
     expect(resolvedOrc.shields.length).toBe(0);
     // First dart broke the shield (0 dmg). The remaining two darts deal damage.
     // T20 = 60, power 10 → 70 - 5 armor = 65 each. Two darts → 130.
@@ -104,10 +103,7 @@ describe('campaign engine', () => {
     let s = addDart(targeted, 10, 3);
     s = addDart(s, 10, 3);
     s = addDart(s, 10, 3);
-    const resolved = resolvePlayerVisit(s);
-    let applied = resolved;
-    for (let i = 0; i < 3; i++) applied = applyNextPlayerDart(applied);
-    const resolvedOrc = applied.enemies.find(e => e.id === orc.id)!;
+    const resolvedOrc = s.enemies.find(e => e.id === orc.id)!;
     expect(resolvedOrc.shields.length).toBe(1); // shield still up
     expect(resolvedOrc.hp).toBe(orc.maxHp); // no damage
   });
@@ -175,7 +171,6 @@ describe('campaign engine', () => {
     s = addDart(s, 0, 1, '0');
     s = addDart(s, 0, 1, '0');
     let resolved = resolvePlayerVisit(s);
-    while (resolved.pendingPlayerDarts.length) resolved = applyNextPlayerDart(resolved);
     expect(resolved.playerTurnIdx).toBe(1);
     expect(resolved.phase).toBe('player');
     // Player 2 throws.
@@ -183,7 +178,6 @@ describe('campaign engine', () => {
     s2 = addDart(s2, 0, 1, '0');
     s2 = addDart(s2, 0, 1, '0');
     let r2 = resolvePlayerVisit(s2);
-    while (r2.pendingPlayerDarts.length) r2 = applyNextPlayerDart(r2);
     expect(r2.playerTurnIdx).toBe(2);
     expect(r2.phase).toBe('player');
     // Player 3 throws — should now transition to enemy phase.
@@ -191,7 +185,6 @@ describe('campaign engine', () => {
     s3 = addDart(s3, 0, 1, '0');
     s3 = addDart(s3, 0, 1, '0');
     let r3 = resolvePlayerVisit(s3);
-    while (r3.pendingPlayerDarts.length) r3 = applyNextPlayerDart(r3);
     expect(r3.phase).toBe('enemy');
     expect(r3.playerTurnIdx).toBe(2); // unchanged until enemy turn finishes
   });

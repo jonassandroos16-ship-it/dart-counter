@@ -204,12 +204,21 @@ export interface CampaignBattleState {
   outcome: 'ongoing' | 'victory' | 'defeat';
   // Party-shared power-up charge (0..100). Fills from doubles/triples/bulls.
   powerUpCharge: number;
-  // Pending resolved darts for the current player's visit — the UI animates
-  // through these one at a time, applying damage to the targeted enemy.
-  pendingPlayerDarts: ResolvedDart[];
+  // Resolved darts for the current player's visit — each dart is resolved
+  // immediately as it is thrown (damage applied to the targeted enemy).
+  // After the 3rd dart, the UI shows a summary overlay listing all darts,
+  // their targets, and the resulting HP / defeated status.
+  resolvedDarts: ResolvedDart[];
+  // Snapshot of the enemies array at the start of the current player's
+  // visit, used to support undo of immediately-applied darts.
+  visitEnemiesSnapshot: ActiveEnemy[];
   // Pending enemy attack steps — the UI animates through these one at a
   // time, applying damage to the party HP.
   pendingEnemyAttacks: EnemyAttackStep[];
+  // Enemy attack steps already applied during the current enemy phase —
+  // kept so the overlay can show all darts thrown so far (dart 1, 2, 3…)
+  // cumulatively rather than only the current one.
+  appliedEnemyAttacks: EnemyAttackStep[];
   // When true, the UI is expected to wait for the player to tap "Continue"
   // before advancing. Used by the dart-by-dart overlays.
   awaitContinue: boolean;
