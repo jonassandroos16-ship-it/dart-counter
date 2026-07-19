@@ -198,20 +198,72 @@ export function reconcilePlayerPoints(player: Player, settings: Settings): Playe
   const devBonus = player.developerMode ? 100 : 0;
 
   const attrTotal = totalAttributePointsForLevel(level, settings) + devBonus;
-  const healthSpent = safeSpent(attrs.health, cfg.attributeStartHealth, cfg.healthPerPoint);
-  const armorSpent = safeSpent(attrs.armor, cfg.attributeStartArmor, cfg.armorPerPoint);
-  const powerSpent = safeSpent(attrs.power, cfg.attributeStartPower, cfg.powerPerPoint);
-  const attrSpent = healthSpent + armorSpent + powerSpent;
+
+  // Normalize each attribute: NaN/non-finite → start value; otherwise keep the
+  // stored value (we'll recompute spent points from the normalized value below).
+  const startHealth = numOr(cfg.attributeStartHealth, 0);
+  const startArmor = numOr(cfg.attributeStartArmor, 0);
+  const startPower = numOr(cfg.attributeStartPower, 0);
+  const normHealth = Number.isFinite(attrs.health) ? attrs.health : startHealth;
+  const normArmor = Number.isFinite(attrs.armor) ? attrs.armor : startArmor;
+  const normPower = Number.isFinite(attrs.power) ? attrs.power : startPower;
+
+  let healthSpent = safeSpent(normHealth, startHealth, cfg.healthPerPoint);
+  let armorSpent = safeSpent(normArmor, startArmor, cfg.armorPerPoint);
+  let powerSpent = safeSpent(normPower, startPower, cfg.powerPerPoint);
+  let attrSpent = healthSpent + armorSpent + powerSpent;
+
+  // If the player spent more points than they have, clamp attribute values back
+  // to what their available points actually allow. We reduce overspend in
+  // reverse order (power → armor → health) so health is the last to be cut,
+  // matching the order players typically invest in.
+  let nextHealth = normHealth;
+  let nextArmor = normArmor;
+  let nextPower = normPower;
+  if (attrSpent > attrTotal) {
+    const overflow = attrSpent - attrTotal;
+    // Cut power first.
+    const cutPower = Math.min(powerSpent, overflow);
+    if (cutPower > 0) {
+      powerSpent -= cutPower;
+      nextPower = startPower + powerSpent * cfg.powerPerPoint;
+    }
+    const remainingAfterPower = overflow - cutPower;
+    const cutArmor = Math.min(armorSpent, remainingAfterPower);
+    if (cutArmor > 0) {
+      armorSpent -= cutArmor;
+      nextArmor = startArmor + armorSpent * cfg.armorPerPoint;
+    }
+    const remainingAfterArmor = remainingAfterPower - cutArmor;
+    const cutHealth = Math.min(healthSpent, remainingAfterArmor);
+    if (cutHealth > 0) {
+      healthSpent -= cutHealth;
+      nextHealth = startHealth + healthSpent * cfg.healthPerPoint;
+    }
+    attrSpent = healthSpent + armorSpent + powerSpent;
+  }
+
   const attrAvail = Math.max(0, attrTotal - attrSpent);
 
   const pwrTotal = totalPowerUpPointsForLevel(level, settings) + devBonus;
   const pwrSpent = (pwr.unlocked || []).length;
   const pwrAvail = Math.max(0, pwrTotal - pwrSpent);
 
-  const nextAttrs = { ...attrs, pointsAvailable: attrAvail };
+  const nextAttrs = {
+    ...attrs,
+    health: nextHealth,
+    armor: nextArmor,
+    power: nextPower,
+    pointsAvailable: attrAvail,
+  };
   const nextPwr = { ...pwr, pointsAvailable: pwrAvail };
 
-  const changed = (attrs.pointsAvailable !== attrAvail) || (pwr.pointsAvailable !== pwrAvail);
+  const changed =
+    attrs.pointsAvailable !== attrAvail ||
+    pwr.pointsAvailable !== pwrAvail ||
+    attrs.health !== nextHealth ||
+    attrs.armor !== nextArmor ||
+    attrs.power !== nextPower;
   if (!changed) return player;
   return { ...player, attributes: nextAttrs, powerUps: nextPwr };
 }
