@@ -69,6 +69,14 @@ function activatePowerUp(game: Game, playerIdx: number, settings: Settings, toas
     if (i !== playerIdx) return p;
     const updated: any = { ...p, powerUpUsed: true, powerUpCharge: 0 };
     if (puId === 'pu_fourth_dart') updated._fourthDart = true;
+    // Track which power-up was used so post-game badges can award the winner.
+    if (puId === 'pu_blocker') updated._usedBlocker = true;
+    if (puId === 'pu_surge') updated._usedSurge = true;
+    if (puId === 'pu_steal') updated._usedSteal = true;
+    if (puId === 'pu_freeze') updated._usedFreeze = true;
+    if (puId === 'pu_reroll') updated._usedReroll = true;
+    if (puId === 'pu_lucky_miss') updated._usedLuckyMiss = true;
+    if (puId === 'pu_fourth_dart') updated._usedFourthDart = true;
     return updated;
   });
   toast(message);
