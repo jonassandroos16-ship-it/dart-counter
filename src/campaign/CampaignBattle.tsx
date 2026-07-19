@@ -209,6 +209,8 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
           const canTarget = state.phase === 'player' && !e.defeated && state.darts.length < 3 && state.outcome === 'ongoing';
           const frozen = e.frozenTurns > 0;
           const vulnerable = e.vulnerableTurns > 0;
+          const distracted = e.distractedTurns > 0;
+          const effAcc = Math.max(0, e.accuracy - (distracted ? e.distractAmount : 0));
           return (
             <div
               key={e.id}
@@ -217,9 +219,9 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
               style={{
                 cursor: canTarget ? 'pointer' : 'default',
                 opacity: e.defeated ? 0.4 : 1,
-                borderColor: isTarget ? 'var(--accent)' : e.defeated ? 'var(--border)' : frozen ? 'color-mix(in srgb,#60a5fa 60%,var(--border))' : vulnerable ? 'color-mix(in srgb,#fbbf24 60%,var(--border))' : 'var(--border)',
+                borderColor: isTarget ? 'var(--accent)' : e.defeated ? 'var(--border)' : frozen ? 'color-mix(in srgb,#60a5fa 60%,var(--border))' : distracted ? 'color-mix(in srgb,#a78bfa 60%,var(--border))' : vulnerable ? 'color-mix(in srgb,#fbbf24 60%,var(--border))' : 'var(--border)',
                 boxShadow: isTarget ? '0 0 0 2px var(--accent)' : 'none',
-                background: e.defeated ? 'var(--bg-3)' : frozen ? 'color-mix(in srgb,#60a5fa 12%,var(--bg-2))' : vulnerable ? 'color-mix(in srgb,#fbbf24 12%,var(--bg-2))' : 'var(--bg-2)',
+                background: e.defeated ? 'var(--bg-3)' : frozen ? 'color-mix(in srgb,#60a5fa 12%,var(--bg-2))' : distracted ? 'color-mix(in srgb,#a78bfa 12%,var(--bg-2))' : vulnerable ? 'color-mix(in srgb,#fbbf24 12%,var(--bg-2))' : 'var(--bg-2)',
               }}
             >
               <div className="row between">
@@ -227,6 +229,7 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
                   <span className="po-name">{e.name}</span>
                   {e.defeated && <span className="pill" style={{ fontSize: 9, background: '#ef4444', color: '#fff' }}>DEFEATED</span>}
                   {frozen && <span className="pill" style={{ fontSize: 9, background: '#60a5fa', color: '#0b0e13' }}>❄ FROZEN {e.frozenTurns}</span>}
+                  {distracted && !e.defeated && <span className="pill" style={{ fontSize: 9, background: '#a78bfa', color: '#0b0e13' }}>🎯 DISTRACTED {e.distractedTurns}</span>}
                   {vulnerable && !e.defeated && <span className="pill" style={{ fontSize: 9, background: '#fbbf24', color: '#0b0e13' }}>⏳ VULN {e.vulnerableTurns}</span>}
                 </div>
                 <span className="pill" style={{ fontSize: 10 }}>{e.hp} HP</span>
@@ -234,7 +237,7 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
               <div style={{ marginTop: 4, height: 6, borderRadius: 3, background: 'var(--bg-3)', overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${hpPct}%`, background: e.defeated ? 'var(--muted)' : '#ef4444', transition: 'width .4s' }} />
               </div>
-              <div className="po-sub">🛡 {e.armor} armor · 🎯 {Math.round(e.accuracy * 100)}% acc{e.shields.length ? ` · 🛡 ${e.shields.length} shield${e.shields.length === 1 ? '' : 's'}` : ''}</div>
+              <div className="po-sub">🛡 {e.armor} armor · 🎯 {Math.round(effAcc * 100)}% acc{distracted ? ' (debuffed)' : ''}{e.shields.length ? ` · 🛡 ${e.shields.length} shield${e.shields.length === 1 ? '' : 's'}` : ''}</div>
               {e.shields.length > 0 && !e.defeated && (
                 <div style={{ marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: 3 }}>
                   {e.shields.map((s, si) => (
