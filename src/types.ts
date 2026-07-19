@@ -29,6 +29,7 @@ export interface Player {
   attributes?: PlayerAttributes;
   powerUps?: PlayerPowerUps;
   developerMode?: boolean;
+  showdownBg?: string;
 }
 
 export interface Dart {
@@ -141,6 +142,8 @@ export interface GameRecord {
     dartsThrown: number;
     visits: Visit[];
     team?: number;
+    kills?: string[];
+    defeated?: boolean;
   }[];
 }
 

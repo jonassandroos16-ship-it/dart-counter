@@ -12,7 +12,7 @@ type StatKey =
   | 'avg' | 'first9' | 'games' | 'n180' | 'n140' | 'tons'
   | 'highScore' | 'highCheckout' | 'legsWon' | 'dartsThrown'
   | 'finishMin' | 'finishMax' | 'finishAvg' | 'legsFinished'
-  | 'level' | 'xp' | 'titles';
+  | 'level' | 'xp' | 'titles' | 'kills' | 'defeated' | 'battleGames';
 
 const STAT_META: { key: StatKey; label: string; better: 'higher' | 'lower' | null; format: (v: number) => string; empty?: string }[] = [
   { key: 'avg', label: '3-dart avg', better: 'higher', format: v => v.toFixed(1) },
@@ -32,6 +32,9 @@ const STAT_META: { key: StatKey; label: string; better: 'higher' | 'lower' | nul
   { key: 'level', label: 'Level', better: 'higher', format: v => String(v) },
   { key: 'xp', label: 'Total XP', better: 'higher', format: v => String(v) },
   { key: 'titles', label: 'Titles', better: 'higher', format: v => String(v) },
+  { key: 'kills', label: 'Kills', better: 'higher', format: v => String(v), empty: '—' },
+  { key: 'defeated', label: 'Times KO\'d', better: 'lower', format: v => String(v), empty: '—' },
+  { key: 'battleGames', label: 'Battle games', better: null, format: v => String(v), empty: '—' },
 ];
 
 function statValue(meta: typeof STAT_META[number], s: ReturnType<typeof playerStats>, li: { level: number }, xp: ReturnType<typeof getPlayerXP>): number {
@@ -53,6 +56,9 @@ function statValue(meta: typeof STAT_META[number], s: ReturnType<typeof playerSt
     case 'level': return li.level;
     case 'xp': return xp.xp || 0;
     case 'titles': return xp.unlockedTitles.length;
+    case 'kills': return s.kills || 0;
+    case 'defeated': return s.defeatedCount || 0;
+    case 'battleGames': return s.battleGames || 0;
   }
 }
 
