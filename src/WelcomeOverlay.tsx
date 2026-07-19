@@ -1,20 +1,20 @@
 import { useEffect, useState } from 'react';
 
-export function WelcomeOverlay() {
+export function WelcomeOverlay({ onDone }: { onDone?: () => void }) {
   const [gone, setGone] = useState(false);
   const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => {
       setGone(true);
-      setTimeout(() => setHidden(true), 700);
+      setTimeout(() => { setHidden(true); onDone?.(); }, 700);
     }, 6500);
     return () => clearTimeout(t);
-  }, []);
+  }, [onDone]);
 
   const dismiss = () => {
     setGone(true);
-    setTimeout(() => setHidden(true), 700);
+    setTimeout(() => { setHidden(true); onDone?.(); }, 700);
   };
 
   if (hidden) return null;

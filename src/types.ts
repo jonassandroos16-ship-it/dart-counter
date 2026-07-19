@@ -203,6 +203,7 @@ export interface Settings {
   confirmReset: boolean;
   sound: boolean;
   music: boolean;
+  musicStartTrack: string;
   musicSetupTrack: string;
   musicMatchTrack: string;
   voicePack: VoicePackId;

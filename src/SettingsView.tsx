@@ -86,6 +86,10 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
         {settings.music && (
           <>
             <div style={{ marginBottom: 14 }}>
+              <div className="muted small" style={{ marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Start screen track</div>
+              <select value={settings.musicStartTrack} onChange={e => update({ musicStartTrack: e.target.value })}>{tracksFor('start').map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+            </div>
+            <div style={{ marginBottom: 14 }}>
               <div className="muted small" style={{ marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Setup screen track</div>
               <select value={settings.musicSetupTrack} onChange={e => update({ musicSetupTrack: e.target.value })}>{tracksFor('setup').map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
             </div>

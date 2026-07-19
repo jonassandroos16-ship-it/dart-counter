@@ -31,6 +31,7 @@ export default function App() {
   const musicRef = useRef<MusicEngine>(new MusicEngine());
   const backfilledRef = useRef(false);
   const { progress: campaignProgress } = useCampaignProgress();
+  const [welcomeDone, setWelcomeDone] = useState(false);
 
   useEffect(() => { applyTheme(db.settings); }, [db.settings]);
 
@@ -61,7 +62,8 @@ export default function App() {
       musicRef.current.unlocked = true;
       Sound.unlock();
       void Sound.preload(db.settings);
-      if (view === 'play') musicRef.current.startContext('setup', db.settings);
+      if (welcomeDone && view === 'play') musicRef.current.startContext('setup', db.settings);
+      else if (!welcomeDone) musicRef.current.startContext('start', db.settings);
       document.removeEventListener('pointerdown', unlock);
       document.removeEventListener('keydown', unlock);
     };
@@ -71,13 +73,18 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!welcomeDone) {
+      musicRef.current.startContext('start', db.settings);
+      return;
+    }
     if (view !== 'play') { musicRef.current.stop(); return; }
     musicRef.current.startContext('setup', db.settings);
-  }, [view]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, welcomeDone, db.settings.music, db.settings.musicStartTrack, db.settings.musicSetupTrack]);
 
   return (
     <div className="app-shell">
-      <WelcomeOverlay />
+      <WelcomeOverlay onDone={() => setWelcomeDone(true)} />
       {view === 'play' && (
         <PlayView players={db.players} games={db.games} settings={db.settings}
           activeGame={db.activeGame} setActiveGame={db.setActiveGame}
