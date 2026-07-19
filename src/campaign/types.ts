@@ -83,7 +83,7 @@ export type CoopPowerUpId =
   // Starter (always available)
   | 'coop_heal'        // Restore party HP
   | 'coop_buff_power'  // Give all players +power for N turns
-  | 'coop_buff_acc'    // Give all players +accuracy for N turns
+  | 'coop_buff_acc'    // Distract enemies: -accuracy & -precision for N turns
   | 'coop_freeze'      // Freeze all enemies for N turns (skip their attacks)
   | 'coop_shield'      // Add a temporary shield that absorbs one enemy hit
   // Advanced (unlocked as level rewards)
@@ -126,6 +126,11 @@ export interface ActiveEnemy {
   defeated: boolean;
   frozenTurns: number;  // when > 0 the enemy skips its next attack(s)
   vulnerableTurns: number; // when > 0, enemy takes +50% damage from all sources (Time Warp)
+  // Focus Buff: when > 0, the enemy's accuracy and precision are reduced
+  // by `distractAmount` (clamped to >= 0) during its attacks. Decremented
+  // at the end of each enemy round alongside other timers.
+  distractedTurns: number;
+  distractAmount: number;
 }
 
 export interface CoopPlayer {
