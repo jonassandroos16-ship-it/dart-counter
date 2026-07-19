@@ -21,11 +21,17 @@ import { ENEMY_DATABASE } from './enemyDatabase';
 import { CAMPAIGN_LEVELS } from './campaignLevels';
 import type { Player, Settings } from '../types';
 
+// How much the Focus Buff subtracts from each alive enemy's accuracy and
+// precision while active. 0.2 mirrors the old "+20% accuracy" hint but now
+// applies to the AI's throw, where it actually has an in-game effect.
+const FOCUS_BUFF_DISTRACT_AMOUNT = 0.2;
+const FOCUS_BUFF_TURNS = 3;
+
 export const COOP_POWER_UPS: CoopPowerUpDef[] = [
   // ── Starter tier (always available) ───────────────────────────────
   { id: 'coop_heal', name: 'Heal', icon: '❤️', desc: 'Restore 80 party HP instantly.', cost: 100, tier: 'starter' },
   { id: 'coop_buff_power', name: 'Power Buff', icon: '⚡', desc: 'All players +10 power for 3 turns.', cost: 80, tier: 'starter' },
-  { id: 'coop_buff_acc', name: 'Focus Buff', icon: '🎯', desc: 'All players +20% accuracy for 3 turns (visual hint).', cost: 80, tier: 'starter' },
+  { id: 'coop_buff_acc', name: 'Focus Buff', icon: '🎯', desc: 'Distract all enemies — -20% accuracy & precision for 3 turns.', cost: 80, tier: 'starter' },
   { id: 'coop_freeze', name: 'Freeze', icon: '❄️', desc: 'Freeze all enemies for 2 turns — they cannot attack.', cost: 100, tier: 'starter' },
   { id: 'coop_shield', name: 'Party Shield', icon: '🛡️', desc: 'Absorb the next 40 party damage from enemies.', cost: 70, tier: 'starter' },
   // ── Advanced tier (unlocked as level rewards) ──────────────────────
@@ -172,6 +178,8 @@ export function startBattle(
       defeated: false,
       frozenTurns: 0,
       vulnerableTurns: 0,
+      distractedTurns: 0,
+      distractAmount: 0,
     };
   });
   return {
@@ -490,14 +498,27 @@ function advanceAfterPlayerVisit(state: CampaignBattleState): CampaignBattleStat
 
 // ── Enemy AI turn ─────────────────────────────────────────────────────
 
+// Effective accuracy/precision for an enemy, applying the Focus Buff
+// distract debuff (clamped to >= 0).
+function effectiveAccuracy(enemy: ActiveEnemy): number {
+  return enemy.distractedTurns > 0
+    ? Math.max(0, enemy.accuracy - enemy.distractAmount)
+    : enemy.accuracy;
+}
+function effectivePrecision(enemy: ActiveEnemy): number {
+  return enemy.distractedTurns > 0
+    ? Math.max(0, enemy.precision - enemy.distractAmount)
+    : enemy.precision;
+}
+
 function simulateEnemyDart(enemy: ActiveEnemy, rng: () => number): CampaignDart {
   const intendedBase = 20;
   const intendedMult = 3;
-  const hit = rng() < enemy.accuracy;
+  const hit = rng() < effectiveAccuracy(enemy);
   let base = intendedBase;
   let mult = intendedMult;
   if (!hit) {
-    if (rng() < enemy.precision) {
+    if (rng() < effectivePrecision(enemy)) {
       const neighbors = neighborsOf(intendedBase);
       base = neighbors[Math.floor(rng() * neighbors.length)] || intendedBase;
     } else {
@@ -599,10 +620,13 @@ function finishEnemyTurn(state: CampaignBattleState): CampaignBattleState {
       .map(b => ({ ...b, turnsLeft: b.turnsLeft - 1 }))
       .filter(b => b.turnsLeft > 0),
   }));
-  // Decrement enemy vulnerability timers (Time Warp).
+  // Decrement enemy vulnerability timers (Time Warp) and Focus Buff
+  // distract timers.
   const enemies = state.enemies.map(e => ({
     ...e,
     vulnerableTurns: Math.max(0, e.vulnerableTurns - 1),
+    distractedTurns: Math.max(0, e.distractedTurns - 1),
+    distractAmount: e.distractedTurns - 1 > 0 ? e.distractAmount : 0,
   }));
   return {
     ...state,
@@ -639,15 +663,26 @@ export function activateCoopPowerUp(state: CampaignBattleState, id: CoopPowerUpI
     const healed = Math.min(state.partyMaxHp, state.partyHp + 80);
     return { ...state, partyHp: healed, powerUpCharge: charge };
   }
-  if (id === 'coop_buff_power' || id === 'coop_buff_acc') {
-    const kind: PlayerBuff['kind'] = id === 'coop_buff_power' ? 'power' : 'accuracy';
-    const amount = id === 'coop_buff_power' ? 10 : 20;
+  if (id === 'coop_buff_power') {
+    const kind: PlayerBuff['kind'] = 'power';
+    const amount = 10;
     const buffId = `${kind}_${Date.now()}`;
     const players = state.players.map(p => ({
       ...p,
       buffs: [...p.buffs, { id: buffId, kind, amount, turnsLeft: 3, source: thrower.id }],
     }));
     return { ...state, players, powerUpCharge: charge };
+  }
+  if (id === 'coop_buff_acc') {
+    // Focus Buff: distract every alive enemy. Reduce their accuracy and
+    // precision for 3 turns. This is the in-game effect — darts are
+    // user-tapped, so a player accuracy buff has no real-life effect.
+    const enemies = state.enemies.map(e => e.defeated ? e : {
+      ...e,
+      distractedTurns: FOCUS_BUFF_TURNS,
+      distractAmount: FOCUS_BUFF_DISTRACT_AMOUNT,
+    });
+    return { ...state, enemies, powerUpCharge: charge };
   }
   if (id === 'coop_freeze') {
     const enemies = state.enemies.map(e => e.defeated ? e : { ...e, frozenTurns: 2 });
