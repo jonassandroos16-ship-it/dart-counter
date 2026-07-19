@@ -238,6 +238,7 @@ export function startBattle(
     appliedEnemyAttacks: [],
     awaitContinue: false,
     phantomDarts: 0,
+    frozenEnemiesThisRound: [],
   };
 }
 
@@ -611,15 +612,19 @@ function makeDart(base: number, mult: number): CampaignDart {
 // Build the list of enemy attack steps for the upcoming enemy phase. Each
 // alive (and non-frozen) enemy throws 3 darts; each dart is one step so the
 // UI can animate them one at a time. Frozen enemies skip their turn and
-// have their `frozenTurns` decremented.
+// have their `frozenTurns` decremented. The list of frozen enemies is
+// recorded in `frozenEnemiesThisRound` so the UI can show a "frozen" popup
+// even when no attacks are produced (e.g. all enemies are frozen).
 export function prepareEnemyTurn(state: CampaignBattleState, rng: () => number = Math.random): CampaignBattleState {
   if (state.phase !== 'enemy') return state;
   const steps: EnemyAttackStep[] = [];
   let partyHp = state.partyHp;
+  const frozenEnemiesThisRound: { id: string; name: string; frozenTurns: number }[] = [];
   const enemies = state.enemies.map(e => ({ ...e }));
   for (const enemy of enemies) {
     if (enemy.defeated) continue;
     if (enemy.frozenTurns > 0) {
+      frozenEnemiesThisRound.push({ id: enemy.id, name: enemy.name, frozenTurns: enemy.frozenTurns });
       enemy.frozenTurns -= 1;
       continue;
     }
@@ -641,6 +646,9 @@ export function prepareEnemyTurn(state: CampaignBattleState, rng: () => number =
     enemies,
     pendingEnemyAttacks: steps,
     appliedEnemyAttacks: [],
+    frozenEnemiesThisRound,
+    // Keep awaiting Continue even when all enemies were frozen so the UI
+    // can show the frozen popup before returning to the player phase.
     awaitContinue: true,
   };
 }
@@ -704,6 +712,7 @@ function finishEnemyTurn(state: CampaignBattleState): CampaignBattleState {
     visitEnemiesSnapshot: [],
     pendingEnemyAttacks: [],
     appliedEnemyAttacks: [],
+    frozenEnemiesThisRound: [],
     visitNumber: state.visitNumber + 1,
     awaitContinue: false,
   };
