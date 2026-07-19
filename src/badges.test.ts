@@ -176,3 +176,72 @@ describe('computeGameBadges — Slayer', () => {
     expect(map['p1']).not.toContain('b_slayer');
   });
 });
+
+describe('computeGameBadges — power-up gating', () => {
+  it('does not award standard badges in a power-up match', () => {
+    const game: any = {
+      mode: '501', powerUpsEnabled: true,
+      players: [
+        { id: 'p1', name: 'P1', color: '#000', visits: [makeVisit(180, [{ base: 20, mult: 3 }, { base: 20, mult: 3 }, { base: 20, mult: 3 }])], powerUpCharge: 0, powerUpUsed: false },
+        { id: 'p2', name: 'P2', color: '#000', visits: [makeVisit(60, [{ base: 20, mult: 3 }])], powerUpCharge: 0, powerUpUsed: false },
+      ],
+    };
+    const map = computeGameBadges(game);
+    expect(map['p1']).not.toContain('b_ton80');
+    expect(map['p1']).not.toContain('b_ton');
+    expect(map['p1']).not.toContain('b_hit_bull');
+  });
+
+  it('awards power-up badges in a power-up match', () => {
+    const game: any = {
+      mode: '501', powerUpsEnabled: true,
+      players: [
+        { id: 'p1', name: 'P1', color: '#000', visits: [makeVisit(180, [{ base: 20, mult: 3 }, { base: 20, mult: 3 }, { base: 20, mult: 3 }])], powerUpCharge: 100, powerUpUsed: true },
+        { id: 'p2', name: 'P2', color: '#000', visits: [makeVisit(60, [{ base: 20, mult: 3 }])], powerUpCharge: 50, powerUpUsed: false },
+      ],
+    };
+    const map = computeGameBadges(game);
+    expect(map['p1']).toContain('b_power_charged');
+    expect(map['p1']).toContain('b_power_used');
+    expect(map['p2']).not.toContain('b_power_charged');
+    expect(map['p2']).not.toContain('b_power_used');
+  });
+
+  it('does not award power-up badges in a standard match', () => {
+    const game: any = {
+      mode: '501',
+      players: [
+        { id: 'p1', name: 'P1', color: '#000', visits: [makeVisit(180, [{ base: 20, mult: 3 }, { base: 20, mult: 3 }, { base: 20, mult: 3 }])], powerUpCharge: 100, powerUpUsed: true },
+        { id: 'p2', name: 'P2', color: '#000', visits: [makeVisit(60, [{ base: 20, mult: 3 }])] },
+      ],
+    };
+    const map = computeGameBadges(game);
+    expect(map['p1']).not.toContain('b_power_charged');
+    expect(map['p1']).not.toContain('b_power_used');
+  });
+
+  it('awards post-game power-up badge to winner who used that power-up', () => {
+    const game: any = {
+      mode: '501', powerUpsEnabled: true, winner: 'p1',
+      players: [
+        { id: 'p1', name: 'P1', color: '#000', visits: [], usedPowerUp: 'pu_blocker' },
+        { id: 'p2', name: 'P2', color: '#000', visits: [], usedPowerUp: null },
+      ],
+    };
+    const map = computeGameBadges(game);
+    expect(map['p1']).toContain('b_power_blocker');
+    expect(map['p1']).not.toContain('b_power_surge');
+  });
+
+  it('does not award post-game power-up badge to a non-winner', () => {
+    const game: any = {
+      mode: '501', powerUpsEnabled: true, winner: 'p2',
+      players: [
+        { id: 'p1', name: 'P1', color: '#000', visits: [], usedPowerUp: 'pu_blocker' },
+        { id: 'p2', name: 'P2', color: '#000', visits: [], usedPowerUp: null },
+      ],
+    };
+    const map = computeGameBadges(game);
+    expect(map['p1']).not.toContain('b_power_blocker');
+  });
+});
