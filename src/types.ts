@@ -205,6 +205,7 @@ export interface Settings {
   musicSetupTrack: string;
   musicMatchTrack: string;
   sfxVolume: number;
+  musicVolume: number;
   xpConfig: XPConfig;
   customTitles: CustomTitle[];
   popups: { scores: boolean; milestones: boolean; xp: boolean; titles: boolean };

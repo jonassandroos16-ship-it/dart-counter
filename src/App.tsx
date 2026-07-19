@@ -84,7 +84,7 @@ export default function App() {
     if (view !== 'play') { musicRef.current.stop(); return; }
     musicRef.current.startContext('setup', db.settings);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, welcomeDone, db.settings.music, db.settings.musicStartTrack, db.settings.musicSetupTrack]);
+  }, [view, welcomeDone, db.settings.music, db.settings.musicStartTrack, db.settings.musicSetupTrack, db.settings.musicVolume]);
 
   return (
     <div className="app-shell">

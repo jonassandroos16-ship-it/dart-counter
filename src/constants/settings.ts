@@ -3,8 +3,8 @@ import type { Settings } from '../types';
 export function defaultSettings(): Settings {
   return {
     theme: 'dark', accent: '#22c55e', confirmReset: true, sound: true, music: true,
-    musicStartTrack: 'start_dart_wars', musicSetupTrack: 'setup_horizon', musicMatchTrack: 'match_drive',
-    sfxVolume: 0.9,
+    musicStartTrack: 'start_bullseye_anthem', musicSetupTrack: 'setup_horizon', musicMatchTrack: 'match_drive',
+    sfxVolume: 0.9, musicVolume: 0.9,
     xpConfig: { win: 50, visit60: 5, visit80: 10, visit100: 15, visit120: 20, visit140: 25, visit180: 50, checkout: 10, perDart: 1, levelMult: 1.5, baseLevelXp: 100 },
     customTitles: [],
     popups: { scores: true, milestones: true, xp: true, titles: true },
