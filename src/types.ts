@@ -8,9 +8,11 @@ export interface PlayerAttributes {
 }
 
 export interface PlayerPowerUps {
-  unlocked: string[];          // power up ids the player has unlocked
-  active: string | null;      // equipped power up id (single slot)
-  pointsAvailable: number;    // unspent power-up unlock points
+  unlocked: string[];          // competitive power up ids the player has unlocked
+  active: string | null;      // equipped competitive power up id (single slot)
+  pointsAvailable: number;    // unspent power-up unlock points (competitive)
+  coopUnlocked: string[];      // coop power up ids the player has unlocked (always all of them)
+  coopActive: string | null;   // equipped coop power up id (single slot, used in Coop mode)
 }
 
 export interface Player {
