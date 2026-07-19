@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import type { Game, GameRecord, Player, Settings } from '../types';
 import { MODES, TEAM_COLORS, getTitleInfo, showdownBgCssForId } from '../constants';
 import { getPlayerXPById, levelFromXP, playerStats } from '../logic';
-import { getBadgeInfo, getBadgeContext } from '../badges';
+import { getBadgeInfo, getBadgeContext, buildCoopBadgeCtx } from '../badges';
 import { getPowerUpInfo } from '../powerups';
 import { initials } from '../store';
 import { Sound } from '../sound';
@@ -70,7 +70,7 @@ export function Showdown({ game, players, games, settings, onClose }: {
         const li = levelFromXP(xp.xp, settings);
         const ti = getTitleInfo(xp.selectedTitle, settings.customTitles);
         const bi = getBadgeInfo(xp.selectedBadge);
-        const ctx = xp.showBadgeContext ? getBadgeContext(xp.selectedBadge, pl.id, games as any) : null;
+        const ctx = xp.showBadgeContext ? getBadgeContext(xp.selectedBadge, pl.id, games as any, buildCoopBadgeCtx()) : null;
         const pu = getPowerUpInfo(p?.powerUps?.active);
         const stats = playerStats(pl.id, games as any);
         return {
@@ -88,7 +88,7 @@ export function Showdown({ game, players, games, settings, onClose }: {
         const li = levelFromXP(xp.xp, settings);
         const tinfo = getTitleInfo(xp.selectedTitle, settings.customTitles);
         const binfo = getBadgeInfo(xp.selectedBadge);
-        const bctx = xp.showBadgeContext ? getBadgeContext(xp.selectedBadge, pl.id, games as any) : null;
+        const bctx = xp.showBadgeContext ? getBadgeContext(xp.selectedBadge, pl.id, games as any, buildCoopBadgeCtx()) : null;
         const pu = getPowerUpInfo(p?.powerUps?.active);
         return { id: pl.id, name: pl.name, color: pl.color, level: li.level, title: tinfo, badge: binfo, badgeCtx: bctx, powerUp: pu };
       });
