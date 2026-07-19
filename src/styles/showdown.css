@@ -58,25 +58,38 @@
 .showdown-card.sd-champion {
   border-color: #fbbf24 !important;
   box-shadow: 0 8px 22px rgba(0,0,0,.5), 0 0 22px rgba(251,191,36,.35);
+  padding-top: 28px;
 }
 .showdown-card.sd-titled {
   border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
   box-shadow: 0 8px 22px rgba(0,0,0,.5), 0 0 16px color-mix(in srgb, var(--accent) 30%, transparent);
+  padding-top: 28px;
 }
 .showdown-card.sd-has-bg::before {
   content: ''; position: absolute; inset: 0; border-radius: inherit;
-  background: linear-gradient(180deg, rgba(8,10,16,.35) 0%, rgba(8,10,16,.55) 100%);
+  background: linear-gradient(180deg, rgba(8,10,16,.15) 0%, rgba(8,10,16,.35) 100%);
   pointer-events: none; z-index: 0;
+}
+.showdown-card.sd-has-bg {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border)) !important;
+}
+.showdown-card.sd-has-bg.sd-champion {
+  border-color: #fbbf24 !important;
+}
+.showdown-card.sd-has-bg.sd-titled {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--border)) !important;
 }
 .showdown-card.sd-has-bg > * { position: relative; z-index: 1; }
 .sd-crown {
-  position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
-  font-size: 9px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase;
-  padding: 3px 9px; border-radius: 999px;
+  position: absolute; top: 0; left: 0; right: 0;
+  font-size: 10px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase;
+  padding: 5px 8px;
+  border-radius: 14px 14px 0 0;
   background: linear-gradient(135deg, #fbbf24, #f59e0b);
-  color: #1a1206; box-shadow: 0 4px 12px rgba(251,191,36,.4);
-  white-space: nowrap; z-index: 4; max-width: calc(100% - 8px);
+  color: #1a1206;
+  white-space: nowrap; z-index: 4; width: 100%;
   overflow: hidden; text-overflow: ellipsis;
+  text-align: center;
   animation: sdFadeIn .5s ease .3s both;
 }
 .sd-crown-alt {

@@ -88,7 +88,7 @@ export const MODES: Record<string, { start: number; label: string; atc?: boolean
   'battle': { start: 0, label: 'Battle', party: true,
     desc: 'Use your attributes! Each dart deals damage to an opponent. Last one standing wins.',
     rules: [
-      'Each player starts with HP equal to their Health attribute (base 100, cap 500).',
+      'Each player starts with HP equal to their Health attribute (base 300, cap 500).',
       'Armor is a flat reduction applied to EVERY dart (base 0, cap 25).',
       'Power is a flat bonus added to EVERY dart that hits (base 0, cap 30).',
       'Each visit you attack one opponent — in 1v1 it is automatic.',

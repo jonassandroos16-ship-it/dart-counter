@@ -8,6 +8,14 @@ import { BADGES, getBadgeInfo, getBadgeContext, computeLifetimeBadgeCounts } fro
 import { POWER_UPS, getPowerUpInfo } from './powerups';
 import { Sound } from './sound';
 
+function spentOn(current: number, start: number, perPoint: number): number {
+  if (!Number.isFinite(current) || !Number.isFinite(start)) return 0;
+  if (!Number.isFinite(perPoint) || perPoint <= 0) return 0;
+  const diff = current - start;
+  if (diff <= 0) return 0;
+  return Math.round(diff / perPoint);
+}
+
 export function PlayersView({ players, games, settings, setPlayers, toast }: {
   players: Player[]; games: any[]; settings: Settings;
   setPlayers: (updater: any) => void; toast: (m: string) => void;
@@ -35,7 +43,7 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
         const pwr = p.powerUps || defaultPowerUps(settings);
         const activePu = getPowerUpInfo(pwr.active);
         return (
-          <div key={p.id} className="card" style={{ padding: 12 }}>
+          <div key={p.id} className="card player-card" style={{ padding: 12, borderLeft: `5px solid ${p.color}`, background: `linear-gradient(135deg, color-mix(in srgb, ${p.color} 10%, var(--bg-2)) 0%, var(--bg-2) 60%)` }}>
             <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
               <div style={{ position: 'relative', width: 34, height: 34, flex: '0 0 auto' }}>
                 <div className="avatar" style={{ background: p.color, fontSize: bi ? 18 : undefined, width: 34, height: 34 }}>{avatarContent}</div>
@@ -61,7 +69,7 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
                   {p.developerMode ? <span className="xp-pill" title="Developer mode — bonus points for testing">DEV</span> : null}
                 </div>
                 <div className="muted small">{s.games} games ({s.competitiveGames} competitive) · {s.avg.toFixed(1)} avg · {s.n180} × 180 · {xp.xp} XP · {(xp.unlockedBadges || []).length} badges · {totalBadgeEarns} earned</div>
-                <div className="muted small" style={{ marginTop: 2 }}>❤️ {attrs.health} HP · 🛡️ {attrs.armor} armor · ⚡ {attrs.power} power · {pwr.unlocked.length} power-ups · {pwr.pointsAvailable} PU pts · {attrs.pointsAvailable} attr pts</div>
+                <div className="muted small" style={{ marginTop: 2 }}>❤️ {Number.isFinite(attrs.health) ? attrs.health : 0} HP · 🛡️ {Number.isFinite(attrs.armor) ? attrs.armor : 0} armor · ⚡ {Number.isFinite(attrs.power) ? attrs.power : 0} power · {pwr.unlocked.length} power-ups · {pwr.pointsAvailable} PU pts · {attrs.pointsAvailable} attr pts</div>
                 <div className="xp-bar" style={{ width: '100%', maxWidth: 240 }}><div style={{ width: `${Math.round(li.xpIntoLevel / li.xpNeeded * 100)}%` }} /></div>
               </div>
             </div>
@@ -132,13 +140,39 @@ function EditPlayerModal({ player, players, isNew, games, settings, onClose, onS
               if (isNew) {
                 setDevMode(on);
               } else {
-                setPlayers((prev: Player[]) => prev.map(p => p.id === player.id ? { ...p, developerMode: on } : p));
+                setPlayers((prev: Player[]) => prev.map(p => {
+                  if (p.id !== player.id) return p;
+                  if (!on) return { ...p, developerMode: false };
+                  const allTitleIds = allTitles(settings.customTitles).map(t => t.id);
+                  const allBadgeIds = BADGES.map(b => b.id);
+                  const allPuIds = POWER_UPS.map(pu => pu.id);
+                  const existingBadgeCounts = { ...(p.badgeCounts || {}) };
+                  for (const bid of allBadgeIds) {
+                    if (!existingBadgeCounts[bid]) existingBadgeCounts[bid] = 1;
+                  }
+                  return {
+                    ...p,
+                    developerMode: true,
+                    unlockedTitles: Array.from(new Set([...(p.unlockedTitles || []), ...allTitleIds])),
+                    unlockedBadges: Array.from(new Set([...(p.unlockedBadges || []), ...allBadgeIds])),
+                    badgeCounts: existingBadgeCounts,
+                    powerUps: {
+                      unlocked: Array.from(new Set([...((p.powerUps?.unlocked || [])), ...allPuIds])),
+                      active: p.powerUps?.active ?? null,
+                      pointsAvailable: (p.powerUps?.pointsAvailable ?? 0) + 100,
+                    },
+                    attributes: {
+                      ...(p.attributes || defaultAttributes(settings)),
+                      pointsAvailable: (p.attributes?.pointsAvailable ?? 0) + 100,
+                    },
+                  };
+                }));
               }
-              toast(on ? 'Developer mode on — +100 attribute & power-up points' : 'Developer mode off');
+              toast(on ? 'Developer mode on — everything unlocked' : 'Developer mode off');
             }} style={{ marginTop: 2, cursor: 'pointer' }} />
             <span>
               <span style={{ fontWeight: 700, fontSize: 14, display: 'block' }}>Developer mode</span>
-              <span className="muted" style={{ fontSize: 12, lineHeight: 1.3, display: 'block', marginTop: 2 }}>Grants +100 attribute points and +100 power-up points for testing power-ups and battle stats without grinding XP.</span>
+              <span className="muted" style={{ fontSize: 12, lineHeight: 1.3, display: 'block', marginTop: 2 }}>Unlocks every title, badge and power-up, and grants +100 attribute & power-up points for testing without grinding XP.</span>
             </span>
           </label>
           <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 6, marginTop: 14, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Showdown Background</span>
@@ -360,30 +394,39 @@ function AttributesTab({ player, settings, setPlayers, toast }: { player: Player
   const cfg = settings.powerUpScaling;
   const attrs = player.attributes || defaultAttributes(settings);
   const level = player.level ?? 1;
-  const totalPoints = totalAttributePointsForLevel(level, settings);
-  const spent = Math.round((attrs.health - cfg.attributeStartHealth) / cfg.healthPerPoint)
-    + Math.round((attrs.armor - cfg.attributeStartArmor) / cfg.armorPerPoint)
-    + Math.round((attrs.power - cfg.attributeStartPower) / cfg.powerPerPoint);
+  const totalPoints = totalAttributePointsForLevel(level, settings) + (player.developerMode ? 100 : 0);
+  const safeHealth = Number.isFinite(attrs.health) ? attrs.health : cfg.attributeStartHealth;
+  const safeArmor = Number.isFinite(attrs.armor) ? attrs.armor : cfg.attributeStartArmor;
+  const safePower = Number.isFinite(attrs.power) ? attrs.power : cfg.attributeStartPower;
+  const spent = spentOn(safeHealth, cfg.attributeStartHealth, cfg.healthPerPoint)
+    + spentOn(safeArmor, cfg.attributeStartArmor, cfg.armorPerPoint)
+    + spentOn(safePower, cfg.attributeStartPower, cfg.powerPerPoint);
   const available = Math.max(0, totalPoints - spent);
-  const armorAtCap = attrs.armor >= cfg.armorMax;
-  const powerAtCap = attrs.power >= cfg.powerMax;
-  const healthAtCap = attrs.health >= cfg.healthMax;
+  const armorAtCap = safeArmor >= cfg.armorMax;
+  const powerAtCap = safePower >= cfg.powerMax;
+  const healthAtCap = safeHealth >= cfg.healthMax;
 
   const spend = (kind: 'health' | 'armor' | 'power') => {
-    if (available <= 0) { toast('No attribute points available'); return; }
+    if (!Number.isFinite(available) || available <= 0) { toast('No attribute points available'); return; }
     setPlayers((prev: Player[]) => prev.map(p => {
       if (p.id !== player.id) return p;
       const a = p.attributes || defaultAttributes(settings);
+      const curHealth = Number.isFinite(a.health) ? a.health : cfg.attributeStartHealth;
+      const curArmor = Number.isFinite(a.armor) ? a.armor : cfg.attributeStartArmor;
+      const curPower = Number.isFinite(a.power) ? a.power : cfg.attributeStartPower;
       if (kind === 'health') {
-        if (a.health >= cfg.healthMax) { toast(`Health capped at ${cfg.healthMax}`); return p; }
-        return { ...p, attributes: { ...a, health: Math.min(cfg.healthMax, a.health + cfg.healthPerPoint), pointsAvailable: Math.max(0, available - 1) } };
+        if (curHealth >= cfg.healthMax) { toast(`Health capped at ${cfg.healthMax}`); return p; }
+        const step = Number.isFinite(cfg.healthPerPoint) && cfg.healthPerPoint > 0 ? cfg.healthPerPoint : 1;
+        return { ...p, attributes: { ...a, health: Math.min(cfg.healthMax, curHealth + step), pointsAvailable: Math.max(0, available - 1) } };
       }
       if (kind === 'armor') {
-        if (a.armor >= cfg.armorMax) { toast(`Armor capped at ${cfg.armorMax}`); return p; }
-        return { ...p, attributes: { ...a, armor: Math.min(cfg.armorMax, a.armor + cfg.armorPerPoint), pointsAvailable: Math.max(0, available - 1) } };
+        if (curArmor >= cfg.armorMax) { toast(`Armor capped at ${cfg.armorMax}`); return p; }
+        const step = Number.isFinite(cfg.armorPerPoint) && cfg.armorPerPoint > 0 ? cfg.armorPerPoint : 1;
+        return { ...p, attributes: { ...a, armor: Math.min(cfg.armorMax, curArmor + step), pointsAvailable: Math.max(0, available - 1) } };
       }
-      if (a.power >= cfg.powerMax) { toast(`Power capped at ${cfg.powerMax}`); return p; }
-      return { ...p, attributes: { ...a, power: Math.min(cfg.powerMax, a.power + cfg.powerPerPoint), pointsAvailable: Math.max(0, available - 1) } };
+      if (curPower >= cfg.powerMax) { toast(`Power capped at ${cfg.powerMax}`); return p; }
+      const step = Number.isFinite(cfg.powerPerPoint) && cfg.powerPerPoint > 0 ? cfg.powerPerPoint : 1;
+      return { ...p, attributes: { ...a, power: Math.min(cfg.powerMax, curPower + step), pointsAvailable: Math.max(0, available - 1) } };
     }));
   };
 
@@ -402,19 +445,19 @@ function AttributesTab({ player, settings, setPlayers, toast }: { player: Player
         <div className="row between" style={{ marginTop: 4 }}><span className="muted small">Available</span><span className="xp-pill">{available} pts</span></div>
       </div>
       <div className="card" style={{ padding: 12, marginBottom: 10 }}>
-        <div className="row between"><b>❤️ Health</b><span style={{ fontWeight: 800, fontSize: 18 }}>{attrs.health} HP{healthAtCap ? <span className="muted small" style={{ marginLeft: 6 }}>MAX</span> : null}</span></div>
+        <div className="row between"><b>❤️ Health</b><span style={{ fontWeight: 800, fontSize: 18 }}>{safeHealth} HP{healthAtCap ? <span className="muted small" style={{ marginLeft: 6 }}>MAX</span> : null}</span></div>
         <div className="muted small" style={{ marginTop: 4 }}>Each point adds +{cfg.healthPerPoint} HP (max {cfg.healthMax}). Your total damage pool in Battle.</div>
-        <button className="btn primary block" style={{ marginTop: 8 }} disabled={available <= 0 || healthAtCap} onClick={() => spend('health')}>{healthAtCap ? 'Health at cap' : '+ Spend 1 point on Health'}</button>
+        <button className="btn primary block" style={{ marginTop: 8 }} disabled={!Number.isFinite(available) || available <= 0 || healthAtCap} onClick={() => spend('health')}>{healthAtCap ? 'Health at cap' : '+ Spend 1 point on Health'}</button>
       </div>
       <div className="card" style={{ padding: 12, marginBottom: 10 }}>
-        <div className="row between"><b>🛡️ Armor</b><span style={{ fontWeight: 800, fontSize: 18 }}>{attrs.armor}{armorAtCap ? <span className="muted small" style={{ marginLeft: 6 }}>MAX</span> : null}</span></div>
+        <div className="row between"><b>🛡️ Armor</b><span style={{ fontWeight: 800, fontSize: 18 }}>{safeArmor}{armorAtCap ? <span className="muted small" style={{ marginLeft: 6 }}>MAX</span> : null}</span></div>
         <div className="muted small" style={{ marginTop: 4 }}>Each point adds +{cfg.armorPerPoint} armor (max {cfg.armorMax}). Flat damage reduction applied to EVERY dart in Battle.</div>
-        <button className="btn primary block" style={{ marginTop: 8 }} disabled={available <= 0 || armorAtCap} onClick={() => spend('armor')}>{armorAtCap ? 'Armor at cap' : '+ Spend 1 point on Armor'}</button>
+        <button className="btn primary block" style={{ marginTop: 8 }} disabled={!Number.isFinite(available) || available <= 0 || armorAtCap} onClick={() => spend('armor')}>{armorAtCap ? 'Armor at cap' : '+ Spend 1 point on Armor'}</button>
       </div>
       <div className="card" style={{ padding: 12, marginBottom: 10 }}>
-        <div className="row between"><b>⚡ Power</b><span style={{ fontWeight: 800, fontSize: 18 }}>{attrs.power}{powerAtCap ? <span className="muted small" style={{ marginLeft: 6 }}>MAX</span> : null}</span></div>
+        <div className="row between"><b>⚡ Power</b><span style={{ fontWeight: 800, fontSize: 18 }}>{safePower}{powerAtCap ? <span className="muted small" style={{ marginLeft: 6 }}>MAX</span> : null}</span></div>
         <div className="muted small" style={{ marginTop: 4 }}>Each point adds +{cfg.powerPerPoint} power (max {cfg.powerMax}). Flat damage bonus added to EVERY dart that hits in Battle.</div>
-        <button className="btn primary block" style={{ marginTop: 8 }} disabled={available <= 0 || powerAtCap} onClick={() => spend('power')}>{powerAtCap ? 'Power at cap' : '+ Spend 1 point on Power'}</button>
+        <button className="btn primary block" style={{ marginTop: 8 }} disabled={!Number.isFinite(available) || available <= 0 || powerAtCap} onClick={() => spend('power')}>{powerAtCap ? 'Power at cap' : '+ Spend 1 point on Power'}</button>
       </div>
       <button className="btn ghost sm block" onClick={reset}>Reset attributes</button>
     </>

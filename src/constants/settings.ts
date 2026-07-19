@@ -17,7 +17,7 @@ export function defaultSettings(): Settings {
       pointsPerLevel: 1,
       startingPoints: 1,
       attributePointsPerLevel: 5,
-      attributeStartHealth: 100,
+      attributeStartHealth: 300,
       attributeStartArmor: 0,
       attributeStartPower: 0,
       healthPerPoint: 25,

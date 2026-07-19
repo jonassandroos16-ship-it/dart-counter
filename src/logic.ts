@@ -20,10 +20,13 @@ export function createGame(modeKey: string, playerIds: string[], players: Player
       const s = settings as Settings | null;
       const attrs = src.attributes || defaultAttributes(s || defaultSettings());
       const cfg = s ? s.powerUpScaling : defaultSettings().powerUpScaling;
-      gp.hp = Math.min(cfg.healthMax, attrs.health);
-      gp.maxHp = Math.min(cfg.healthMax, attrs.health);
-      gp.armorPct = Math.min(cfg.armorMax, attrs.armor);
-      gp.powerPct = Math.min(cfg.powerMax, attrs.power);
+      const safeHealth = Number.isFinite(attrs.health) ? attrs.health : cfg.attributeStartHealth;
+      const safeArmor = Number.isFinite(attrs.armor) ? attrs.armor : cfg.attributeStartArmor;
+      const safePower = Number.isFinite(attrs.power) ? attrs.power : cfg.attributeStartPower;
+      gp.hp = Math.max(1, Math.min(cfg.healthMax, safeHealth));
+      gp.maxHp = Math.max(1, Math.min(cfg.healthMax, safeHealth));
+      gp.armorPct = Math.max(0, Math.min(cfg.armorMax, safeArmor));
+      gp.powerPct = Math.max(0, Math.min(cfg.powerMax, safePower));
       gp.defeated = false;
       gp.attacks = [];
       gp.damageDealt = 0;
@@ -144,12 +147,17 @@ export function getPlayerXP(player: Player | undefined) {
 }
 
 export function defaultAttributes(settings: Settings) {
+  const cfg = settings.powerUpScaling;
   return {
-    health: settings.powerUpScaling.attributeStartHealth,
-    armor: settings.powerUpScaling.attributeStartArmor,
-    power: settings.powerUpScaling.attributeStartPower,
+    health: numOr(cfg.attributeStartHealth, 0),
+    armor: numOr(cfg.attributeStartArmor, 0),
+    power: numOr(cfg.attributeStartPower, 0),
     pointsAvailable: 0,
   };
+}
+
+function numOr<T>(v: unknown, fallback: T): T | number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
 }
 
 export function defaultPowerUps(settings: Settings) {
@@ -170,14 +178,16 @@ export function totalPowerUpPointsForLevel(level: number, settings: Settings): n
 
 export function reconcilePlayerPoints(player: Player, settings: Settings): Player {
   const level = player.level ?? 1;
+  const cfg = settings.powerUpScaling;
   const attrs = player.attributes || defaultAttributes(settings);
   const pwr = player.powerUps || defaultPowerUps(settings);
   const devBonus = player.developerMode ? 100 : 0;
 
   const attrTotal = totalAttributePointsForLevel(level, settings) + devBonus;
-  const attrSpent = Math.round((attrs.health - settings.powerUpScaling.attributeStartHealth) / settings.powerUpScaling.healthPerPoint)
-    + Math.round((attrs.armor - settings.powerUpScaling.attributeStartArmor) / settings.powerUpScaling.armorPerPoint)
-    + Math.round((attrs.power - settings.powerUpScaling.attributeStartPower) / settings.powerUpScaling.powerPerPoint);
+  const healthSpent = safeSpent(attrs.health, cfg.attributeStartHealth, cfg.healthPerPoint);
+  const armorSpent = safeSpent(attrs.armor, cfg.attributeStartArmor, cfg.armorPerPoint);
+  const powerSpent = safeSpent(attrs.power, cfg.attributeStartPower, cfg.powerPerPoint);
+  const attrSpent = healthSpent + armorSpent + powerSpent;
   const attrAvail = Math.max(0, attrTotal - attrSpent);
 
   const pwrTotal = totalPowerUpPointsForLevel(level, settings) + devBonus;
@@ -190,6 +200,16 @@ export function reconcilePlayerPoints(player: Player, settings: Settings): Playe
   const changed = (attrs.pointsAvailable !== attrAvail) || (pwr.pointsAvailable !== pwrAvail);
   if (!changed) return player;
   return { ...player, attributes: nextAttrs, powerUps: nextPwr };
+}
+
+// Compute how many points were spent on a single attribute, guarding against
+// zero/missing per-point values so we never produce NaN.
+function safeSpent(current: number, start: number, perPoint: number): number {
+  if (!Number.isFinite(current) || !Number.isFinite(start)) return 0;
+  if (!Number.isFinite(perPoint) || perPoint <= 0) return 0;
+  const diff = current - start;
+  if (diff <= 0) return 0;
+  return Math.round(diff / perPoint);
 }
 
 export function reconcileAllPlayersPoints(players: Player[], settings: Settings): { players: Player[]; changed: boolean } {

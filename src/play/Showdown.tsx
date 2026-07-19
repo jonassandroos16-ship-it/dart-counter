@@ -210,7 +210,7 @@ export function Showdown({ game, players, games, settings, onClose }: {
                 {!teamMode && s.kind === 'player' && s.level > 1 ? <span className="sd-acc sd-acc-lvl">Lvl {s.level}</span> : null}
                 {!teamMode && s.kind === 'player' && s.title ? <span className="sd-acc sd-acc-title" title={s.title.desc}>{s.title.icon || ''} {s.title.name}</span> : null}
                 {!teamMode && s.kind === 'player' && s.badge ? <span className="sd-acc sd-acc-badge" title={s.badge.desc}>{s.badge.icon} {s.badge.name}</span> : null}
-                {!teamMode && s.kind === 'player' && s.powerUp ? <span className="sd-acc sd-acc-pu" title={s.powerUp.desc}>{s.powerUp.icon} {s.powerUp.name}</span> : null}
+                {!teamMode && s.kind === 'player' && powerUpsOn && s.powerUp ? <span className="sd-acc sd-acc-pu" title={s.powerUp.desc}>{s.powerUp.icon} {s.powerUp.name}</span> : null}
               </div>
             </div>
           </div>
