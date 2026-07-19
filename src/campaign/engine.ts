@@ -77,22 +77,22 @@ export function totalLevels(): number {
 
 // ── Party attribute aggregation ──────────────────────────────────────
 //
-// Party HP for a level = sum of each selected player's `health` attribute,
-// capped by `healthMax`. Armor and power are averaged (sum / playerCount)
-// so adding more players can't push armor/power above the configured caps
-// — they share the load. Each player still attacks with their own per-dart
+// Party HP for a level = sum of each selected player's `health` attribute
+// (NOT capped — the per-player `healthMax` cap applies to individuals, not
+// to the party total). Armor and power are averaged (sum / playerCount) so
+// adding more players can't push armor/power above the configured caps —
+// they share the load. Each player still attacks with their own per-dart
 // power (so high power players hit harder), but the shared armor is what
 // mitigates incoming enemy damage.
 
 export function partyMaxHpFor(players: Player[], settings: Settings): number {
   const cfg = settings.powerUpScaling;
-  const cap = Number.isFinite(cfg.healthMax) ? cfg.healthMax : Number.MAX_SAFE_INTEGER;
   const startHealth = Number.isFinite(cfg.attributeStartHealth) ? cfg.attributeStartHealth : 0;
   const sum = players.reduce((acc, p) => {
     const h = p.attributes?.health;
     return acc + (typeof h === 'number' && Number.isFinite(h) ? Math.max(1, h) : startHealth);
   }, 0);
-  return Math.max(1, Math.min(cap, sum));
+  return Math.max(1, sum);
 }
 
 export function partyArmorFor(players: Player[], settings: Settings): number {

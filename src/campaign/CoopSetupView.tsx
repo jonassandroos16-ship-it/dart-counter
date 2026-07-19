@@ -65,7 +65,7 @@ export function CoopSetupView({ players, settings, onStart, onBack }: CoopSetupP
             </div>
           </div>
           <div className="muted small" style={{ marginTop: 6, fontStyle: 'italic' }}>
-            HP is the sum of all players' health. Armor & power are averaged so adding more players can't push them above the cap.
+            HP is the total of all players' health. Armor & power are averaged so adding more players can't push them above the cap.
           </div>
         </div>
         <button className="btn primary block" disabled={!picked.length} onClick={() => picked.length && onStart(picked)}>

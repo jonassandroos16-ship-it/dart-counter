@@ -46,9 +46,9 @@ describe('campaign engine', () => {
     expect(isLevelUnlocked(6, 4)).toBe(false);
   });
 
-  it('party HP is the sum of selected players health, capped by healthMax', () => {
+  it('party HP is the sum of selected players health (not capped)', () => {
     const players = makePlayers(2);
-    expect(partyMaxHpFor(players, settings)).toBe(500); // cap is 500
+    expect(partyMaxHpFor(players, settings)).toBe(600); // 300 + 300, no cap
     const onePlayer: Player[] = [{ ...players[0], attributes: { health: 300, armor: 0, power: 0, pointsAvailable: 0 } }];
     expect(partyMaxHpFor(onePlayer, settings)).toBe(300);
   });
@@ -67,8 +67,8 @@ describe('campaign engine', () => {
     const lvl = getLevel(1)!;
     const players = makePlayers(2);
     const state = startBattle(lvl, players, settings);
-    expect(state.partyMaxHp).toBe(500);
-    expect(state.partyHp).toBe(500);
+    expect(state.partyMaxHp).toBe(600); // 300 + 300, summed (no cap)
+    expect(state.partyHp).toBe(600);
     expect(state.players.length).toBe(2);
     expect(state.playerTurnIdx).toBe(0);
     expect(state.phase).toBe('player');
