@@ -1,16 +1,15 @@
-import type { Game, Settings } from '../../types';
-import { initials } from '../../store';
+import type { Game, GameRecord, Player, Settings } from '../../types';
 import { Sound } from '../../sound';
 import type { MusicEngine } from '../../music';
 import type { PopupControls } from '../../Popups';
-import { PowerUpOrb } from '../common';
+import { PowerUpOrb, BadgeAvatar } from '../common';
 import { addDartToGame, undoDart } from '../dart';
 import { activatePowerUp } from '../powerups';
 import { finishSimpleGame } from '../finish';
 import { GameOver } from '../GameOver';
 
-export function KillerBoard({ game, setGame, settings, toast, music, onQuit, setGames, setPlayers, popups, onGameOver }: {
-  game: Game; setGame: (g: Game | null) => void; settings: Settings; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void;
+export function KillerBoard({ game, setGame, settings, players, games, toast, music, onQuit, setGames, setPlayers, popups, onGameOver }: {
+  game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[]; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void;
 }) {
   const p = game.players[game.turn];
   const others = [...game.players.slice(game.turn + 1), ...game.players.slice(0, game.turn)];
@@ -92,7 +91,7 @@ export function KillerBoard({ game, setGame, settings, toast, music, onQuit, set
       <div className="play-current">
         <div className="pc-header">
           <div className="row" style={{ gap: 8 }}>
-            <span className="avatar" style={{ width: 32, height: 32, fontSize: 13, background: p.color }}>{initials(p.name)}</span>
+            <BadgeAvatar playerId={p.id} players={players} games={games} size={32} fontSize={13} color={p.color} />
             <span className="pc-name">{p.name}</span>
             {(p.killerHits || 0) >= 5 && <span className="pill" style={{ background: '#ef4444', color: '#fff', fontSize: 10 }}>KILLER</span>}
           </div>
@@ -121,7 +120,7 @@ export function KillerBoard({ game, setGame, settings, toast, music, onQuit, set
           <div key={pl.id} className="play-other">
             <div className="row between">
               <div className="row" style={{ gap: 6 }}>
-                <span className="avatar" style={{ width: 22, height: 22, fontSize: 10, background: pl.color }}>{initials(pl.name)}</span>
+                <BadgeAvatar playerId={pl.id} players={players} games={games} size={22} fontSize={10} color={pl.color} />
                 <span className="po-name">{pl.name}</span>
                 {(pl.killerHits || 0) >= 5 && <span className="pill" style={{ background: '#ef4444', color: '#fff', fontSize: 9 }}>KILLER</span>}
               </div>

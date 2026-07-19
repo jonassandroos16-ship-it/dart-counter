@@ -88,6 +88,22 @@ describe('checkoutHint', () => {
     expect(checkoutHint(50, false)).toBe('Checkout: Bull');
   });
 
+  it('suggests two singles for 31 straight out (not S31 or D16)', () => {
+    expect(checkoutHint(31, false)).toBe('Checkout: S20 + S11');
+  });
+
+  it('suggests two singles for 21 straight out', () => {
+    expect(checkoutHint(21, false)).toBe('Checkout: S20 + S1');
+  });
+
+  it('suggests two singles for 39 straight out', () => {
+    expect(checkoutHint(39, false)).toBe('Checkout: S20 + S19');
+  });
+
+  it('returns generic message for 41 straight out (no two-single finish)', () => {
+    expect(checkoutHint(41, false)).toBe('Checkout: 41 — score to finish');
+  });
+
   it('returns no checkout message for unsupported double-out value', () => {
     expect(checkoutHint(169, true)).toBe('No checkout from 169');
   });

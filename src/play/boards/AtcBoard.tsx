@@ -1,13 +1,13 @@
-import type { Game, Settings } from '../../types';
+import type { Game, GameRecord, Player, Settings } from '../../types';
 import { ATC_TARGETS, atcLabel } from '../../constants';
 import { recordFromGame } from '../../logic';
-import { initials } from '../../store';
 import { Sound } from '../../sound';
 import type { MusicEngine } from '../../music';
 import { awardBadges } from '../rewards';
+import { BadgeAvatar } from '../common';
 
-export function AtcBoard({ game, setGame, settings, toast, music, onQuit, setGames, setPlayers }: {
-  game: Game; setGame: (g: Game | null) => void; settings: Settings; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void;
+export function AtcBoard({ game, setGame, settings, players, games, toast, music, onQuit, setGames, setPlayers }: {
+  game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[]; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void;
 }) {
   const p = game.players[game.turn];
   const total = ATC_TARGETS.length;
@@ -58,7 +58,7 @@ export function AtcBoard({ game, setGame, settings, toast, music, onQuit, setGam
       <div className="play-current">
         <div className="pc-header">
           <div className="row" style={{ gap: 8 }}>
-            <span className="avatar" style={{ width: 32, height: 32, fontSize: 13, background: p.color }}>{initials(p.name)}</span>
+            <BadgeAvatar playerId={p.id} players={players} games={games} size={32} fontSize={13} color={p.color} />
             <span className="pc-name">{p.name}</span>
           </div>
           <span className="muted small">AROUND THE CLOCK</span>
@@ -79,7 +79,7 @@ export function AtcBoard({ game, setGame, settings, toast, music, onQuit, setGam
               <div key={pl.id} className="play-other">
                 <div className="row between">
                   <div className="row" style={{ gap: 6 }}>
-                    <span className="avatar" style={{ width: 22, height: 22, fontSize: 10, background: pl.color }}>{initials(pl.name)}</span>
+                    <BadgeAvatar playerId={pl.id} players={players} games={games} size={22} fontSize={10} color={pl.color} />
                     <span className="po-name">{pl.name}</span>
                   </div>
                   <span className="pill" style={{ fontSize: 10 }}>{pl.dartsThrown} 🎯</span>

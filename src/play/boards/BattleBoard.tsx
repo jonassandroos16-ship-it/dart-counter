@@ -1,20 +1,19 @@
 import { useEffect, useState } from 'react';
-import type { Dart, Game, GamePlayer, Settings } from '../../types';
+import type { Dart, Game, GamePlayer, GameRecord, Player, Settings } from '../../types';
 import { SCORE_POPUPS } from '../../constants';
 import { computeBattleDartDamage } from '../../logic';
-import { initials } from '../../store';
 import { Sound } from '../../sound';
 import type { MusicEngine } from '../../music';
 import type { PopupControls } from '../../Popups';
-import { PowerUpOrb } from '../common';
+import { PowerUpOrb, BadgeAvatar } from '../common';
 import { addDartToGame, undoDart, KeypadPad } from '../dart';
 import { activatePowerUp } from '../powerups';
 import { finishSimpleGame } from '../finish';
 import { GameOver } from '../GameOver';
 import { BattleVisitOverlay } from '../BattleVisitOverlay';
 
-export function BattleBoard({ game, setGame, settings, toast, music, onQuit, setGames, setPlayers, popups, onGameOver }: {
-  game: Game; setGame: (g: Game | null) => void; settings: Settings; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void;
+export function BattleBoard({ game, setGame, settings, players, games, toast, music, onQuit, setGames, setPlayers, popups, onGameOver }: {
+  game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[]; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void;
 }) {
   const [targetId, setTargetId] = useState<string | null>(null);
   const [shaking, setShaking] = useState<Record<string, number>>({});
@@ -144,7 +143,7 @@ export function BattleBoard({ game, setGame, settings, toast, music, onQuit, set
       <div className="play-current">
         <div className="pc-header">
           <div className="row" style={{ gap: 8 }}>
-            <span className="avatar" style={{ width: 32, height: 32, fontSize: 13, background: p.color }}>{initials(p.name)}</span>
+            <BadgeAvatar playerId={p.id} players={players} games={games} size={32} fontSize={13} color={p.color} />
             <span className="pc-name">{p.name}</span>
           </div>
           <span className="muted small">BATTLE · {alive.length} ALIVE</span>
@@ -165,7 +164,7 @@ export function BattleBoard({ game, setGame, settings, toast, music, onQuit, set
               {aliveOthers.map(pl => (
                 <button key={pl.id} className="pill" style={{ background: targetId === pl.id ? pl.color : 'var(--bg-3)', color: targetId === pl.id ? '#0b0e13' : 'var(--text)', cursor: 'pointer' }}
                   onClick={() => setTargetId(pl.id)}>
-                  <span className="avatar" style={{ width: 18, height: 18, fontSize: 9, background: targetId === pl.id ? 'rgba(0,0,0,.2)' : pl.color }}>{initials(pl.name)}</span>{pl.name}
+                  <BadgeAvatar playerId={pl.id} players={players} games={games} size={18} fontSize={9} color={targetId === pl.id ? 'rgba(0,0,0,.2)' : pl.color} />{pl.name}
                 </button>
               ))}
             </div>
@@ -191,7 +190,7 @@ export function BattleBoard({ game, setGame, settings, toast, music, onQuit, set
             >
               <div className="row between">
                 <div className="row" style={{ gap: 6 }}>
-                  <span className="avatar" style={{ width: 22, height: 22, fontSize: 10, background: pl.color }}>{initials(pl.name)}</span>
+                  <BadgeAvatar playerId={pl.id} players={players} games={games} size={22} fontSize={10} color={pl.color} />
                   <span className="po-name">{pl.name}</span>
                   {defeated && <span className="pill" style={{ fontSize: 9, background: '#ef4444', color: '#fff' }}>DEFEATED</span>}
                 </div>

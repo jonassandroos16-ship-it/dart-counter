@@ -91,8 +91,11 @@ export function checkoutHint(remaining: number | null, doubleOut: boolean, pract
     if (remaining <= 20) return `Checkout: S${remaining}`;
     if (remaining === 25) return 'Checkout: 25 (outer bull)';
     if (remaining === 50) return 'Checkout: Bull';
-    if (remaining <= 40) { const d = Math.ceil(remaining / 2); return `Checkout: S${remaining} or D${d}`; }
-    if (remaining <= 60) {
+    // Straight-out: any darts summing to `remaining` finish the leg. Suggest
+    // two single segments (1-20) that add up when possible; otherwise fall
+    // back to a generic message so we never reference impossible segments
+    // (e.g. S31) or darts that would bust (e.g. D16 on 31).
+    if (remaining <= 40) {
       const first = Math.min(20, remaining - 1);
       const rest = remaining - first;
       return `Checkout: S${first} + S${rest}`;

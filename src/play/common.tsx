@@ -1,7 +1,46 @@
 import { useState } from 'react';
-import type { Game, Player, Settings } from '../types';
+import type { Game, GameRecord, Player, Settings } from '../types';
 import { getPowerUpInfo } from '../powerups';
+import { getBadgeInfo, getBadgeContext } from '../badges';
+import { getPlayerXPById } from '../logic';
+import { initials } from '../store';
 import { Modal } from '../Popups';
+
+// Avatar that shows the player's equipped badge icon (if any) and, when the
+// player has "show badge context" enabled, a small overlay pill with the
+// lifetime context value. Used across all game boards so the badge context
+// is visible everywhere the profile icon appears, not just in PlayersView.
+export function BadgeAvatar({ playerId, players, games, size = 32, fontSize, color, shape = 'circle' }: {
+  playerId: string; players: Player[]; games?: GameRecord[]; size?: number; fontSize?: number; color: string;
+  shape?: 'circle' | 'square';
+}) {
+  const xp = getPlayerXPById(playerId, players);
+  const bi = getBadgeInfo(xp.selectedBadge);
+  const ctx = xp.showBadgeContext && games ? getBadgeContext(xp.selectedBadge, playerId, games as any) : null;
+  const content = bi ? bi.icon : initials(players.find(p => p.id === playerId)?.name || '');
+  const radius = shape === 'circle' ? '50%' : '6px';
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flex: '0 0 auto' }}>
+      <span
+        className="avatar"
+        style={{ width: size, height: size, fontSize: fontSize ?? (bi ? Math.max(12, size * 0.5) : undefined), background: color, borderRadius: radius }}
+      >{content}</span>
+      {ctx ? (
+        <span
+          title={`${ctx.label}: ${ctx.value}`}
+          style={{
+            position: 'absolute', bottom: -3, right: -3, minWidth: Math.max(16, size * 0.5), height: Math.max(14, size * 0.45),
+            padding: '0 4px', borderRadius: 999, background: 'var(--accent)', color: '#04150a',
+            fontSize: Math.max(8, Math.round(size * 0.32)), fontWeight: 800,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            border: '2px solid var(--bg-2)', lineHeight: 1, boxSizing: 'border-box',
+          }}
+        >{ctx.value}</span>
+      ) : null}
+    </div>
+  );
+}
+
 
 export function PowerUpOrb({ game, curIdx, settings, onActivate }: { game: Game; curIdx: number; settings: Settings; onActivate: () => void; toast: (m: string) => void }) {
   const [open, setOpen] = useState(false);

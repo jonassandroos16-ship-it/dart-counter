@@ -1,12 +1,10 @@
 import type { Game, GamePlayer, GameRecord, Player, Settings } from '../../types';
 import { MODES, TEAM_COLORS, getTitleInfo } from '../../constants';
 import { recordFromGame, checkoutHint, leadTrailBadge, visitAvg, levelFromXP, getPlayerXPById } from '../../logic';
-import { getBadgeInfo } from '../../badges';
-import { initials } from '../../store';
 import { Sound } from '../../sound';
 import type { MusicEngine } from '../../music';
 import type { PopupControls } from '../../Popups';
-import { PowerUpOrb, AttributeStrip } from '../common';
+import { PowerUpOrb, AttributeStrip, BadgeAvatar } from '../common';
 import { addDartToGame, undoDart, KeypadPad } from '../dart';
 import { activatePowerUp } from '../powerups';
 import { runMilestones, awardXP, checkTitleUnlocks, awardBadges } from '../rewards';
@@ -24,8 +22,6 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
   const projected = game.practice ? p.score + buffScored : p.score - buffScored;
   const others = [...game.players.slice(game.turn + 1), ...game.players.slice(0, game.turn)];
   const throwOrder = (idx: number) => (idx - game.roundStartTurn + game.players.length) % game.players.length;
-  const curXp = getPlayerXPById(p.id, players);
-  const curBadge = getBadgeInfo(curXp.selectedBadge);
 
   const curTeam = game.teamMode ? (p.team ?? 0) : -1;
   const curTeamColor = game.teamMode ? TEAM_COLORS[curTeam % TEAM_COLORS.length] : p.color;
@@ -231,7 +227,7 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
         <div className="pc-header">
           <div className="row" style={{ gap: 8 }}>
             <span className={`turn-order-badge${game.turn === game.roundStartTurn ? ' starter' : ''}`}>{throwOrder(game.turn) + 1}</span>
-            <span className="avatar" style={{ width: 32, height: 32, fontSize: 16, background: p.color }}>{curBadge ? curBadge.icon : initials(p.name)}</span>
+            <BadgeAvatar playerId={p.id} players={players} games={games} size={32} fontSize={16} color={p.color} />
             <span className="pc-name">{p.name}</span>
             {game.teamMode && <span className="pill" style={{ background: curTeamColor, color: '#04150a' }}>Team {curTeam + 1}</span>}
           </div>
@@ -262,7 +258,6 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
             const xpInfo = getPlayerXPById(pl.id, players);
             const li = levelFromXP(xpInfo.xp, settings);
             const ti = getTitleInfo(xpInfo.selectedTitle, settings.customTitles);
-            const bi = getBadgeInfo(xpInfo.selectedBadge);
             const badge = leadTrailBadge(pl, game);
             const plTeam = game.teamMode ? (pl.team ?? 0) : -1;
             const plTeamColor = game.teamMode ? TEAM_COLORS[plTeam % TEAM_COLORS.length] : pl.color;
@@ -271,7 +266,7 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
                 <div className="row between">
                   <div className="row" style={{ gap: 6 }}>
                     <span className={`turn-order-badge${game.players.indexOf(pl) === game.roundStartTurn ? ' starter' : ''}`} style={{ width: 18, height: 18, fontSize: 10 }}>{throwOrder(game.players.indexOf(pl)) + 1}</span>
-                    <span className="avatar" style={{ width: 22, height: 22, fontSize: 12, background: pl.color }}>{bi ? bi.icon : initials(pl.name)}</span>
+                    <BadgeAvatar playerId={pl.id} players={players} games={games} size={22} fontSize={12} color={pl.color} />
                     <span className="po-name">{pl.name}</span>
                     {game.teamMode && <span style={{ fontSize: 9, fontWeight: 800, color: plTeamColor }}>T{plTeam + 1}</span>}
                   </div>
