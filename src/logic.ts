@@ -191,7 +191,10 @@ export function totalPowerUpPointsForLevel(level: number, settings: Settings): n
 }
 
 export function reconcilePlayerPoints(player: Player, settings: Settings): Player {
-  const level = player.level ?? 1;
+  // Derive level from XP so the reconciler never relies on a stale cached
+  // `player.level` (e.g. older saves or imported players where level wasn't
+  // persisted). `levelFromXP` is the source of truth for level progression.
+  const level = levelFromXP(player.xp ?? 0, settings).level;
   const cfg = settings.powerUpScaling;
   const attrs = player.attributes || defaultAttributes(settings);
   const pwr = player.powerUps || defaultPowerUps(settings);
