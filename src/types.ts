@@ -144,6 +144,9 @@ export interface GameRecord {
     team?: number;
     kills?: string[];
     defeated?: boolean;
+    // Power-up activation flags — present only when game.powerUpsEnabled.
+    // Used by post-game badges that reward the winner for using a power-up.
+    usedPowerUp?: string | null;
   }[];
 }
 
