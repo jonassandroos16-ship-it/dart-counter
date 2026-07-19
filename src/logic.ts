@@ -13,6 +13,7 @@ export function createGame(modeKey: string, playerIds: string[], players: Player
     if (powerUpsEnabled) {
       gp.powerUpCharge = 0;
       gp.powerUpUsed = false;
+      gp.powerUpUses = 0;
       gp.powerUpId = src.powerUps?.active ?? null;
     }
     if (modeKey === 'battle') {

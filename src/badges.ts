@@ -189,7 +189,7 @@ export const BADGES: BadgeDef[] = [
       const totals: Record<string, number> = {};
       players.forEach((p: any) => (totals[p.id] = 0));
       const timeline: { pid: string; date: number; scored: number; bust: boolean; atc: boolean }[] = [];
-      players.forEach((p: any) => (p.visits || []).forEach((v: any) => timeline.push({ pid: p.id, date: new Date(v.date || 0).getTime(), scored: v.scored || 0, bust: !!v.bust, atc: !!v.atc })));
+      players.forEach((p: any) => (p.visits || []).forEach((v: any) => timeline.push({ pid: p.id, date: new Date(v.date || 0).getTime(), scored: v.scored || 0, bust: !!v.bust, atc: !!v.atc }))));
       timeline.sort((a, b) => a.date - b.date);
       let winnerScored = 0;
       for (const ev of timeline) {
@@ -235,7 +235,7 @@ export const BADGES: BadgeDef[] = [
   { id: 'b_power_used', name: 'Unleashed', desc: 'Activate your equipped power-up during a power-up match', icon: '⚡', kind: 'post-game', powerUpOnly: true,
     pick: (game) => {
       if (!game || !game.powerUpsEnabled) return null;
-      const used = (game.players || []).filter((p: any) => p.powerUpUsed).map((p: any) => p.id);
+      const used = (game.players || []).filter((p: any) => p.powerUpUsed || (p.powerUpUses || 0) > 0).map((p: any) => p.id);
       if (!used.length) return null;
       return used.length === 1 ? used[0] : used;
     } },

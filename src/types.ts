@@ -76,7 +76,8 @@ export interface GamePlayer {
   team?: number; // 0-indexed team id when team mode is active
   // Power-up state during a match (only present when game.powerUpsEnabled).
   powerUpCharge?: number;   // 0..100 — fills from doubles/triples/bullseyes
-  powerUpUsed?: boolean;    // true once the equipped power up has been used this match
+  powerUpUsed?: boolean;    // legacy: true once the equipped power up has been used this match (kept for migration)
+  powerUpUses?: number;     // number of times the equipped power up has been activated this match
   powerUpId?: string | null; // snapshot of the equipped power up at game start
   // Battle mode state (only present when game.mode === 'battle').
   hp?: number;              // current health points (decreases when attacked)
