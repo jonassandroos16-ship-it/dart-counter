@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Game, GamePlayer, GameRecord, Player, Settings } from './types';
-import { MODES, ATC_TARGETS, atcLabel, BUILTIN_TITLES, buildTitleCheck, getTitleInfo, SCORE_POPUPS, MILESTONES, TEAM_COLORS, TEAM_NAMES, showdownBgFor } from './constants';
+import { MODES, ATC_TARGETS, atcLabel, BUILTIN_TITLES, buildTitleCheck, getTitleInfo, SCORE_POPUPS, MILESTONES, TEAM_COLORS, TEAM_NAMES, showdownBgCssForId } from './constants';
 import { createGame, recordFromGame, checkoutHint, leadTrailBadge, visitAvg, levelFromXP, getPlayerXPById, allVisitsFor, computeBattleDamage, playerStats } from './logic';
 import { initials } from './store';
 import { Sound } from './sound';
@@ -1483,6 +1483,7 @@ function Showdown({ game, players, games, settings, onClose }: {
           kind: 'player' as const, idx: i, name: pl.name, color: pl.color,
           members: [{ id: pl.id, name: pl.name, color: pl.color }],
           level: li.level, title: ti, badge: bi, badgeCtx: ctx, powerUp: pu, stats,
+          bgCss: showdownBgCssForId(p?.showdownBg),
         };
       });
     }
@@ -1498,7 +1499,10 @@ function Showdown({ game, players, games, settings, onClose }: {
         return { id: pl.id, name: pl.name, color: pl.color, level: li.level, title: tinfo, badge: binfo, badgeCtx: bctx, powerUp: pu };
       });
       const name = `Team ${ti + 1}`;
-      return { kind: 'team' as const, idx: ti, name, color: TEAM_COLORS[ti % TEAM_COLORS.length], members };
+      const teamBgCss = members
+        .map(m => showdownBgCssForId(players.find(pp => pp.id === m.id)?.showdownBg))
+        .find(css => css) || null;
+      return { kind: 'team' as const, idx: ti, name, color: TEAM_COLORS[ti % TEAM_COLORS.length], members, bgCss: teamBgCss };
     });
   }, [game.players, teamMode, teamCount, players, settings, games]);
 
@@ -1535,7 +1539,7 @@ function Showdown({ game, players, games, settings, onClose }: {
   }, []);
 
   return (
-    <div className="showdown-bg" style={{ background: showdownBgFor(players) }} onClick={onClose}>
+    <div className="showdown-bg" onClick={onClose}>
       <div className="showdown-flash" />
       <div className="showdown-header">
         <div className="sd-mode-name">{modeName}</div>
@@ -1555,7 +1559,7 @@ function Showdown({ game, players, games, settings, onClose }: {
             ? `${Math.round(stat.winRate)}% wins`
             : stat.highScore > 0 ? `Best ${stat.highScore}` : null) : null;
           return (
-          <div key={i} className={`showdown-card${isChampion ? ' sd-champion' : ''}`} style={{ animationDelay: `${0.15 + i * 0.18}s`, borderColor: s.color }}>
+          <div key={i} className={`showdown-card${isChampion ? ' sd-champion' : ''}${s.bgCss ? ' sd-has-bg' : ''}`} style={{ animationDelay: `${0.15 + i * 0.18}s`, borderColor: s.color, ...(s.bgCss ? { background: s.bgCss } : {}) }}>
             <div className="sd-team-color" style={{ background: s.color }} />
             {isChampion && <div className="sd-crown" title="Highest level — the defending champion">👑 Champion</div>}
             <div className="sd-card-inner">
@@ -1573,19 +1577,19 @@ function Showdown({ game, players, games, settings, onClose }: {
               ) : (
                 <>
                   <div className="sd-solo-avatar" style={{ background: s.color }}>
-                    {s.badge ? s.badge.icon : initials(s.name)}
+                    {s.kind === 'player' && s.badge ? s.badge.icon : initials(s.name)}
                   </div>
-                  {s.badgeCtx ? (
+                  {s.kind === 'player' && s.badgeCtx ? (
                     <div className="sd-badge-ctx" title={`${s.badgeCtx.label}: ${s.badgeCtx.value}`}>{s.badge?.icon} {s.badgeCtx.value}</div>
                   ) : null}
                   {statLabel ? <div className="sd-stat-teaser">{statLabel}</div> : null}
                 </>
               )}
               <div className="sd-accents">
-                {!teamMode && s.level > 1 ? <span className="sd-acc sd-acc-lvl">Lvl {s.level}</span> : null}
-                {!teamMode && s.title ? <span className="sd-acc sd-acc-title" title={s.title.desc}>{s.title.icon || ''} {s.title.name}</span> : null}
-                {!teamMode && s.badge ? <span className="sd-acc sd-acc-badge" title={s.badge.desc}>{s.badge.icon} {s.badge.name}</span> : null}
-                {!teamMode && s.powerUp ? <span className="sd-acc sd-acc-pu" title={s.powerUp.desc}>{s.powerUp.icon} {s.powerUp.name}</span> : null}
+                {!teamMode && s.kind === 'player' && s.level > 1 ? <span className="sd-acc sd-acc-lvl">Lvl {s.level}</span> : null}
+                {!teamMode && s.kind === 'player' && s.title ? <span className="sd-acc sd-acc-title" title={s.title.desc}>{s.title.icon || ''} {s.title.name}</span> : null}
+                {!teamMode && s.kind === 'player' && s.badge ? <span className="sd-acc sd-acc-badge" title={s.badge.desc}>{s.badge.icon} {s.badge.name}</span> : null}
+                {!teamMode && s.kind === 'player' && s.powerUp ? <span className="sd-acc sd-acc-pu" title={s.powerUp.desc}>{s.powerUp.icon} {s.powerUp.name}</span> : null}
               </div>
             </div>
           </div>
