@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Player, GameRecord, Settings, CustomTitle } from './types';
 import { COLORS, conditionLabel } from './constants';
-import { tracksFor } from './music';
+import { tracksFor, MusicEngine } from './music';
 import { uid, todayKey, mergeBackup, type BackupShape, type SyncResult } from './store';
 import { Modal } from './Popups';
 import { POWER_UPS } from './powerups';
@@ -15,8 +15,28 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
   const [xpForm, setXpForm] = useState(cfg);
   const [puForm, setPuForm] = useState(settings.powerUpScaling);
   const mergeInputRef = useRef<HTMLInputElement>(null);
+  const previewRef = useRef<MusicEngine | null>(null);
+  const [previewing, setPreviewing] = useState<string | null>(null);
+
+  if (!previewRef.current) previewRef.current = new MusicEngine();
+
+  useEffect(() => () => { previewRef.current?.stop(); }, []);
 
   const update = (patch: Partial<Settings>) => setSettings((prev: Settings) => ({ ...prev, ...patch }));
+
+  const stopPreview = () => {
+    previewRef.current?.stop();
+    setPreviewing(null);
+  };
+
+  const togglePreview = (trackId: string) => {
+    if (previewing === trackId) {
+      stopPreview();
+      return;
+    }
+    previewRef.current?.preview(trackId, { ...settings, music: true });
+    setPreviewing(trackId);
+  };
 
   const statusLabel = !hasDatabase ? 'Local storage only'
     : syncing ? 'Syncing…'
@@ -85,18 +105,13 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
         <label className="row between" style={{ marginBottom: 14 }}><b>Background music</b><input type="checkbox" checked={settings.music} onChange={e => update({ music: e.target.checked })} style={{ width: 'auto' }} /></label>
         {settings.music && (
           <>
-            <div style={{ marginBottom: 14 }}>
-              <div className="muted small" style={{ marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Start screen track</div>
-              <select value={settings.musicStartTrack} onChange={e => update({ musicStartTrack: e.target.value })}>{tracksFor('start').map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
-            </div>
-            <div style={{ marginBottom: 14 }}>
-              <div className="muted small" style={{ marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Setup screen track</div>
-              <select value={settings.musicSetupTrack} onChange={e => update({ musicSetupTrack: e.target.value })}>{tracksFor('setup').map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
-            </div>
-            <div style={{ marginBottom: 14 }}>
-              <div className="muted small" style={{ marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Match track</div>
-              <select value={settings.musicMatchTrack} onChange={e => update({ musicMatchTrack: e.target.value })}>{tracksFor('match').map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
-            </div>
+            <label className="field" style={{ marginBottom: 14 }}>
+              <span><b>Music volume</b> · {Math.round((settings.musicVolume ?? 0.9) * 100)}%</span>
+              <input type="range" min={0} max={1} step={0.05} value={settings.musicVolume ?? 0.9} onChange={e => { update({ musicVolume: +e.target.value }); if (previewing) previewRef.current?.preview(previewing, { ...settings, music: true, musicVolume: +e.target.value }); }} />
+            </label>
+            <TrackRow label="Start screen track" value={settings.musicStartTrack} onChange={v => update({ musicStartTrack: v })} context="start" previewing={previewing} onTogglePreview={togglePreview} onStopPreview={stopPreview} />
+            <TrackRow label="Setup screen track" value={settings.musicSetupTrack} onChange={v => update({ musicSetupTrack: v })} context="setup" previewing={previewing} onTogglePreview={togglePreview} onStopPreview={stopPreview} />
+            <TrackRow label="Match track" value={settings.musicMatchTrack} onChange={v => update({ musicMatchTrack: v })} context="match" previewing={previewing} onTogglePreview={togglePreview} onStopPreview={stopPreview} />
           </>
         )}
         <label className="row between"><b>Confirm before quitting/reset</b><input type="checkbox" checked={settings.confirmReset} onChange={e => update({ confirmReset: e.target.checked })} style={{ width: 'auto' }} /></label>
@@ -311,5 +326,18 @@ function EditCustomTitleModal({ onClose, onSave }: { onClose: () => void; onSave
         }}>Save Title</button>
       </div>
     </Modal>
+  );
+}
+
+function TrackRow({ label, value, onChange, context, previewing, onTogglePreview, onStopPreview }: { label: string; value: string; onChange: (v: string) => void; context: 'start' | 'setup' | 'match'; previewing: string | null; onTogglePreview: (id: string) => void; onStopPreview: () => void }) {
+  const tracks = tracksFor(context);
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div className="muted small" style={{ marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</div>
+      <div className="row" style={{ gap: 8 }}>
+        <select value={value} onChange={e => { onStopPreview(); onChange(e.target.value); }} style={{ flex: 1 }}>{tracks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+        <button className="btn" style={{ width: 86 }} onClick={() => onTogglePreview(value)}>{previewing === value ? 'Stop' : 'Listen'}</button>
+      </div>
+    </div>
   );
 }
