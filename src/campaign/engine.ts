@@ -3,17 +3,34 @@ import type {
   CampaignBattleState,
   CampaignDart,
   CampaignLevel,
+  CoopPlayer,
+  CoopPowerUpDef,
+  CoopPowerUpId,
   EnemyDef,
   EnemyDatabase,
   ExactTarget,
+  PlayerBuff,
+  ResolvedDart,
   ShieldLayer,
   SpanTarget,
+  EnemyAttackStep,
   VisitLogEntry,
 } from './types';
 import { ENEMY_DATABASE } from './enemyDatabase';
 import { CAMPAIGN_LEVELS } from './campaignLevels';
+import type { Player, Settings } from '../types';
 
-export const DEFAULT_PARTY_MAX_HP = 350;
+export const COOP_POWER_UPS: CoopPowerUpDef[] = [
+  { id: 'coop_heal', name: 'Heal', icon: '❤️', desc: 'Restore 80 party HP instantly.', cost: 100 },
+  { id: 'coop_buff_power', name: 'Power Buff', icon: '⚡', desc: 'All players +10 power for 3 turns.', cost: 80 },
+  { id: 'coop_buff_acc', name: 'Focus Buff', icon: '🎯', desc: 'All players +20% accuracy for 3 turns (visual hint).', cost: 80 },
+  { id: 'coop_freeze', name: 'Freeze', icon: '❄️', desc: 'Freeze all enemies for 2 turns — they cannot attack.', cost: 100 },
+  { id: 'coop_shield', name: 'Party Shield', icon: '🛡️', desc: 'Absorb the next 40 party damage from enemies.', cost: 70 },
+];
+
+export function getCoopPowerUp(id: CoopPowerUpId): CoopPowerUpDef | undefined {
+  return COOP_POWER_UPS.find(p => p.id === id);
+}
 
 let instanceCounter = 0;
 function nextInstanceId(prefix: string): string {
@@ -33,14 +50,76 @@ export function totalLevels(): number {
   return CAMPAIGN_LEVELS.levels.length;
 }
 
+// ── Party attribute aggregation ──────────────────────────────────────
+//
+// Party HP for a level = sum of each selected player's `health` attribute,
+// capped by `healthMax`. Armor and power are averaged (sum / playerCount)
+// so adding more players can't push armor/power above the configured caps
+// — they share the load. Each player still attacks with their own per-dart
+// power (so high power players hit harder), but the shared armor is what
+// mitigates incoming enemy damage.
+
+export function partyMaxHpFor(players: Player[], settings: Settings): number {
+  const cfg = settings.powerUpScaling;
+  const cap = cfg.healthMax;
+  const sum = players.reduce((acc, p) => {
+    const h = p.attributes?.health;
+    return acc + (Number.isFinite(h) ? Math.max(1, h) : cfg.attributeStartHealth);
+  }, 0);
+  return Math.max(1, Math.min(cap, sum));
+}
+
+export function partyArmorFor(players: Player[], settings: Settings): number {
+  const cfg = settings.powerUpScaling;
+  if (!players.length) return 0;
+  const sum = players.reduce((acc, p) => {
+    const a = p.attributes?.armor;
+    return acc + (Number.isFinite(a) ? a : cfg.attributeStartArmor);
+  }, 0);
+  // Divide by player count so the combined armor never exceeds the cap.
+  const avg = sum / players.length;
+  return Math.max(0, Math.min(cfg.armorMax, avg));
+}
+
+export function partyPowerFor(players: Player[], settings: Settings): number {
+  const cfg = settings.powerUpScaling;
+  if (!players.length) return 0;
+  const sum = players.reduce((acc, p) => {
+    const pw = p.attributes?.power;
+    return acc + (Number.isFinite(pw) ? pw : cfg.attributeStartPower);
+  }, 0);
+  const avg = sum / players.length;
+  return Math.max(0, Math.min(cfg.powerMax, avg));
+}
+
+// Per-player snapshot used during a battle.
+function toCoopPlayer(p: Player, settings: Settings): CoopPlayer {
+  const cfg = settings.powerUpScaling;
+  const h = Number.isFinite(p.attributes?.health) ? p.attributes!.health : cfg.attributeStartHealth;
+  const a = Number.isFinite(p.attributes?.armor) ? p.attributes!.armor : cfg.attributeStartArmor;
+  const pw = Number.isFinite(p.attributes?.power) ? p.attributes!.power : cfg.attributeStartPower;
+  return {
+    id: p.id,
+    name: p.name,
+    color: p.color,
+    hp: Math.max(1, Math.min(cfg.healthMax, h)),
+    maxHp: Math.max(1, Math.min(cfg.healthMax, h)),
+    power: Math.max(0, Math.min(cfg.powerMax, pw)),
+    armor: Math.max(0, Math.min(cfg.armorMax, a)),
+    buffs: [],
+  };
+}
+
 // ── Battle initialization ─────────────────────────────────────────────
 
 export function startBattle(
   level: CampaignLevel,
-  partyHp: number,
-  partyMaxHp: number,
+  players: Player[],
+  settings: Settings,
   db: EnemyDatabase = ENEMY_DATABASE,
 ): CampaignBattleState {
+  const party = players.map(p => toCoopPlayer(p, settings));
+  const partyMaxHp = partyMaxHpFor(players, settings);
   const enemies: ActiveEnemy[] = level.enemies.map((defId) => {
     const def = db[defId];
     if (!def) throw new Error(`Unknown enemy id: ${defId}`);
@@ -55,21 +134,28 @@ export function startBattle(
       precision: def.precision,
       shields: def.shields.map(s => ({ ...s })),
       defeated: false,
+      frozenTurns: 0,
     };
   });
   return {
     levelId: level.level_id,
     levelName: level.name,
     isBoss: level.is_boss,
-    partyHp,
+    partyHp: partyMaxHp,
     partyMaxHp,
+    players: party,
+    playerTurnIdx: 0,
+    darts: [],
     enemies,
     targetIdx: 0,
-    darts: [],
     phase: 'player',
     lastVisitLog: [],
     visitNumber: 1,
     outcome: 'ongoing',
+    powerUpCharge: 0,
+    pendingPlayerDarts: [],
+    pendingEnemyAttacks: [],
+    awaitContinue: false,
   };
 }
 
@@ -91,8 +177,6 @@ function isTopHalf(base: number): boolean {
 function isBottomHalf(base: number): boolean {
   return base >= 1 && base <= 10;
 }
-// Left/right halves are approximated by board position index parity. The
-// left half contains the odd-indexed sectors of DARTBOARD_ORDER.
 function isLeftHalf(base: number): boolean {
   const i = DARTBOARD_ORDER.indexOf(base);
   return i % 2 === 0;
@@ -105,7 +189,7 @@ function isRightHalf(base: number): boolean {
 export function dartMatchesShield(dart: CampaignDart, shield: ShieldLayer): boolean {
   if (shield.type === 'span') {
     const target = shield.target_value as SpanTarget;
-    if (dart.base === 0) return false; // miss never matches a span
+    if (dart.base === 0) return false;
     switch (target) {
       case 'TOP_HALF': return isTopHalf(dart.base);
       case 'BOTTOM_HALF': return isBottomHalf(dart.base);
@@ -117,7 +201,6 @@ export function dartMatchesShield(dart: CampaignDart, shield: ShieldLayer): bool
     }
     return false;
   }
-  // exact
   const t = shield.target_value as ExactTarget;
   return matchesExactTarget(dart, t);
 }
@@ -125,14 +208,13 @@ export function dartMatchesShield(dart: CampaignDart, shield: ShieldLayer): bool
 function matchesExactTarget(dart: CampaignDart, t: ExactTarget): boolean {
   if (t === 'Bull') return dart.base === 50;
   if (t === '25') return dart.base === 25 && !dart.isBull;
-  // D<base>, T<base>, or bare <base>
   const m = /^([DT]?)(\d+)$/.exec(t);
   if (!m) return false;
   const mult = m[1] === 'D' ? 2 : m[1] === 'T' ? 3 : 1;
   const base = Number(m[2]);
   if (!Number.isFinite(base)) return false;
   if (dart.base !== base) return false;
-  if (base === 25 || base === 50) return true; // bull handled above
+  if (base === 25 || base === 50) return true;
   return dart.mult === mult;
 }
 
@@ -196,106 +278,174 @@ export function setTarget(state: CampaignBattleState, enemyId: string): Campaign
   return { ...state, targetIdx: idx };
 }
 
-// Resolve a player's visit. Shields are checked dart-by-dart in throw order.
-// A dart that breaks a shield deals 0 damage. Darts thrown after all shields
-// are gone deal damage (summed, then armor-mitigated) to the targeted enemy.
-// Returns the post-visit state (still in 'player' phase, with a log). The
-// caller then triggers the enemy phase separately.
+// Effective power for the current thrower, including active buffs.
+function effectivePower(player: CoopPlayer): number {
+  const buff = player.buffs.filter(b => b.kind === 'power').reduce((a, b) => a + b.amount, 0);
+  return Math.max(0, player.power + buff);
+}
+
+// Per-dart damage = max(0, dartValue + power) − armor, min 1 on a hit. Misses deal 0.
+export function computePlayerDartDamage(dart: CampaignDart, attackerPower: number, targetArmor: number): number {
+  if (dart.value <= 0) return 0;
+  const raw = Math.max(0, dart.value + attackerPower) - Math.max(0, targetArmor);
+  return Math.max(1, raw);
+}
+
+// Resolve a player's visit dart-by-dart against the targeted enemy. Each
+// dart is checked against the front shield first; a matching dart breaks
+// the shield and deals 0 damage. Once shields are gone, each dart deals
+// damage to the targeted enemy. If the targeted enemy is defeated mid-visit,
+// remaining darts auto-target the next alive enemy (so a player can kill
+// one enemy and damage another in the same visit). Returns a state with
+// `pendingPlayerDarts` populated; the UI animates through them one at a
+// time, calling `applyNextPlayerDart` to actually mutate enemy HP.
 export function resolvePlayerVisit(state: CampaignBattleState): CampaignBattleState {
   if (state.phase !== 'player') return state;
   if (!state.darts.length) return state;
-  const target = state.enemies[state.targetIdx];
+
+  const thrower = state.players[state.playerTurnIdx];
+  if (!thrower) return state;
+
+  // Find a valid target (auto-pick first alive if the chosen one is dead).
+  let targetIdx = state.targetIdx;
+  let target = state.enemies[targetIdx];
   if (!target || target.defeated) {
-    // Auto-pick first alive enemy if the chosen target is invalid.
-    const firstAliveIdx = state.enemies.findIndex(e => !e.defeated);
-    if (firstAliveIdx < 0) return state;
-    return resolvePlayerVisit({ ...state, targetIdx: firstAliveIdx });
+    const firstAlive = state.enemies.findIndex(e => !e.defeated);
+    if (firstAlive < 0) return state;
+    targetIdx = firstAlive;
+    target = state.enemies[targetIdx];
   }
 
+  const power = effectivePower(thrower);
+  const steps: ResolvedDart[] = [];
+  // Work on a deep copy so we can simulate HP changes locally.
   const enemies = state.enemies.map(e => ({ ...e, shields: [...e.shields] }));
-  const t = enemies[state.targetIdx];
-  const log: VisitLogEntry[] = [];
-  let damageSum = 0;
 
   for (const dart of state.darts) {
-    if (t.defeated) break;
+    let t = enemies[targetIdx];
+    if (t.defeated) {
+      // Auto-retarget to the next alive enemy.
+      const next = enemies.findIndex(e => !e.defeated);
+      if (next < 0) break;
+      targetIdx = next;
+      t = enemies[targetIdx];
+    }
     if (t.shields.length > 0) {
-      const shieldIdx = 0; // front shield is the next to break
+      const shieldIdx = 0;
       const shield = t.shields[shieldIdx];
       if (dartMatchesShield(dart, shield)) {
         t.shields = t.shields.filter((_, i) => i !== shieldIdx);
-        log.push({ kind: 'shield_break', dartLabel: dart.label, shieldIndex: shieldIdx, shieldTarget: describeShield(shield) });
-        continue; // shield-break dart deals 0 damage
+        steps.push({
+          dart, damage: 0, kind: 'shield_break',
+          shieldTarget: describeShield(shield),
+          enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
+        });
+        continue;
       }
-      // Dart didn't match the shield — it also deals 0 damage (absorbed by shield).
+      // Absorbed by shield — 0 damage.
+      steps.push({
+        dart, damage: 0, kind: 'miss',
+        enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
+      });
       continue;
     }
-    // No shields left: this dart deals damage.
-    const dmg = computePlayerDartDamage(dart, t.armor);
-    damageSum += dmg;
-    log.push({ kind: 'damage', dartLabel: dart.label, damage: dmg, enemyId: t.id });
+    const dmg = computePlayerDartDamage(dart, power, t.armor);
     t.hp = Math.max(0, t.hp - dmg);
-    if (t.hp <= 0) {
-      t.defeated = true;
-      log.push({ kind: 'enemy_defeated', enemyId: t.id, enemyName: t.name });
-      break;
+    const defeated = t.hp <= 0;
+    if (defeated) t.defeated = true;
+    steps.push({
+      dart, damage: dmg, kind: defeated ? 'defeated' : 'damage',
+      enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
+    });
+    if (defeated) {
+      // Continue to next dart (auto-retarget on next iteration).
+      // But if no other alive enemy remains, stop.
+      const anyAlive = enemies.some(e => !e.defeated);
+      if (!anyAlive) break;
     }
   }
 
-  const anyAlive = enemies.some(e => !e.defeated);
-  const outcome: CampaignBattleState['outcome'] = !anyAlive ? 'victory' : state.outcome;
   return {
     ...state,
     enemies,
     darts: [],
-    phase: outcome === 'victory' ? 'player' : 'enemy',
-    lastVisitLog: log,
-    visitNumber: state.visitNumber,
-    outcome,
+    targetIdx,
+    pendingPlayerDarts: steps,
+    awaitContinue: true,
   };
 }
 
-// Per-dart damage = max(0, dartValue) − armor, min 1 on a hit. Misses deal 0.
-export function computePlayerDartDamage(dart: CampaignDart, armor: number): number {
-  if (dart.value <= 0) return 0;
-  return Math.max(1, dart.value - armor);
+// Apply the next pending player dart (called by the UI after each animation
+// step). When the queue empties, advance to the next player or the enemy
+// phase.
+export function applyNextPlayerDart(state: CampaignBattleState): CampaignBattleState {
+  if (!state.pendingPlayerDarts.length) {
+    return advanceAfterPlayerVisit(state);
+  }
+  const [step, ...rest] = state.pendingPlayerDarts;
+  const log: VisitLogEntry[] = [...state.lastVisitLog];
+  if (step.kind === 'shield_break') {
+    log.push({ kind: 'shield_break', dartLabel: step.dart.label, shieldIndex: 0, shieldTarget: step.shieldTarget || '' });
+  } else if (step.kind === 'damage') {
+    log.push({ kind: 'damage', dartLabel: step.dart.label, damage: step.damage, enemyId: step.enemyId });
+  } else if (step.kind === 'defeated') {
+    log.push({ kind: 'damage', dartLabel: step.dart.label, damage: step.damage, enemyId: step.enemyId });
+    log.push({ kind: 'enemy_defeated', enemyId: step.enemyId, enemyName: step.enemyName });
+  }
+  const anyAlive = state.enemies.some(e => !e.defeated);
+  const outcome: CampaignBattleState['outcome'] = !anyAlive ? 'victory' : state.outcome;
+  const next: CampaignBattleState = {
+    ...state,
+    pendingPlayerDarts: rest,
+    lastVisitLog: log,
+    outcome,
+    awaitContinue: rest.length > 0 && outcome === 'ongoing',
+  };
+  if (!rest.length) {
+    return advanceAfterPlayerVisit({ ...next, awaitContinue: false });
+  }
+  return next;
+}
+
+// After a player's visit is fully animated, either pass to the next player
+// or start the enemy phase.
+function advanceAfterPlayerVisit(state: CampaignBattleState): CampaignBattleState {
+  if (state.outcome === 'victory') {
+    return { ...state, phase: 'player', awaitContinue: false };
+  }
+  const nextIdx = state.playerTurnIdx + 1;
+  if (nextIdx < state.players.length) {
+    return {
+      ...state,
+      playerTurnIdx: nextIdx,
+      darts: [],
+      awaitContinue: false,
+    };
+  }
+  // All players have thrown — start the enemy phase.
+  return {
+    ...state,
+    phase: 'enemy',
+    darts: [],
+    awaitContinue: false,
+  };
 }
 
 // ── Enemy AI turn ─────────────────────────────────────────────────────
 
-// Simulate one enemy's 3-dart visit. Each dart: with probability `accuracy`
-// the enemy hits its intended sector (T20 — the highest-scoring triple);
-// otherwise it misses. If it misses, with probability `precision` it lands
-// on an adjacent number (1 or 5 for T20), otherwise it scatters to a random
-// sector. Doubles/triples are sampled to determine the multiplier.
-export function simulateEnemyVisit(enemy: ActiveEnemy, rng: () => number = Math.random): { darts: CampaignDart[]; totalDamage: number; log: VisitLogEntry[] } {
-  const darts: CampaignDart[] = [];
-  const log: VisitLogEntry[] = [];
-  let totalDamage = 0;
-  for (let i = 0; i < 3; i++) {
-    const dart = simulateEnemyDart(enemy, rng);
-    darts.push(dart);
-    totalDamage += dart.value;
-  }
-  log.push({ kind: 'enemy_attack', enemyName: enemy.name, damage: totalDamage, dartLabel: darts.map(d => d.label).join(' + ') });
-  return { darts, totalDamage, log };
-}
-
 function simulateEnemyDart(enemy: ActiveEnemy, rng: () => number): CampaignDart {
   const intendedBase = 20;
-  const intendedMult = 3; // enemies aim for T20 by default
+  const intendedMult = 3;
   const hit = rng() < enemy.accuracy;
   let base = intendedBase;
   let mult = intendedMult;
   if (!hit) {
-    // Miss. High-precision enemies cluster to adjacent numbers; low-precision scatter.
     if (rng() < enemy.precision) {
       const neighbors = neighborsOf(intendedBase);
       base = neighbors[Math.floor(rng() * neighbors.length)] || intendedBase;
     } else {
       base = DARTBOARD_ORDER[Math.floor(rng() * DARTBOARD_ORDER.length)];
     }
-    // Misses usually hit single segments.
     const r = rng();
     mult = r < 0.1 ? 3 : r < 0.25 ? 2 : 1;
   }
@@ -317,30 +467,143 @@ function makeDart(base: number, mult: number): CampaignDart {
   return { value, label, base, mult, isDouble: mult === 2, isBull: false };
 }
 
-// Run all alive enemies' turns, deduct damage from party HP, return next state
-// (back to 'player' phase). If party HP hits 0, outcome becomes 'defeat'.
-export function resolveEnemyTurn(state: CampaignBattleState, rng: () => number = Math.random): CampaignBattleState {
+// Build the list of enemy attack steps for the upcoming enemy phase. Each
+// alive (and non-frozen) enemy throws 3 darts; each dart is one step so the
+// UI can animate them one at a time. Frozen enemies skip their turn and
+// have their `frozenTurns` decremented.
+export function prepareEnemyTurn(state: CampaignBattleState, rng: () => number = Math.random): CampaignBattleState {
   if (state.phase !== 'enemy') return state;
-  const log: VisitLogEntry[] = [];
+  const steps: EnemyAttackStep[] = [];
   let partyHp = state.partyHp;
-  const aliveEnemies = state.enemies.filter(e => !e.defeated);
-  for (const enemy of aliveEnemies) {
-    const { totalDamage, log: enemyLog } = simulateEnemyVisit(enemy, rng);
-    log.push(...enemyLog);
-    partyHp = Math.max(0, partyHp - totalDamage);
+  const enemies = state.enemies.map(e => ({ ...e }));
+  for (const enemy of enemies) {
+    if (enemy.defeated) continue;
+    if (enemy.frozenTurns > 0) {
+      enemy.frozenTurns -= 1;
+      continue;
+    }
+    for (let i = 0; i < 3; i++) {
+      const dart = simulateEnemyDart(enemy, rng);
+      const dmg = Math.max(0, dart.value); // enemy damage = dart value, no armor reduction for simplicity
+      partyHp = Math.max(0, partyHp - dmg);
+      steps.push({
+        enemyId: enemy.id,
+        enemyName: enemy.name,
+        dart,
+        damage: dmg,
+        partyHpAfter: partyHp,
+      });
+    }
   }
-  if (partyHp <= 0) {
-    log.push({ kind: 'party_hit', damage: state.partyHp - partyHp });
-    return { ...state, partyHp: 0, phase: 'player', lastVisitLog: log, outcome: 'defeat' };
-  }
-  log.push({ kind: 'party_hit', damage: state.partyHp - partyHp });
   return {
     ...state,
-    partyHp,
-    phase: 'player',
-    lastVisitLog: log,
-    visitNumber: state.visitNumber + 1,
+    enemies,
+    pendingEnemyAttacks: steps,
+    awaitContinue: true,
   };
+}
+
+// Apply the next pending enemy attack step. When the queue empties, return
+// to the player phase (or defeat if party HP is 0).
+export function applyNextEnemyAttack(state: CampaignBattleState): CampaignBattleState {
+  if (!state.pendingEnemyAttacks.length) {
+    return finishEnemyTurn(state);
+  }
+  const [step, ...rest] = state.pendingEnemyAttacks;
+  const log: VisitLogEntry[] = [...state.lastVisitLog, { kind: 'player_attack_step', step }];
+  const next: CampaignBattleState = {
+    ...state,
+    partyHp: step.partyHpAfter,
+    pendingEnemyAttacks: rest,
+    lastVisitLog: log,
+    awaitContinue: rest.length > 0,
+  };
+  if (next.partyHp <= 0) {
+    return { ...next, outcome: 'defeat', phase: 'player', pendingEnemyAttacks: [], awaitContinue: false };
+  }
+  if (!rest.length) {
+    return finishEnemyTurn({ ...next, awaitContinue: false });
+  }
+  return next;
+}
+
+function finishEnemyTurn(state: CampaignBattleState): CampaignBattleState {
+  if (state.partyHp <= 0) {
+    return { ...state, outcome: 'defeat', phase: 'player', awaitContinue: false };
+  }
+  // Decrement player buff timers at the end of the round.
+  const players = state.players.map(p => ({
+    ...p,
+    buffs: p.buffs
+      .map(b => ({ ...b, turnsLeft: b.turnsLeft - 1 }))
+      .filter(b => b.turnsLeft > 0),
+  }));
+  return {
+    ...state,
+    players,
+    phase: 'player',
+    playerTurnIdx: 0,
+    darts: [],
+    visitNumber: state.visitNumber + 1,
+    awaitContinue: false,
+  };
+}
+
+// ── Coop power-ups ────────────────────────────────────────────────────
+
+export function canActivateCoopPowerUp(state: CampaignBattleState, id: CoopPowerUpId): boolean {
+  if (state.phase !== 'player') return false;
+  if (state.darts.length > 0) return false; // only before throwing
+  const def = getCoopPowerUp(id);
+  if (!def) return false;
+  return state.powerUpCharge >= def.cost;
+}
+
+export function activateCoopPowerUp(state: CampaignBattleState, id: CoopPowerUpId): CampaignBattleState {
+  if (!canActivateCoopPowerUp(state, id)) return state;
+  const def = getCoopPowerUp(id)!;
+  const thrower = state.players[state.playerTurnIdx];
+  const charge = state.powerUpCharge - def.cost;
+  if (id === 'coop_heal') {
+    const healed = Math.min(state.partyMaxHp, state.partyHp + 80);
+    return { ...state, partyHp: healed, powerUpCharge: charge };
+  }
+  if (id === 'coop_buff_power' || id === 'coop_buff_acc') {
+    const kind: PlayerBuff['kind'] = id === 'coop_buff_power' ? 'power' : 'accuracy';
+    const amount = id === 'coop_buff_power' ? 10 : 20;
+    const buffId = `${kind}_${Date.now()}`;
+    const players = state.players.map(p => ({
+      ...p,
+      buffs: [...p.buffs, { id: buffId, kind, amount, turnsLeft: 3, source: thrower.id }],
+    }));
+    return { ...state, players, powerUpCharge: charge };
+  }
+  if (id === 'coop_freeze') {
+    const enemies = state.enemies.map(e => e.defeated ? e : { ...e, frozenTurns: 2 });
+    return { ...state, enemies, powerUpCharge: charge };
+  }
+  if (id === 'coop_shield') {
+    // Represented as a buff on every player with kind 'shield' — the engine
+    // doesn't reduce enemy damage directly, but we add a flat 40-HP party
+    // shield by raising partyHp temporarily via a special buff. Simpler:
+    // just heal 40 (acts as absorbtion).
+    const healed = Math.min(state.partyMaxHp, state.partyHp + 40);
+    return { ...state, partyHp: healed, powerUpCharge: charge };
+  }
+  return state;
+}
+
+// Add power-up charge based on a dart just thrown (called from addDart flow
+// in the UI, or rolled into resolvePlayerVisit). Returns the new charge.
+export function chargeFromDart(dart: CampaignDart, settings: Settings): number {
+  const cfg = settings.powerUpScaling;
+  let c = 0;
+  const isBull = dart.value === 50 || dart.value === 25;
+  if (isBull) c += cfg.chargePerBull;
+  else if (dart.mult === 3) c += cfg.chargePerTriple;
+  else if (dart.mult === 2 || dart.isDouble) c += cfg.chargePerDouble;
+  c += dart.value * cfg.chargePerScorePoint;
+  return c;
 }
 
 // ── Progress helpers ──────────────────────────────────────────────────

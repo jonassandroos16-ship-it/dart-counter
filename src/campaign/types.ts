@@ -1,12 +1,14 @@
 // ── Co-op Campaign data model ─────────────────────────────────────────
 //
-// The campaign is fully JSON-driven. Static content (levels, enemy stats,
-// shield definitions) lives in `campaign_levels.json` and
-// `enemy_database.json`. Player progress is a single integer — the highest
-// level beaten — plus the party's current HP, which is persisted between
-// sessions. The combat engine in `engine.ts` is pure: it takes a campaign
-// state and a player action and returns the next state, so the UI stays a
-// thin shell.
+// The campaign is JSON-driven. Static content (levels, enemy stats, shield
+// definitions) lives in `campaignLevels.ts` and `enemyDatabase.ts`. Player
+// progress is the highest level beaten. Party HP is now per-level — each
+// level recomputes the party's max HP from the combined `health` attribute
+// of the selected players, so adding more (or higher-level) players raises
+// the party HP pool for that level only.
+//
+// The combat engine in `engine.ts` is pure: it takes a campaign state and a
+// player action and returns the next state, so the UI stays a thin shell.
 
 export type Difficulty = 'Easy' | 'Hard' | 'Boss';
 
@@ -61,6 +63,35 @@ export interface CampaignConfig {
   levels: CampaignLevel[];
 }
 
+// ── Coop power-ups ────────────────────────────────────────────────────
+//
+// Coop power-ups are single-use abilities the party can activate during a
+// player's turn (before throwing). They cost one charge from the party's
+// shared pool, which fills as the party lands doubles/triples/bulls.
+export type CoopPowerUpId =
+  | 'coop_heal'        // Restore party HP
+  | 'coop_buff_power'  // Give all players +power for N turns
+  | 'coop_buff_acc'    // Give all players +accuracy for N turns
+  | 'coop_freeze'      // Freeze all enemies for N turns (skip their attacks)
+  | 'coop_shield';     // Add a temporary shield that absorbs one enemy hit
+
+export interface CoopPowerUpDef {
+  id: CoopPowerUpId;
+  name: string;
+  icon: string;
+  desc: string;
+  cost: number; // charge cost to activate
+}
+
+// A buff currently active on a player (e.g. +power for 2 more turns).
+export interface PlayerBuff {
+  id: string;
+  kind: 'power' | 'accuracy';
+  amount: number;
+  turnsLeft: number;
+  source: string; // player id who granted it
+}
+
 // ── Runtime combat state ──────────────────────────────────────────────
 
 export interface ActiveEnemy {
@@ -74,27 +105,18 @@ export interface ActiveEnemy {
   precision: number;
   shields: ShieldLayer[]; // remaining shields (front = next to break)
   defeated: boolean;
+  frozenTurns: number;  // when > 0 the enemy skips its next attack(s)
 }
 
-export interface CampaignBattleState {
-  levelId: number;
-  levelName: string;
-  isBoss: boolean;
-  partyHp: number;
-  partyMaxHp: number;
-  enemies: ActiveEnemy[];
-  // Index into `enemies` of the currently targeted enemy (player chooses).
-  targetIdx: number;
-  // Player turn: darts thrown so far this visit (max 3).
-  darts: CampaignDart[];
-  // Whose phase: 'player' | 'enemy'.
-  phase: 'player' | 'enemy';
-  // Per-visit shield-break log so the UI can show what happened.
-  lastVisitLog: VisitLogEntry[];
-  // Visit counter (starts at 1, increments after each player visit).
-  visitNumber: number;
-  // Outcome once the battle ends.
-  outcome: 'ongoing' | 'victory' | 'defeat';
+export interface CoopPlayer {
+  id: string;       // matches Player.id
+  name: string;
+  color: string;
+  hp: number;       // per-player current HP (for display)
+  maxHp: number;    // per-player max HP (from their health attribute)
+  power: number;    // per-player power (from their power attribute)
+  armor: number;    // per-player armor (from their armor attribute)
+  buffs: PlayerBuff[];
 }
 
 export interface CampaignDart {
@@ -106,16 +128,74 @@ export interface CampaignDart {
   isBull?: boolean;
 }
 
+// A single dart's resolution against an enemy — used for the dart-by-dart
+// animated overlay. damage = 0 means shield-break or miss.
+export interface ResolvedDart {
+  dart: CampaignDart;
+  damage: number;
+  kind: 'miss' | 'shield_break' | 'damage' | 'defeated';
+  shieldTarget?: string;
+  enemyId: string;
+  enemyName: string;
+  hpAfter: number;
+}
+
+// An enemy attack step (one dart) — used for the dart-by-dart enemy overlay.
+export interface EnemyAttackStep {
+  enemyId: string;
+  enemyName: string;
+  dart: CampaignDart;
+  damage: number;
+  partyHpAfter: number;
+  targetPlayerId?: string; // which player the dart hit (for display)
+}
+
 export type VisitLogEntry =
   | { kind: 'shield_break'; dartLabel: string; shieldIndex: number; shieldTarget: string }
   | { kind: 'damage'; dartLabel: string; damage: number; enemyId: string }
   | { kind: 'enemy_defeated'; enemyId: string; enemyName: string }
   | { kind: 'enemy_attack'; enemyName: string; damage: number; dartLabel: string }
-  | { kind: 'party_hit'; damage: number };
+  | { kind: 'party_hit'; damage: number }
+  | { kind: 'player_attack_step'; step: EnemyAttackStep }
+  | { kind: 'player_resolved_dart'; step: ResolvedDart };
+
+export interface CampaignBattleState {
+  levelId: number;
+  levelName: string;
+  isBoss: boolean;
+  partyHp: number;
+  partyMaxHp: number;
+  players: CoopPlayer[];
+  // Whose turn within the party (index into `players`). After every player
+  // has thrown once, the enemy phase begins.
+  playerTurnIdx: number;
+  // Per-player dart slots for the current visit (max 3 each).
+  darts: CampaignDart[];
+  enemies: ActiveEnemy[];
+  // Index into `enemies` of the currently targeted enemy (player chooses).
+  targetIdx: number;
+  // Whose phase: 'player' | 'enemy'.
+  phase: 'player' | 'enemy';
+  // Per-visit shield-break log so the UI can show what happened.
+  lastVisitLog: VisitLogEntry[];
+  // Visit counter (starts at 1, increments after each full party round).
+  visitNumber: number;
+  // Outcome once the battle ends.
+  outcome: 'ongoing' | 'victory' | 'defeat';
+  // Party-shared power-up charge (0..100). Fills from doubles/triples/bulls.
+  powerUpCharge: number;
+  // Pending resolved darts for the current player's visit — the UI animates
+  // through these one at a time, applying damage to the targeted enemy.
+  pendingPlayerDarts: ResolvedDart[];
+  // Pending enemy attack steps — the UI animates through these one at a
+  // time, applying damage to the party HP.
+  pendingEnemyAttacks: EnemyAttackStep[];
+  // When true, the UI is expected to wait for the player to tap "Continue"
+  // before advancing. Used by the dart-by-dart overlays.
+  awaitContinue: boolean;
+}
 
 // Persisted progress (also stored to localStorage + Supabase).
 export interface CampaignProgress {
   highest_level_beaten: number;
-  current_party_hp: number;
-  party_max_hp: number;
 }

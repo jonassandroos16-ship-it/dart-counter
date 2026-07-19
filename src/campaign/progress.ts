@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
 import type { CampaignProgress } from './types';
-import { DEFAULT_PARTY_MAX_HP } from './engine';
 import { supabase } from '../supabase';
 
 const KEY = 'dc_campaign_progress';
@@ -8,15 +7,13 @@ const KEY = 'dc_campaign_progress';
 function loadLocal(): CampaignProgress {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { highest_level_beaten: 0, current_party_hp: DEFAULT_PARTY_MAX_HP, party_max_hp: DEFAULT_PARTY_MAX_HP };
+    if (!raw) return { highest_level_beaten: 0 };
     const p = JSON.parse(raw) as Partial<CampaignProgress>;
     return {
       highest_level_beaten: Math.max(0, p.highest_level_beaten || 0),
-      current_party_hp: Number.isFinite(p.current_party_hp) ? p.current_party_hp! : DEFAULT_PARTY_MAX_HP,
-      party_max_hp: Number.isFinite(p.party_max_hp) ? p.party_max_hp! : DEFAULT_PARTY_MAX_HP,
     };
   } catch {
-    return { highest_level_beaten: 0, current_party_hp: DEFAULT_PARTY_MAX_HP, party_max_hp: DEFAULT_PARTY_MAX_HP };
+    return { highest_level_beaten: 0 };
   }
 }
 
@@ -42,8 +39,6 @@ export function useCampaignProgress() {
         setProgressState(prev => {
           const merged: CampaignProgress = {
             highest_level_beaten: Math.max(prev.highest_level_beaten, remote.highest_level_beaten || 0),
-            current_party_hp: Number.isFinite(remote.current_party_hp) ? remote.current_party_hp! : prev.current_party_hp,
-            party_max_hp: Number.isFinite(remote.party_max_hp) ? remote.party_max_hp! : prev.party_max_hp,
           };
           saveLocal(merged);
           return merged;
