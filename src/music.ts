@@ -700,8 +700,9 @@ export class MusicEngine {
     const ctx = this.ensure();
     if (!ctx) return;
     if (ctx.state === 'suspended') {
-      ctx.resume();
-      if (ctx.state === 'suspended') { this.track = null; return; }
+      // Resume within the user gesture; scheduled notes will fire once running.
+      // Don't bail on a synchronous state check — resume() is async.
+      try { void ctx.resume(); } catch {}
     }
     this.track = trackId;
     this.master = ctx.createGain();
