@@ -20,8 +20,8 @@ export function createGame(modeKey: string, playerIds: string[], players: Player
       const s = settings as Settings | null;
       const attrs = src.attributes || defaultAttributes(s || defaultSettings());
       const cfg = s ? s.powerUpScaling : defaultSettings().powerUpScaling;
-      gp.hp = attrs.health;
-      gp.maxHp = attrs.health;
+      gp.hp = Math.min(cfg.healthMax, attrs.health);
+      gp.maxHp = Math.min(cfg.healthMax, attrs.health);
       gp.armorPct = Math.min(cfg.armorMax, attrs.armor);
       gp.powerPct = Math.min(cfg.powerMax, attrs.power);
       gp.defeated = false;
@@ -202,14 +202,32 @@ export function reconcileAllPlayersPoints(players: Player[], settings: Settings)
   return { players: next, changed };
 }
 
-export function computeBattleDamage(visitScore: number, attackerPowerPct: number, targetArmorPct: number, settings: Settings): number {
+// Per-dart battle damage. Each dart is calculated independently so armor
+// applies to every dart (countering multi-hit builds) and power boosts every
+// successful hit. Misses deal 0 damage (power only applies on a hit). A
+// successful hit always deals at least `battleMinDamage` (default 1) so armor
+// can never fully neutralize a turn.
+//
+//   damage(dart) = max(0, dartValue + power) − armor   →   clamp to [minDamage, ∞) on hit, 0 on miss
+export function computeBattleDartDamage(dartValue: number, attackerPower: number, targetArmor: number, settings: Settings): number {
   const cfg = settings.powerUpScaling;
-  const base = cfg.battleBaseDamage + visitScore * 0.5;
-  const powerMult = 1 + (attackerPowerPct / 100) * cfg.battlePowerBonus;
-  const raw = base * powerMult;
-  const armorReduction = Math.min(cfg.armorMax, targetArmorPct) / 100;
-  const final = Math.round(raw * (1 - armorReduction));
-  return Math.max(1, final);
+  const power = Math.min(cfg.powerMax, Math.max(0, attackerPower));
+  const armor = Math.min(cfg.armorMax, Math.max(0, targetArmor));
+  if (dartValue <= 0) return 0; // miss — power only applies on successful hits
+  const raw = Math.max(0, dartValue + power) - armor;
+  return Math.max(cfg.battleMinDamage, raw);
+}
+
+// Convenience: total damage across a visit's darts.
+export function computeBattleVisitDamage(dartValues: number[], attackerPower: number, targetArmor: number, settings: Settings): number {
+  return dartValues.reduce((sum, v) => sum + computeBattleDartDamage(v, attackerPower, targetArmor, settings), 0);
+}
+
+// Legacy single-number API kept for any external callers; computes per-dart
+// damage from a flat visit score treated as a single hit. Prefer
+// computeBattleDartDamage / computeBattleVisitDamage for new code.
+export function computeBattleDamage(visitScore: number, attackerPower: number, targetArmor: number, settings: Settings): number {
+  return computeBattleDartDamage(visitScore, attackerPower, targetArmor, settings);
 }
 
 export function getPlayerXPById(playerId: string, players: Player[]) {

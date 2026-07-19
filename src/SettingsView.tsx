@@ -150,7 +150,7 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
         </div>
         <div className="muted small" style={{ margin: '14px 0 8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Attributes</div>
         <div className="grid grid-2">
-          {([['Starting HP', 'attributeStartHealth'], ['Starting armor (%)', 'attributeStartArmor'], ['Starting power (%)', 'attributeStartPower'], ['HP per point', 'healthPerPoint'], ['Armor per point (%)', 'armorPerPoint'], ['Power per point (%)', 'powerPerPoint'], ['Armor cap (%)', 'armorMax'], ['Power cap (%)', 'powerMax']] as [string, keyof typeof puForm][]).map(([label, key]) => (
+          {([['Starting HP', 'attributeStartHealth'], ['Starting armor', 'attributeStartArmor'], ['Starting power', 'attributeStartPower'], ['HP per point', 'healthPerPoint'], ['Armor per point', 'armorPerPoint'], ['Power per point', 'powerPerPoint'], ['Armor cap', 'armorMax'], ['Power cap', 'powerMax'], ['Health cap', 'healthMax']] as [string, keyof typeof puForm][]).map(([label, key]) => (
             <label key={key} className="field"><span>{label}</span>
               <input type="number" value={puForm[key] as number} min={0} step={1} onChange={e => setPuForm({ ...puForm, [key]: +e.target.value || 0 })} />
             </label>
@@ -158,9 +158,9 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
         </div>
         <div className="muted small" style={{ margin: '14px 0 8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Battle Mode</div>
         <div className="grid grid-2">
-          {([['Base attack damage', 'battleBaseDamage'], ['Power bonus multiplier', 'battlePowerBonus']] as [string, keyof typeof puForm][]).map(([label, key]) => (
+          {([['Min damage per hit', 'battleMinDamage']] as [string, keyof typeof puForm][]).map(([label, key]) => (
             <label key={key} className="field"><span>{label}</span>
-              <input type="number" value={puForm[key] as number} min={0} step={key === 'battlePowerBonus' ? 0.1 : 1} onChange={e => setPuForm({ ...puForm, [key]: +e.target.value || 0 })} />
+              <input type="number" value={puForm[key] as number} min={0} step={1} onChange={e => setPuForm({ ...puForm, [key]: +e.target.value || 0 })} />
             </label>
           ))}
         </div>

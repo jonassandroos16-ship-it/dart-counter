@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { Game, Settings } from '../../types';
+import type { Dart, Game, GamePlayer, Settings } from '../../types';
 import { SCORE_POPUPS } from '../../constants';
-import { computeBattleDamage } from '../../logic';
+import { computeBattleDartDamage } from '../../logic';
 import { initials } from '../../store';
 import { Sound } from '../../sound';
 import type { MusicEngine } from '../../music';
@@ -11,6 +11,7 @@ import { addDartToGame, undoDart, KeypadPad } from '../dart';
 import { activatePowerUp } from '../powerups';
 import { finishSimpleGame } from '../finish';
 import { GameOver } from '../GameOver';
+import { BattleVisitOverlay } from '../BattleVisitOverlay';
 
 export function BattleBoard({ game, setGame, settings, toast, music, onQuit, setGames, setPlayers, popups, onGameOver }: {
   game: Game; setGame: (g: Game | null) => void; settings: Settings; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void;
@@ -18,6 +19,9 @@ export function BattleBoard({ game, setGame, settings, toast, music, onQuit, set
   const [targetId, setTargetId] = useState<string | null>(null);
   const [shaking, setShaking] = useState<Record<string, number>>({});
   const [lastHit, setLastHit] = useState<{ target: string; damage: number } | null>(null);
+  // When set, an animated overlay walks the user through the per-dart damage
+  // of the just-entered visit. The overlay's onDone advances the turn.
+  const [overlay, setOverlay] = useState<{ attacker: GamePlayer; target: GamePlayer; darts: Dart[]; surgeActive: boolean; pending: Game } | null>(null);
   const p = game.players[game.turn];
   const others = [...game.players.slice(game.turn + 1), ...game.players.slice(0, game.turn)];
   const alive = game.players.filter(pl => !pl.defeated);
@@ -55,16 +59,29 @@ export function BattleBoard({ game, setGame, settings, toast, music, onQuit, set
     const victim = newPlayers.find((pl: any) => pl.id === target);
     if (!victim || victim.defeated) { toast('That opponent is already defeated'); return; }
 
-    const damage = computeBattleDamage(scored, cur.powerPct || 0, victim.armorPct || 0, settings);
-    victim.hp = Math.max(0, (victim.hp || 0) - damage);
-    cur.damageDealt = (cur.damageDealt || 0) + damage;
-    victim.damageTaken = (victim.damageTaken || 0) + damage;
-    cur.attacks = [...(cur.attacks || []), { target: victim.id, damage, visit: cur.visits.length + 1, date: new Date().toISOString() }];
+    // Per-dart damage: each dart is calculated independently so armor applies
+    // to every dart and power boosts every successful hit. Surge doubles each
+    // dart's value for damage purposes (mirroring the score multiplier).
+    const darts = [...game.darts] as Dart[];
+    const power = cur.powerPct || 0;
+    const armor = victim.armorPct || 0;
+    let totalDamage = 0;
+    let hp = victim.hp || 0;
+    for (const d of darts) {
+      const dartValue = surgeActive ? d.value * 2 : d.value;
+      const dmg = computeBattleDartDamage(dartValue, power, armor, settings);
+      totalDamage += dmg;
+      hp = Math.max(0, hp - dmg);
+    }
+    victim.hp = hp;
+    cur.damageDealt = (cur.damageDealt || 0) + totalDamage;
+    victim.damageTaken = (victim.damageTaken || 0) + totalDamage;
+    cur.attacks = [...(cur.attacks || []), { target: victim.id, damage: totalDamage, visit: cur.visits.length + 1, date: new Date().toISOString() }];
     cur.score += scored;
-    cur.visits.push({ darts: [...game.darts], scored, remaining: cur.hp, leg: 1, mode: 'battle', date: new Date().toISOString() });
-    cur.dartsThrown += game.darts.length;
+    cur.visits.push({ darts, scored, remaining: cur.hp, leg: 1, mode: 'battle', date: new Date().toISOString() });
+    cur.dartsThrown += darts.length;
     Sound.play('impact', {}, settings);
-    setLastHit({ target: victim.id, damage });
+    setLastHit({ target: victim.id, damage: totalDamage });
     triggerShake(victim.id);
 
     if (victim.hp <= 0 && !victim.defeated) {
@@ -77,17 +94,28 @@ export function BattleBoard({ game, setGame, settings, toast, music, onQuit, set
       for (const sp of SCORE_POPUPS) { if (scored >= sp.min) { popups.setMilestone({ emoji: sp.emoji, title: sp.title, sub: sp.sub }); Sound.play('milestone', {}, settings); break; } }
     }
 
+    const finishedState: Game = { ...game, players: newPlayers, darts: [], mult: 1 };
+    // Show the animated per-dart overlay. Turn rotation happens in onDone
+    // so the overlay can animate the target's HP draining before the next
+    // player's board appears.
+    setOverlay({ attacker: cur as GamePlayer, target: victim as GamePlayer, darts, surgeActive, pending: finishedState });
+  };
+
+  const finishVisit = () => {
+    setOverlay(null);
+    const finishedState = overlay?.pending;
+    if (!finishedState) return;
+    const newPlayers = finishedState.players;
     const remainingAlive = newPlayers.filter((pl: any) => !pl.defeated);
-    const finishedState = { ...game, players: newPlayers, darts: [], mult: 1 };
     if (remainingAlive.length <= 1) {
       const winner = remainingAlive[0] || null;
-      setTimeout(() => finishSimpleGame(finishedState, winner, settings, setGame, setGames, setPlayers, popups, music, [], []), 1200);
+      setTimeout(() => finishSimpleGame(finishedState, winner, settings, setGame, setGames, setPlayers, popups, music, [], []), 200);
       return;
     }
     Sound.play('enter', {}, settings);
-    let nextTurn = (game.turn + 1) % newPlayers.length;
+    let nextTurn = (finishedState.turn + 1) % newPlayers.length;
     while (newPlayers[nextTurn].defeated) nextTurn = (nextTurn + 1) % newPlayers.length;
-    if (game.powerUpsEnabled) {
+    if (finishedState.powerUpsEnabled) {
       let guards = 0;
       while (guards < newPlayers.length) {
         const np = newPlayers[nextTurn] as any;
@@ -122,7 +150,7 @@ export function BattleBoard({ game, setGame, settings, toast, music, onQuit, set
           <span className="muted small">BATTLE · {alive.length} ALIVE</span>
         </div>
         <div className="pc-remaining" style={{ fontSize: 28 }}>{p.hp} HP</div>
-        <div className="checkout-hint center">❤️ {p.hp}/{p.maxHp} · 🛡️ {p.armorPct}% armor · ⚡ {p.powerPct}% power</div>
+        <div className="checkout-hint center">❤️ {p.hp}/{p.maxHp} · 🛡️ {p.armorPct} armor · ⚡ {p.powerPct} power</div>
         <div style={{ width: '100%', height: 8, borderRadius: 4, background: 'var(--bg-3)', overflow: 'hidden', margin: '4px 0' }}>
           <div style={{ height: '100%', width: `${hpPct(p)}%`, background: p.color, transition: 'width .3s' }} />
         </div>
@@ -172,7 +200,7 @@ export function BattleBoard({ game, setGame, settings, toast, music, onQuit, set
               <div style={{ marginTop: 4, height: 6, borderRadius: 3, background: 'var(--bg-3)', overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${hpPct(pl)}%`, background: pl.color, transition: 'width .3s' }} />
               </div>
-              <div className="po-sub">🛡️ {pl.armorPct}% · ⚡ {pl.powerPct}%{pl.damageDealt ? ` · 💥 ${pl.damageDealt}` : ''}</div>
+              <div className="po-sub">🛡️ {pl.armorPct} · ⚡ {pl.powerPct}{pl.damageDealt ? ` · 💥 ${pl.damageDealt}` : ''}</div>
             </div>
           );
         })}
@@ -182,6 +210,16 @@ export function BattleBoard({ game, setGame, settings, toast, music, onQuit, set
         <KeypadPad game={game} setGame={setGame as any} onAdd={addDart} onUndo={() => setGame(undoDart(game))} onEnter={enterVisit} enterLabel="Attack!" />
       </div>
       <button className="btn danger sm" style={{ alignSelf: 'flex-end' }} onClick={() => { if (confirm('Quit this game?')) onQuit(); }}>Quit</button>
+      {overlay ? (
+        <BattleVisitOverlay
+          attacker={overlay.attacker}
+          target={overlay.target}
+          darts={overlay.darts}
+          settings={settings}
+          surgeActive={overlay.surgeActive}
+          onDone={finishVisit}
+        />
+      ) : null}
     </div>
   );
 }
