@@ -12,8 +12,9 @@ export function PowerUpOrb({ game, curIdx, settings, onActivate }: { game: Game;
   const cap = settings.powerUpScaling.chargeMax;
   const charge = Math.min(cap, pl.powerUpCharge || 0);
   const pct = Math.round((charge / cap) * 100);
-  const ready = !pl.powerUpUsed && charge >= cap && !!pu && game.darts.length > 0;
-  const chargedButWaiting = !pl.powerUpUsed && charge >= cap && !!pu && game.darts.length === 0;
+  const ready = charge >= cap && !!pu && game.darts.length > 0;
+  const chargedButWaiting = charge >= cap && !!pu && game.darts.length === 0;
+  const uses = pl.powerUpUses || 0;
   const R = 22;
   const C = 2 * Math.PI * R;
   const dash = C * (pct / 100);
@@ -50,7 +51,7 @@ export function PowerUpOrb({ game, curIdx, settings, onActivate }: { game: Game;
             <h3 style={{ margin: '0 0 6px' }}>{pu.name}</h3>
             <div className="muted" style={{ fontSize: 13, lineHeight: 1.4, marginBottom: 12, maxWidth: 280 }}>{pu.desc}</div>
             <div className="muted small" style={{ marginBottom: 12 }}>
-              {pl.powerUpUsed ? 'Already used this match.' : ready ? 'Fully charged — ready to activate!' : chargedButWaiting ? 'Fully charged — throw at least one dart this visit to activate.' : `${pct}% charged — keep hitting doubles, triples and bulls to charge.`}
+              {ready ? `Fully charged — ready to activate!${uses ? ` (Used ${uses}× this match.)` : ''}` : chargedButWaiting ? 'Fully charged — throw at least one dart this visit to activate.' : `${pct}% charged — keep hitting doubles, triples and bulls to charge.${uses ? ` (Used ${uses}× this match.)` : ''}`}
             </div>
             <div className="row" style={{ gap: 8, justifyContent: 'center' }}>
               <button className="btn ghost" onClick={() => setOpen(false)}>Close</button>

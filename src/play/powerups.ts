@@ -18,17 +18,40 @@ export function applyCharge(game: Game, playerIdx: number, charge: number, setti
   const cap = settings.powerUpScaling.chargeMax;
   const players = game.players.map((pl, i) => {
     if (i !== playerIdx) return pl;
-    if (pl.powerUpUsed) return pl;
     const next = Math.min(cap, (pl.powerUpCharge || 0) + charge);
     return { ...pl, powerUpCharge: next };
   });
   return { ...game, players };
 }
 
+// Catch-up mechanic: when a player is trailing the leader by more than 50
+// (in remaining x01 score, or in accumulated highscore), they earn a small
+// bonus to their power-up charge per dart. This lets lagging players get
+// back into the game faster.
+export function catchUpBoost(game: Game, playerIdx: number, settings: Settings): number {
+  if (!game.powerUpsEnabled) return 0;
+  const players = game.players;
+  if (players.length < 2) return 0;
+  const me = players[playerIdx];
+  if (!me) return 0;
+  const isHighScore = game.mode === 'highscore';
+  const TRAIL_THRESHOLD = 50;
+  const BOOST = Math.max(1, Math.round(settings.powerUpScaling.chargeMax * 0.05));
+  if (isHighScore) {
+    const leader = Math.max(...players.map((p) => p.score));
+    if (leader - me.score > TRAIL_THRESHOLD) return BOOST;
+  } else {
+    // x01-style: lower remaining is better. Leader has the lowest remaining.
+    const leader = Math.min(...players.map((p) => p.score));
+    if (me.score - leader > TRAIL_THRESHOLD) return BOOST;
+  }
+  return 0;
+}
+
 export function activatePowerUp(game: Game, playerIdx: number, settings: Settings, toast: (m: string) => void): Game | null {
   if (!game.powerUpsEnabled) return null;
   const pl = game.players[playerIdx];
-  if (!pl || pl.powerUpUsed) { toast('Power-up already used'); return null; }
+  if (!pl) { toast('No player'); return null; }
   const cap = settings.powerUpScaling.chargeMax;
   if ((pl.powerUpCharge || 0) < cap) { toast('Power-up not fully charged'); return null; }
   // Power-up cannot be activated at the start of a visit — at least one dart
@@ -44,7 +67,7 @@ export function activatePowerUp(game: Game, playerIdx: number, settings: Setting
   if (ok === false) { toast(message); return null; }
   const players = nextGame.players.map((p: any, i: number) => {
     if (i !== playerIdx) return p;
-    const updated: any = { ...p, powerUpUsed: true, powerUpCharge: 0 };
+    const updated: any = { ...p, powerUpCharge: 0, powerUpUses: (p.powerUpUses || 0) + 1 };
     if (puId === 'pu_fourth_dart') updated._fourthDart = true;
     // Track which power-up was used so post-game badges can award the winner.
     if (puId === 'pu_blocker') updated._usedBlocker = true;

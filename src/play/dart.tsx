@@ -1,6 +1,6 @@
 import type { Game, Settings } from '../types';
 import { Sound } from '../sound';
-import { applyCharge, chargeFromDart } from './powerups';
+import { applyCharge, chargeFromDart, catchUpBoost } from './powerups';
 
 // Shared dart-construction helper used by every board that records darts via
 // the numeric keypad. Returns a new Game with the dart appended and the
@@ -16,7 +16,11 @@ export function addDartToGame(game: Game, base: number, mult: number, labelOverr
   const dart = { value, label: labelOverride || label, base, mult: isBull ? 2 : (base === 25 && value === 50 ? 2 : mult), isDouble: !!(isBull || (base === 25 && value === 50) || mult === 2), isOuter: false };
   Sound.play('dart', { score: value }, settings);
   let next: Game = { ...game, darts: [...game.darts, dart], mult: 1 };
-  if (game.powerUpsEnabled) next = applyCharge(next, game.turn, chargeFromDart(dart, settings), settings);
+  if (game.powerUpsEnabled) {
+    const baseCharge = chargeFromDart(dart, settings);
+    const boost = catchUpBoost(game, game.turn, settings);
+    next = applyCharge(next, game.turn, baseCharge + boost, settings);
+  }
   return next;
 }
 
