@@ -9,6 +9,13 @@
 // state to perform the effect. The effect is invoked from the play board when
 // the player taps Activate.
 
+export interface PowerUpResult {
+  game: any;
+  message: string;
+  // When false, the apply call failed (no effect, no charge should be consumed).
+  ok?: boolean;
+}
+
 export interface PowerUpDef {
   id: string;
   name: string;
@@ -16,8 +23,9 @@ export interface PowerUpDef {
   desc: string;
   // Apply the power up to the in-progress game. `curIdx` is the index of the
   // player activating it. The function returns the mutated game and an
-  // optional user-facing message.
-  apply: (game: any, curIdx: number) => { game: any; message: string };
+  // optional user-facing message. Set `ok: false` to signal a failed activation
+  // (the caller will not consume the charge in that case).
+  apply: (game: any, curIdx: number) => PowerUpResult;
 }
 
 export const POWER_UPS: PowerUpDef[] = [
@@ -45,7 +53,7 @@ export const POWER_UPS: PowerUpDef[] = [
     desc: 'Randomize the value of one of your already-thrown darts this visit (1–60).',
     apply: (game, _curIdx) => {
       const darts = [...(game.darts || [])];
-      if (!darts.length) return { game, message: 'Reroll: no darts to reroll yet.' };
+      if (!darts.length) return { game, message: 'Reroll: no darts to reroll yet.', ok: false };
       const idx = Math.floor(Math.random() * darts.length);
       const base = 1 + Math.floor(Math.random() * 20);
       const mult = [1, 1, 1, 2, 3][Math.floor(Math.random() * 5)];
@@ -72,7 +80,7 @@ export const POWER_UPS: PowerUpDef[] = [
     desc: 'Steal 30 points from the leading opponent (added to your score in High Score, subtracted from their remaining in x01).',
     apply: (game, curIdx) => {
       const players = [...(game.players || [])];
-      if (players.length < 2) return { game, message: 'Steal: no opponents to steal from.' };
+      if (players.length < 2) return { game, message: 'Steal: no opponents to steal from.', ok: false };
       const others = players.map((pl, i) => ({ pl, i })).filter(({ i }) => i !== curIdx);
       // Leader = lowest remaining in x01, highest score in highscore.
       const isHighScore = game.mode === 'highscore';
