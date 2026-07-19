@@ -73,6 +73,7 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
     setState(prev => addDart(prev, base, m, labelOverride, isBull, settings));
     Sound.play('dart', { score: base * m }, settings);
     if (base > 0) Sound.play('impact', {}, settings);
+    setMult(1);
   };
 
   const onUndo = () => setState(prev => undoDart(prev, settings));
