@@ -36,14 +36,14 @@ Live demo: https://jonassandroos16-ship-it.github.io/dart-counter/
 - **Killer** — Hit your number 5 times to become a Killer, then knock out opponents
 - **Speed 101** — Race to zero, fastest checkout wins
 - **High Score** — 7 visits of 3 darts, highest total wins
-- **Battle** — HP-based combat using player attributes (health/armor/power); last one standing wins
+- **Battle** — HP-based combat using player attributes (health/armor/power); each dart deals damage independently; last one standing wins
 - **Team Mode** — Any of the above can be played as team vs team (2–4 teams)
 
 ### Progression
 - **XP and leveling** — Earn XP from wins, visits, checkouts, and darts thrown
 - **70+ built-in titles** — From "First Win" to "Dart Legend", with custom title creation
 - **30+ badges** — In-game medals (Ton, Hat Trick, Slayer), post-game comparative awards (Top Scorer, Clutch, Comeback Kid), and a dedicated power-up badge pool (Fully Charged, Unleashed, Wall Builder, Surge Rider, Thief, Cold Snap, Lucky Hand, Saved, Quad Squad)
-- **Player attributes** — Health, armor (max 60%), power (max 100%) used in Battle mode
+- **Player attributes** — Health (base 100, cap 500), armor (flat per dart, cap 25), power (flat per dart, cap 30) used in Battle mode
 - **Power-ups** — 7 power-ups (Fourth Dart, Blocker, Reroll, Surge, Steal, Freeze, Lucky Miss) that charge from doubles/triples/bullseyes
 - **Showdown backgrounds** — 10 selectable gradient backgrounds for the match intro animation
 - **Showdown stat titles** — Per-player highlight titles in the showdown intro (Top Scorer, Ton Master, Maximum King, Checkout Master, Winner, Fast Starter, Sharpshooter, The Finisher, Veteran) — each fires only when exactly one player leads that metric, plus a Champion crown for the highest-level player
@@ -154,6 +154,7 @@ src/
     ├── SetupView.tsx      # Setup form (mode, players, legs, double-out, teams, power-ups)
     ├── Showdown.tsx       # Pre-match intro screen with champion crown + stat titles
     ├── GameOver.tsx       # Post-match summary + badge award display
+    ├── BattleVisitOverlay.tsx # Animated per-dart damage overlay shown during a Battle visit
     ├── common.tsx         # PowerUpOrb + AttributeStrip shared UI
     ├── dart.tsx           # Shared addDartToGame + KeypadPad helpers
     ├── powerups.ts        # Charge + activate helpers (enforces 1-dart rule, ok flag)
@@ -201,6 +202,18 @@ All state lives in the `useDB` hook in `store.ts`. Components read via props and
 4. **Play** — Players tap dart buttons; the active board component updates `game.darts`, then on "Enter visit" calls `commitVisit()` which appends to `game.players[turn].visits`, applies power-up charge via `play/powerups.ts`, handles busts, and advances the turn.
 5. **Leg/Game end** — When a player checks out (or all visits used in High Score, or last one standing in Battle/Killer), `recordFromGame()` snapshots the game into a `GameRecord` and pushes it to `games` via `setGames()`.
 6. **XP/Titles/Badges** — After a game, `play/rewards.ts` computes XP earned, checks all title conditions in `allTitles()`, checks badges via `computeGameBadges()`, and updates the player object. Popups fire for new unlocks.
+
+### Battle Mode
+
+Battle mode uses player attributes (Health, Armor, Power) for HP-based combat:
+- Each player starts with HP equal to their Health attribute (base 100, cap 500).
+- **Per-dart damage formula**: `(dartValue + power) − armor`, with a minimum of 1 damage on any successful hit.
+- Armor is a flat reduction applied to EVERY dart in a visit (base 0, cap 25).
+- Power is a flat bonus added to EVERY dart that hits (base 0, cap 30).
+- Misses deal 0 damage — power only applies on successful hits.
+- Surge power-up doubles each dart's value for damage purposes (mirroring the score multiplier).
+- When a player attacks, the `BattleVisitOverlay` animates each dart's damage individually, showing the formula, draining the target's HP bar in steps, and shaking the target card with intensity proportional to the damage dealt.
+- Reduce an opponent to 0 HP to defeat them; last player standing wins.
 
 ### State Persistence
 
