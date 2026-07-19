@@ -56,7 +56,7 @@ function aggregate(
 // Total kills across all killer-mode games for this player.
 export function lifetimeKills(playerId: string, games: any[]): number {
   return (games || []).reduce((acc: number, g: any) => {
-    if (!g || g.players || g.mode !== 'killer') return acc;
+    if (!g || !g.players || g.mode !== 'killer') return acc;
     const pl = (g.players as any[]).find((p) => p.id === playerId);
     return acc + ((pl?.kills as string[])?.length || 0);
   }, 0);
