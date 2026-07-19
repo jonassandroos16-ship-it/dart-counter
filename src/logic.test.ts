@@ -470,8 +470,10 @@ describe('reconcilePlayerPoints — health recalculation from base stats', () =>
 
   it('preserves legitimate health upgrades within available points', () => {
     // Level 3 → (3-1)*5 = 10 attribute points. Spending 2 on health → 300 + 2*25 = 350.
+    // Level is derived from XP (source of truth), so set xp to reach level 3
+    // (100 for level 1 + 150 for level 2 = 250 XP).
     const player: Player = {
-      id: 'p1', name: 'P1', color: '#000', level: 3,
+      id: 'p1', name: 'P1', color: '#000', level: 3, xp: 250,
       attributes: { health: 350, armor: 0, power: 0, pointsAvailable: 8 },
     };
     const out = reconcilePlayerPoints(player, settings);
@@ -498,8 +500,9 @@ describe('reconcilePlayerPoints — health recalculation from base stats', () =>
     // base was 400 and perPoint was 25 (health=500). Now base is 300, perPoint
     // is 25, level 2 gives 5 points. The stored 500 would imply 8 points spent
     // (500-300)/25, but the player only has 5. Reconcile should clamp.
+    // Level is derived from XP, so set xp to reach level 2 (100 XP).
     const player: Player = {
-      id: 'p1', name: 'P1', color: '#000', level: 2,
+      id: 'p1', name: 'P1', color: '#000', level: 2, xp: 100,
       attributes: { health: 500, armor: 0, power: 0, pointsAvailable: 0 },
     };
     const out = reconcilePlayerPoints(player, settings);
