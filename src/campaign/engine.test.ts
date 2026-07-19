@@ -221,6 +221,26 @@ describe('campaign engine', () => {
     expect(after.players.every(p => p.buffs.some(b => b.kind === 'power' && b.amount === 10 && b.turnsLeft === 3))).toBe(true);
   });
 
+  it('coop power-ups: buff_acc distracts all alive enemies (-accuracy/-precision for 3 turns)', () => {
+    const lvl = getLevel(1)!;
+    const state = startBattle(lvl, makePlayers(1), settings);
+    const charged = { ...state, powerUpCharge: 80 };
+    const after = activateCoopPowerUp(charged, 'coop_buff_acc');
+    // No player buff is granted — the effect targets enemies instead.
+    expect(after.players.every(p => p.buffs.length === 0)).toBe(true);
+    expect(after.enemies.every(e => e.defeated || (e.distractedTurns === 3 && e.distractAmount === 0.2))).toBe(true);
+    // A distracted enemy with 0.35 accuracy misses on rng >= 0.15.
+    const enemyPhase = { ...after, phase: 'enemy' as const };
+    const prepared = prepareEnemyTurn(enemyPhase, () => 0.5);
+    // With accuracy reduced to 0.15, rng=0.5 misses; precision reduced to
+    // 0.20, rng=0.5 scatters randomly — but every dart still resolves.
+    expect(prepared.pendingEnemyAttacks.length).toBeGreaterThan(0);
+    // After the enemy turn finishes, the distract timer ticks down to 2.
+    let applied = prepared;
+    while (applied.pendingEnemyAttacks.length) applied = applyNextEnemyAttack(applied);
+    expect(applied.enemies.every(e => e.defeated || e.distractedTurns === 2)).toBe(true);
+  });
+
   it('enemy database ships with the boss warlord_malakar', () => {
     expect(ENEMY_DATABASE.warlord_malakar.difficulty).toBe('Boss');
     expect(ENEMY_DATABASE.warlord_malakar.shields.length).toBeGreaterThan(0);
