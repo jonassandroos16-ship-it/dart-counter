@@ -37,7 +37,8 @@
 .nav button.active { color: var(--accent); }
 
 .nav-toggle {
-  position: absolute; right: 12px; bottom: calc(6px + env(safe-area-inset-bottom));
+  position: absolute; left: 50%; bottom: calc(6px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
   z-index: 31;
   width: 36px; height: 28px; border-radius: 10px 10px 4px 4px;
   display: flex; align-items: center; justify-content: center;
@@ -48,7 +49,7 @@
   box-shadow: 0 -2px 8px rgba(0,0,0,.18);
   transition: bottom .22s ease, background .15s, transform .12s;
 }
-.nav-toggle:active { transform: scale(.94); }
+.nav-toggle:active { transform: translateX(-50%) scale(.94); }
 .nav-toggle.open {
   bottom: calc(56px + env(safe-area-inset-bottom));
   border-radius: 4px 4px 10px 10px;
