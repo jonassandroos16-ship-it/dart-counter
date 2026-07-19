@@ -189,7 +189,7 @@ export const BADGES: BadgeDef[] = [
       const totals: Record<string, number> = {};
       players.forEach((p: any) => (totals[p.id] = 0));
       const timeline: { pid: string; date: number; scored: number; bust: boolean; atc: boolean }[] = [];
-      players.forEach((p: any) => (p.visits || []).forEach((v: any) => timeline.push({ pid: p.id, date: new Date(v.date || 0).getTime(), scored: v.scored || 0, bust: !!v.bust, atc: !!v.atc }))));
+      players.forEach((p: any) => (p.visits || []).forEach(function (v: any) { timeline.push({ pid: p.id, date: new Date(v.date || 0).getTime(), scored: v.scored || 0, bust: !!v.bust, atc: !!v.atc }); }));
       timeline.sort((a, b) => a.date - b.date);
       let winnerScored = 0;
       for (const ev of timeline) {
