@@ -695,15 +695,20 @@ export class MusicEngine {
     if (!settings.music) return;
     const def = MUSIC_TRACKS.find(t => t.id === trackId);
     if (!def) return;
-    if (this.track === trackId) return;
-    this.stop();
     const ctx = this.ensure();
     if (!ctx) return;
-    if (ctx.state === 'suspended') {
-      // Resume within the user gesture; scheduled notes will fire once running.
-      // Don't bail on a synchronous state check — resume() is async.
+    // If the context is suspended, the clock isn't advancing and any notes
+    // we scheduled previously are stuck in the past. Resume and restart so
+    // we re-schedule against a running clock. Without this, the first
+    // startContext() call (before the user gesture) latches this.track and
+    // the post-gesture restart bails on the same-track check, leaving music
+    // silent forever.
+    const wasSuspended = ctx.state === 'suspended';
+    if (wasSuspended) {
       try { void ctx.resume(); } catch {}
     }
+    if (this.track === trackId && !wasSuspended) return;
+    this.stop();
     this.track = trackId;
     this.master = ctx.createGain();
     this.master.gain.setValueAtTime(0.0001, ctx.currentTime);

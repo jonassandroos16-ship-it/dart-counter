@@ -32,11 +32,12 @@ interface Props {
   onQuit: () => void;
   onGameOver: () => void;
   popups: PopupControls;
+  onImmersiveChange?: (immersive: boolean) => void;
 }
 
 type CoopStage = 'none' | 'setup' | 'map' | 'battle' | 'reward';
 
-export function PlayView({ players, games, settings, activeGame, setActiveGame, setGames, setPlayers, toast, music, onQuit, onGameOver, popups }: Props) {
+export function PlayView({ players, games, settings, activeGame, setActiveGame, setGames, setPlayers, toast, music, onQuit, onGameOver, popups, onImmersiveChange }: Props) {
   const game = activeGame;
   const setGame = setActiveGame;
   const [showdown, setShowdown] = useState<Game | null>(null);
@@ -52,6 +53,11 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
     if (game && !game.finished) music.startContext('match', settings);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Tell the app shell when we're in an immersive view (active game, showdown,
+  // or coop battle/reward) so it can hide the bottom navigation bar.
+  const immersive = !!(game || showdown || coopStage === 'battle' || coopStage === 'reward');
+  useEffect(() => { onImmersiveChange?.(immersive); }, [immersive, onImmersiveChange]);
 
   if (coopStage === 'battle' && coopLevelId != null) {
     const coopPlayers = coopPlayerIds.map(id => players.find(p => p.id === id)).filter(Boolean) as Player[];

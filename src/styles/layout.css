@@ -55,3 +55,12 @@
   border-radius: 4px 4px 10px 10px;
   box-shadow: 0 -2px 8px rgba(0,0,0,.18);
 }
+.nav-toggle.hidden,
+.nav.hidden {
+  transform: translateY(120%);
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition: transform .2s ease, opacity .2s ease, visibility .2s ease;
+}
+.nav-toggle.hidden { transform: translateX(-50%) translateY(120%); }
