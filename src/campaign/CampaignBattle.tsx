@@ -3,7 +3,7 @@ import type { CampaignBattleState, CampaignProgress, CoopPowerUpId, ResolvedDart
 import {
   addDart, undoDart, resolvePlayerVisit, applyNextPlayerDart,
   prepareEnemyTurn, applyNextEnemyAttack, setTarget, startBattle, getLevel,
-  describeShield, COOP_POWER_UPS, canActivateCoopPowerUp, activateCoopPowerUp,
+  describeShield, getCoopPowerUp, canActivateCoopPowerUp, activateCoopPowerUp,
 } from './engine';
 import type { Player, Settings } from '../types';
 import { Sound } from '../sound';
@@ -215,29 +215,34 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
         })}
       </div>
 
-      {/* Coop power-up bar — available before the player throws. */}
-      {state.phase === 'player' && !state.pendingPlayerDarts.length && state.darts.length === 0 && (
-        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-          <div className="muted small" style={{ alignSelf: 'center', marginRight: 4 }}>⚡ {state.powerUpCharge}</div>
-          {COOP_POWER_UPS.map(pu => {
-            const can = canActivateCoopPowerUp(state, pu.id);
-            return (
-              <button key={pu.id} className="pill" disabled={!can}
-                title={pu.desc}
-                onClick={() => can && onActivatePowerUp(pu.id)}
-                style={{
-                  background: can ? 'color-mix(in srgb,var(--accent) 25%,var(--bg-3))' : 'var(--bg-3)',
-                  color: can ? 'var(--text)' : 'var(--muted)',
-                  opacity: can ? 1 : 0.5,
-                  cursor: can ? 'pointer' : 'not-allowed',
-                  borderColor: 'transparent',
-                }}>
-                {pu.icon} {pu.name} <span className="muted small">({pu.cost})</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {/* Coop power-up bar — shows the current thrower's equipped Coop
+          power-up. Each player equips a single Coop power-up from the
+          Players tab; that's the one they can activate during their turn. */}
+      {state.phase === 'player' && !state.pendingPlayerDarts.length && state.darts.length === 0 && thrower && (() => {
+        const srcPlayer = players.find(p => p.id === thrower.id);
+        const equippedId = srcPlayer?.powerUps?.coopActive ?? null;
+        const pu = equippedId ? getCoopPowerUp(equippedId as CoopPowerUpId) : null;
+        if (!pu) return null;
+        const can = canActivateCoopPowerUp(state, pu.id);
+        return (
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div className="muted small" style={{ marginRight: 4 }}>⚡ {state.powerUpCharge}</div>
+            <button className="pill" disabled={!can}
+              title={`${pu.name}: ${pu.desc}`}
+              onClick={() => can && onActivatePowerUp(pu.id)}
+              style={{
+                background: can ? 'color-mix(in srgb,#ef4444 25%,var(--bg-3))' : 'var(--bg-3)',
+                color: can ? 'var(--text)' : 'var(--muted)',
+                opacity: can ? 1 : 0.5,
+                cursor: can ? 'pointer' : 'not-allowed',
+                borderColor: 'transparent',
+              }}>
+              {pu.icon} {pu.name} <span className="muted small">({pu.cost})</span>
+            </button>
+            <div className="muted small" style={{ fontStyle: 'italic' }}>{pu.desc}</div>
+          </div>
+        );
+      })()}
 
       {state.phase === 'player' && state.outcome === 'ongoing' && !state.pendingPlayerDarts.length && (
         <div className="play-input">
