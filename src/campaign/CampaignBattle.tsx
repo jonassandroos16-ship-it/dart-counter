@@ -55,17 +55,20 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
   // When entering the enemy phase, prepare the enemy attack steps. The UI
   // then animates through them one at a time, requiring the player to tap
   // "Continue" to advance — so the player can see what each dart did.
+  // Frozen enemies produce no attack steps; the frozen popup is shown
+  // instead (see `frozenEnemiesThisRound`).
   useEffect(() => {
     if (state.phase !== 'enemy') return;
     if (state.outcome !== 'ongoing') return;
     if (state.pendingEnemyAttacks.length) return;
     if (state.appliedEnemyAttacks.length) return;
+    if (state.frozenEnemiesThisRound.length) return;
     const t = setTimeout(() => {
       setState(prev => prepareEnemyTurn(prev));
       Sound.play('impact', {}, settings);
     }, 600);
     return () => clearTimeout(t);
-  }, [state.phase, state.outcome, state.pendingEnemyAttacks.length, state.appliedEnemyAttacks.length, settings]);
+  }, [state.phase, state.outcome, state.pendingEnemyAttacks.length, state.appliedEnemyAttacks.length, state.frozenEnemiesThisRound.length, settings]);
 
   const aliveEnemies = state.enemies.filter(e => !e.defeated);
   const target = state.enemies[state.targetIdx];
@@ -90,6 +93,13 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
     if (state.pendingEnemyAttacks.length) {
       setState(prev => applyNextEnemyAttack(prev));
       Sound.play('impact', {}, settings);
+      return;
+    }
+    // No pending attacks — either the enemy phase is done, or all enemies
+    // were frozen this round. Advancing finishes the enemy turn and returns
+    // to the player phase.
+    if (state.phase === 'enemy' && state.frozenEnemiesThisRound.length) {
+      setState(prev => applyNextEnemyAttack(prev));
     }
   };
 
@@ -109,15 +119,22 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
   const partyHpPct = Math.max(0, Math.min(100, (state.partyHp / state.partyMaxHp) * 100));
   // Show the player summary overlay once the player has thrown all 3 darts
   // (or fewer, if every enemy is already defeated). The enemy overlay shows
-  // whenever there are pending enemy attacks to animate.
+  // whenever there are pending enemy attacks to animate. The frozen overlay
+  // shows when the enemy phase has produced no attacks because every alive
+  // enemy is frozen — the player taps Continue to advance to their turn.
   const playerVisitDone = state.phase === 'player'
     && state.darts.length >= 3
     && state.outcome === 'ongoing';
-  const showingOverlay = playerVisitDone || state.pendingEnemyAttacks.length > 0;
+  const showingFrozen = state.phase === 'enemy'
+    && state.pendingEnemyAttacks.length === 0
+    && state.appliedEnemyAttacks.length === 0
+    && state.frozenEnemiesThisRound.length > 0;
+  const showingOverlay = playerVisitDone || state.pendingEnemyAttacks.length > 0 || showingFrozen;
 
   return (
-    <div className="view-noscroll" style={{ background: chapter?.theme.background || undefined, borderRadius: 14 }}>
-      <div className="play-current">
+    <div className="view-noscroll" style={{ position: 'relative', background: chapter?.theme.background || undefined, borderRadius: 14, overflow: 'hidden' }}>
+      {showingFrozen && <div className="battle-frost-tint" />}
+      <div className="play-current" style={{ position: 'relative', zIndex: 2 }}>
         <div className="pc-header">
           <div className="row" style={{ gap: 8, alignItems: 'center' }}>
             <span className="pc-name">{level.is_boss ? '☠ BOSS · ' : ''}{level.name}</span>
@@ -218,7 +235,7 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
           </>
         )}
 
-        {state.phase === 'enemy' && !state.pendingEnemyAttacks.length && (
+        {state.phase === 'enemy' && !state.pendingEnemyAttacks.length && !state.frozenEnemiesThisRound.length && (
           <div className="muted small" style={{ marginTop: 6, fontStyle: 'italic' }}>
             Enemies are preparing to attack…
           </div>
@@ -309,7 +326,11 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
 
       <button className="btn danger sm" style={{ alignSelf: 'flex-end' }} onClick={() => { if (confirm('Quit this battle? Progress will be saved.')) onQuit(); }}>Quit</button>
 
-      {showingOverlay && (
+      {showingFrozen && (
+        <FrozenOverlay state={state} onContinue={onContinue} />
+      )}
+
+      {showingOverlay && !showingFrozen && (
         <DartOverlay
           state={state}
           onContinue={onContinue}
@@ -546,6 +567,41 @@ function DartOverlay({ state, onContinue, onEndVisit }: {
         </div>
         <button className="btn primary block" style={{ marginTop: 12 }} onClick={onContinue} disabled={!currentEnemyStep}>
           {currentEnemyStep ? 'Continue' : 'Done'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Frozen overlay ───────────────────────────────────────────────────
+//
+// Shown when the enemy phase starts but every alive enemy is frozen. The
+// popup lists each frozen enemy and their remaining frozen turns, then the
+// player taps Continue to advance to their turn. The overlay uses an
+// ice-blue palette to reinforce the freeze context.
+function FrozenOverlay({ state, onContinue }: {
+  state: CampaignBattleState;
+  onContinue: () => void;
+}) {
+  const frozen = state.frozenEnemiesThisRound;
+  return (
+    <div className="battle-overlay-bg">
+      <div className="battle-overlay frozen-overlay" onClick={(e) => e.stopPropagation()}>
+        <div className="frozen-icon">❄️</div>
+        <div className="frozen-title">Enemies Frozen</div>
+        <div className="frozen-subtitle">
+          The cold holds them still — their turn is skipped.
+        </div>
+        <div>
+          {frozen.map(e => (
+            <div key={e.id} className="frozen-enemy-row">
+              <span>👹 {e.name}</span>
+              <span className="frozen-badge">❄ {e.frozenTurns} turn{e.frozenTurns === 1 ? '' : 's'} left</span>
+            </div>
+          ))}
+        </div>
+        <button className="btn primary block" style={{ marginTop: 12 }} onClick={onContinue}>
+          Continue
         </button>
       </div>
     </div>
