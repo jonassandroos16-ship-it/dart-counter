@@ -1,33 +1,47 @@
 import type { CampaignProgress } from './types';
+import type { Player as AppPlayer } from '../types';
 import { CAMPAIGN_LEVELS } from './campaignLevels';
 import { ENEMY_DATABASE } from './enemyDatabase';
 import { isLevelUnlocked } from './engine';
+import { initials } from '../store';
 
-export function CampaignMap({ progress, onPick, onBack }: {
+export function CampaignMap({
+  progress,
+  players,
+  onPick,
+  onBack,
+}: {
   progress: CampaignProgress;
+  players: AppPlayer[];
   onPick: (levelId: number) => void;
   onBack: () => void;
 }) {
   const levels = CAMPAIGN_LEVELS.levels;
-  const hpPct = Math.max(0, Math.min(100, (progress.current_party_hp / progress.party_max_hp) * 100));
   return (
     <div className="view-scroll">
       <div className="row between" style={{ marginBottom: 12 }}>
         <button className="btn ghost sm" onClick={onBack}>← Back</button>
         <h2 style={{ margin: 0 }}>Co-op Campaign</h2>
         <span className="pill" style={{ background: 'color-mix(in srgb,#ef4444 18%,var(--bg-3))', color: '#fca5a5', borderColor: 'transparent' }}>
-          ❤️ {progress.current_party_hp}/{progress.party_max_hp}
+          ⭐ {progress.highest_level_beaten} cleared
         </span>
       </div>
-      <div className="card" style={{ padding: 10 }}>
-        <div className="muted small" style={{ marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Party HP</div>
-        <div style={{ width: '100%', height: 10, borderRadius: 5, background: 'var(--bg-3)', overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${hpPct}%`, background: '#ef4444', transition: 'width .4s' }} />
-        </div>
-        <div className="muted small" style={{ marginTop: 8 }}>Highest level beaten: <b style={{ color: 'var(--text)' }}>{progress.highest_level_beaten}</b></div>
-      </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+      {players.length > 0 && (
+        <div className="card" style={{ padding: 10, marginBottom: 12 }}>
+          <div className="muted small" style={{ marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Your party</div>
+          <div className="row wrap" style={{ gap: 6 }}>
+            {players.map(p => (
+              <span key={p.id} className="pill" style={{ background: p.color, color: '#0b0e13', borderColor: 'transparent' }}>
+                <span className="avatar" style={{ width: 18, height: 18, fontSize: 9, background: 'rgba(0,0,0,.25)' }}>{initials(p.name)}</span>
+                {p.name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {levels.map((lvl, i) => {
           const unlocked = isLevelUnlocked(lvl.level_id, progress.highest_level_beaten);
           const beaten = lvl.level_id <= progress.highest_level_beaten;

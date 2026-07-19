@@ -1,8 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { addDart, computePlayerDartDamage, dartMatchesShield, describeShield, getLevel, isLevelUnlocked, resolveEnemyTurn, resolvePlayerVisit, setTarget, startBattle, totalLevels } from './engine';
+import {
+  addDart, computePlayerDartDamage, dartMatchesShield, describeShield, getLevel,
+  isLevelUnlocked, prepareEnemyTurn, applyNextEnemyAttack, resolvePlayerVisit,
+  applyNextPlayerDart, setTarget, startBattle, totalLevels,
+  partyMaxHpFor, partyArmorFor, partyPowerFor, COOP_POWER_UPS,
+  canActivateCoopPowerUp, activateCoopPowerUp,
+} from './engine';
 import { ENEMY_DATABASE } from './enemyDatabase';
 import { CAMPAIGN_LEVELS } from './campaignLevels';
-import type { CampaignDart } from './types';
+import type { CampaignDart, Player, Settings } from './types';
+import { defaultSettings } from '../constants';
 
 const dart = (base: number, mult: number): CampaignDart => ({
   value: base === 0 ? 0 : base === 25 ? (mult === 2 ? 50 : 25) : base === 50 ? 50 : base * mult,
@@ -12,6 +19,15 @@ const dart = (base: number, mult: number): CampaignDart => ({
   isDouble: base === 50 || mult === 2,
   isBull: base === 25 || base === 50,
 });
+
+const settings = defaultSettings();
+
+const makePlayers = (n: number): Player[] => Array.from({ length: n }, (_, i) => ({
+  id: `p${i + 1}`,
+  name: `Player ${i + 1}`,
+  color: '#22c55e',
+  attributes: { health: 300, armor: 10, power: 10, pointsAvailable: 0 },
+}));
 
 describe('campaign engine', () => {
   it('exposes a linear campaign with a boss finale', () => {
@@ -29,37 +45,68 @@ describe('campaign engine', () => {
     expect(isLevelUnlocked(6, 4)).toBe(false);
   });
 
+  it('party HP is the sum of selected players health, capped by healthMax', () => {
+    const players = makePlayers(2);
+    expect(partyMaxHpFor(players, settings)).toBe(500); // cap is 500
+    const onePlayer: Player[] = [{ ...players[0], attributes: { health: 300, armor: 0, power: 0, pointsAvailable: 0 } }];
+    expect(partyMaxHpFor(onePlayer, settings)).toBe(300);
+  });
+
+  it('party armor and power are averaged so adding players cannot exceed the cap', () => {
+    const players = makePlayers(2); // each has armor 10, power 10
+    expect(partyArmorFor(players, settings)).toBe(10); // (10+10)/2 = 10
+    expect(partyPowerFor(players, settings)).toBe(10);
+    // Three players with armor 25 each — average 25, at cap.
+    const heavy: Player[] = Array.from({ length: 3 }, () => ({ ...players[0], attributes: { health: 300, armor: 25, power: 25, pointsAvailable: 0 } }));
+    expect(partyArmorFor(heavy, settings)).toBe(25); // capped at armorMax=25
+    expect(partyPowerFor(heavy, settings)).toBe(25); // capped at powerMax=30
+  });
+
+  it('starts a battle with party HP equal to combined player health', () => {
+    const lvl = getLevel(1)!;
+    const players = makePlayers(2);
+    const state = startBattle(lvl, players, settings);
+    expect(state.partyMaxHp).toBe(500);
+    expect(state.partyHp).toBe(500);
+    expect(state.players.length).toBe(2);
+    expect(state.playerTurnIdx).toBe(0);
+    expect(state.phase).toBe('player');
+  });
+
   it('breaks a span shield with a top-half dart and deals 0 damage', () => {
     const lvl = getLevel(4)!; // Raider Crossing — orc_raider has TOP_HALF shield
-    const state = startBattle(lvl, 350, 350);
-    // orc_raider is the first enemy; it has a TOP_HALF shield.
+    const state = startBattle(lvl, makePlayers(1), settings);
     const orc = state.enemies.find(e => e.defId === 'orc_raider')!;
     const orcIdx = state.enemies.findIndex(e => e.id === orc.id);
     const targeted = setTarget(state, orc.id);
     expect(targeted.targetIdx).toBe(orcIdx);
-    // Throw T20 (top half) — should break the shield, deal 0 damage.
     let s = addDart(targeted, 20, 3);
     s = addDart(s, 20, 3);
     s = addDart(s, 20, 3);
     const resolved = resolvePlayerVisit(s);
-    const resolvedOrc = resolved.enemies.find(e => e.id === orc.id)!;
+    expect(resolved.pendingPlayerDarts.length).toBe(3);
+    // Apply each dart step.
+    let applied = resolved;
+    for (let i = 0; i < 3; i++) applied = applyNextPlayerDart(applied);
+    const resolvedOrc = applied.enemies.find(e => e.id === orc.id)!;
     expect(resolvedOrc.shields.length).toBe(0);
     // First dart broke the shield (0 dmg). The remaining two darts deal damage.
-    // T20 = 60, armor 5 → 55 each. Two darts → 110.
-    expect(resolvedOrc.hp).toBe(orc.maxHp - 110);
+    // T20 = 60, power 10 → 70 - 5 armor = 65 each. Two darts → 130.
+    expect(resolvedOrc.hp).toBe(orc.maxHp - 130);
   });
 
   it('absorbs non-matching darts into the shield (0 damage)', () => {
     const lvl = getLevel(4)!;
-    const state = startBattle(lvl, 350, 350);
+    const state = startBattle(lvl, makePlayers(1), settings);
     const orc = state.enemies.find(e => e.defId === 'orc_raider')!;
     const targeted = setTarget(state, orc.id);
-    // Throw T10 (bottom half) three times — none match the TOP_HALF shield.
     let s = addDart(targeted, 10, 3);
     s = addDart(s, 10, 3);
     s = addDart(s, 10, 3);
     const resolved = resolvePlayerVisit(s);
-    const resolvedOrc = resolved.enemies.find(e => e.id === orc.id)!;
+    let applied = resolved;
+    for (let i = 0; i < 3; i++) applied = applyNextPlayerDart(applied);
+    const resolvedOrc = applied.enemies.find(e => e.id === orc.id)!;
     expect(resolvedOrc.shields.length).toBe(1); // shield still up
     expect(resolvedOrc.hp).toBe(orc.maxHp); // no damage
   });
@@ -85,36 +132,112 @@ describe('campaign engine', () => {
   });
 
   it('computes player dart damage with armor mitigation and min 1 on hit', () => {
-    expect(computePlayerDartDamage(dart(20, 3), 5)).toBe(55); // 60 - 5
-    expect(computePlayerDartDamage(dart(20, 1), 25)).toBe(1); // clamped to min 1
-    expect(computePlayerDartDamage(dart(0, 1), 0)).toBe(0); // miss
+    expect(computePlayerDartDamage(dart(20, 3), 0, 5)).toBe(55); // 60 - 5
+    expect(computePlayerDartDamage(dart(20, 1), 0, 25)).toBe(1); // clamped to min 1
+    expect(computePlayerDartDamage(dart(0, 1), 0, 0)).toBe(0); // miss
   });
 
-  it('runs the enemy turn and deducts party HP, then returns to player phase', () => {
+  it('runs the enemy turn dart-by-dart and deducts party HP', () => {
     const lvl = getLevel(1)!;
-    const state = startBattle(lvl, 350, 350);
-    // Force into enemy phase.
+    const state = startBattle(lvl, makePlayers(1), settings);
     const enemyPhase = { ...state, phase: 'enemy' as const };
-    // Use a seeded-ish rng that always hits to guarantee damage > 0.
-    const rng = () => 0.99; // accuracy check passes (0.99 > 0.35), precision check passes
-    const after = resolveEnemyTurn(enemyPhase, rng);
-    expect(after.phase).toBe('player');
-    expect(after.partyHp).toBeLessThan(350);
-    expect(after.visitNumber).toBe(2);
+    const prepared = prepareEnemyTurn(enemyPhase, () => 0.99);
+    expect(prepared.pendingEnemyAttacks.length).toBeGreaterThan(0);
+    let applied = prepared;
+    while (applied.pendingEnemyAttacks.length) applied = applyNextEnemyAttack(applied);
+    expect(applied.phase).toBe('player');
+    expect(applied.partyHp).toBeLessThan(applied.partyMaxHp);
+    expect(applied.visitNumber).toBe(2);
   });
 
   it('marks the battle as defeat when party HP hits 0', () => {
     const lvl = getLevel(1)!;
-    const state = startBattle(lvl, 5, 350); // tiny party HP
-    const enemyPhase = { ...state, phase: 'enemy' as const };
-    const rng = () => 0.99;
-    const after = resolveEnemyTurn(enemyPhase, rng);
-    expect(after.outcome).toBe('defeat');
-    expect(after.partyHp).toBe(0);
+    const state = startBattle(lvl, makePlayers(1), settings);
+    const tiny = { ...state, partyHp: 5, partyMaxHp: 5 };
+    const enemyPhase = { ...tiny, phase: 'enemy' as const };
+    const prepared = prepareEnemyTurn(enemyPhase, () => 0.99);
+    let applied = prepared;
+    while (applied.pendingEnemyAttacks.length && applied.outcome === 'ongoing') {
+      applied = applyNextEnemyAttack(applied);
+    }
+    expect(applied.outcome).toBe('defeat');
+    expect(applied.partyHp).toBe(0);
+  });
+
+  it('all players throw before the enemy phase begins', () => {
+    const lvl = getLevel(1)!;
+    const players = makePlayers(3);
+    const state = startBattle(lvl, players, settings);
+    expect(state.playerTurnIdx).toBe(0);
+    // Player 1 throws (misses so enemies survive and the turn passes).
+    let s = addDart(state, 0, 1, '0');
+    s = addDart(s, 0, 1, '0');
+    s = addDart(s, 0, 1, '0');
+    let resolved = resolvePlayerVisit(s);
+    while (resolved.pendingPlayerDarts.length) resolved = applyNextPlayerDart(resolved);
+    expect(resolved.playerTurnIdx).toBe(1);
+    expect(resolved.phase).toBe('player');
+    // Player 2 throws.
+    let s2 = addDart(resolved, 0, 1, '0');
+    s2 = addDart(s2, 0, 1, '0');
+    s2 = addDart(s2, 0, 1, '0');
+    let r2 = resolvePlayerVisit(s2);
+    while (r2.pendingPlayerDarts.length) r2 = applyNextPlayerDart(r2);
+    expect(r2.playerTurnIdx).toBe(2);
+    expect(r2.phase).toBe('player');
+    // Player 3 throws — should now transition to enemy phase.
+    let s3 = addDart(r2, 0, 1, '0');
+    s3 = addDart(s3, 0, 1, '0');
+    s3 = addDart(s3, 0, 1, '0');
+    let r3 = resolvePlayerVisit(s3);
+    while (r3.pendingPlayerDarts.length) r3 = applyNextPlayerDart(r3);
+    expect(r3.phase).toBe('enemy');
+    expect(r3.playerTurnIdx).toBe(2); // unchanged until enemy turn finishes
+  });
+
+  it('coop power-ups: heal restores party HP and consumes charge', () => {
+    const lvl = getLevel(1)!;
+    const state = startBattle(lvl, makePlayers(1), settings);
+    const damaged = { ...state, partyHp: state.partyMaxHp - 100, powerUpCharge: 100 };
+    expect(canActivateCoopPowerUp(damaged, 'coop_heal')).toBe(true);
+    const after = activateCoopPowerUp(damaged, 'coop_heal');
+    // Heal restores 80 HP; 300 - 100 + 80 = 280 (not capped since below max).
+    expect(after.partyHp).toBe(state.partyMaxHp - 100 + 80);
+    expect(after.powerUpCharge).toBe(0);
+  });
+
+  it('coop power-ups: freeze sets frozenTurns on all alive enemies', () => {
+    const lvl = getLevel(1)!;
+    const state = startBattle(lvl, makePlayers(1), settings);
+    const charged = { ...state, powerUpCharge: 100 };
+    const after = activateCoopPowerUp(charged, 'coop_freeze');
+    expect(after.enemies.every(e => e.defeated || e.frozenTurns === 2)).toBe(true);
+    // Frozen enemies skip their turn during prepareEnemyTurn.
+    const enemyPhase = { ...after, phase: 'enemy' as const };
+    const prepared = prepareEnemyTurn(enemyPhase, () => 0.99);
+    expect(prepared.pendingEnemyAttacks.length).toBe(0);
+    expect(prepared.enemies.every(e => e.frozenTurns === 1)).toBe(true);
+  });
+
+  it('coop power-ups: buff_power adds a power buff to every player', () => {
+    const lvl = getLevel(1)!;
+    const state = startBattle(lvl, makePlayers(2), settings);
+    const charged = { ...state, powerUpCharge: 80 };
+    const after = activateCoopPowerUp(charged, 'coop_buff_power');
+    expect(after.players.every(p => p.buffs.some(b => b.kind === 'power' && b.amount === 10 && b.turnsLeft === 3))).toBe(true);
   });
 
   it('enemy database ships with the boss warlord_malakar', () => {
     expect(ENEMY_DATABASE.warlord_malakar.difficulty).toBe('Boss');
     expect(ENEMY_DATABASE.warlord_malakar.shields.length).toBeGreaterThan(0);
+  });
+
+  it('ships coop power-ups: heal, buff_power, buff_acc, freeze, shield', () => {
+    const ids = COOP_POWER_UPS.map(p => p.id);
+    expect(ids).toContain('coop_heal');
+    expect(ids).toContain('coop_buff_power');
+    expect(ids).toContain('coop_buff_acc');
+    expect(ids).toContain('coop_freeze');
+    expect(ids).toContain('coop_shield');
   });
 });
