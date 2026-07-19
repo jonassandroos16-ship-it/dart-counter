@@ -8,7 +8,8 @@ import {
 } from './engine';
 import { ENEMY_DATABASE } from './enemyDatabase';
 import { CAMPAIGN_LEVELS } from './campaignLevels';
-import type { CampaignDart, Player, Settings } from './types';
+import type { CampaignDart } from './types';
+import type { Player } from '../types';
 import { defaultSettings } from '../constants';
 
 const dart = (base: number, mult: number): CampaignDart => ({

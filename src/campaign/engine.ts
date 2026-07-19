@@ -64,7 +64,7 @@ export function partyMaxHpFor(players: Player[], settings: Settings): number {
   const cap = cfg.healthMax;
   const sum = players.reduce((acc, p) => {
     const h = p.attributes?.health;
-    return acc + (Number.isFinite(h) ? Math.max(1, h) : cfg.attributeStartHealth);
+    return acc + (typeof h === 'number' && Number.isFinite(h) ? Math.max(1, h) : cfg.attributeStartHealth);
   }, 0);
   return Math.max(1, Math.min(cap, sum));
 }
@@ -74,7 +74,7 @@ export function partyArmorFor(players: Player[], settings: Settings): number {
   if (!players.length) return 0;
   const sum = players.reduce((acc, p) => {
     const a = p.attributes?.armor;
-    return acc + (Number.isFinite(a) ? a : cfg.attributeStartArmor);
+    return acc + (typeof a === 'number' && Number.isFinite(a) ? a : cfg.attributeStartArmor);
   }, 0);
   // Divide by player count so the combined armor never exceeds the cap.
   const avg = sum / players.length;
@@ -86,7 +86,7 @@ export function partyPowerFor(players: Player[], settings: Settings): number {
   if (!players.length) return 0;
   const sum = players.reduce((acc, p) => {
     const pw = p.attributes?.power;
-    return acc + (Number.isFinite(pw) ? pw : cfg.attributeStartPower);
+    return acc + (typeof pw === 'number' && Number.isFinite(pw) ? pw : cfg.attributeStartPower);
   }, 0);
   const avg = sum / players.length;
   return Math.max(0, Math.min(cfg.powerMax, avg));
