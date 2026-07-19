@@ -15,6 +15,7 @@ import {
   recordFromGame,
   computeUnlockedTitlesForPlayer,
   retroUnlockAll,
+  reconcilePlayerPoints,
 } from './logic';
 import { defaultSettings } from './constants';
 import type { Game, GamePlayer, GameRecord, Player, Visit } from './types';
@@ -440,5 +441,71 @@ describe('retroUnlockAll / computeUnlockedTitlesForPlayer', () => {
       ], { winner: 'p1' }),
     ];
     expect(() => computeUnlockedTitlesForPlayer('p1', games, customTitles)).not.toThrow();
+  });
+});
+
+describe('reconcilePlayerPoints — health recalculation from base stats', () => {
+  it('clamps NaN health to the configured starting value', () => {
+    const player: Player = {
+      id: 'p1', name: 'P1', color: '#000', level: 1,
+      attributes: { health: NaN, armor: 0, power: 0, pointsAvailable: 0 },
+    };
+    const out = reconcilePlayerPoints(player, settings);
+    expect(out.attributes?.health).toBe(settings.powerUpScaling.attributeStartHealth);
+    expect(Number.isFinite(out.attributes?.health as number)).toBe(true);
+  });
+
+  it('recalculates health from base stats when old save exceeds available points', () => {
+    // Old save: health=400 with base=300, perPoint=25 → 4 points "spent".
+    // Player is level 1 with 0 attribute points, so they cannot have spent 4.
+    // The reconciler should clamp the stored health to the starting value.
+    const player: Player = {
+      id: 'p1', name: 'P1', color: '#000', level: 1,
+      attributes: { health: 400, armor: 0, power: 0, pointsAvailable: 0 },
+    };
+    const out = reconcilePlayerPoints(player, settings);
+    expect(out.attributes?.health).toBe(settings.powerUpScaling.attributeStartHealth);
+    expect(out.attributes?.pointsAvailable).toBe(0);
+  });
+
+  it('preserves legitimate health upgrades within available points', () => {
+    // Level 3 → (3-1)*5 = 10 attribute points. Spending 2 on health → 300 + 2*25 = 350.
+    const player: Player = {
+      id: 'p1', name: 'P1', color: '#000', level: 3,
+      attributes: { health: 350, armor: 0, power: 0, pointsAvailable: 8 },
+    };
+    const out = reconcilePlayerPoints(player, settings);
+    expect(out.attributes?.health).toBe(350);
+    expect(out.attributes?.pointsAvailable).toBe(8);
+  });
+
+  it('never produces NaN in battle-mode game creation from corrupted attributes', () => {
+    const player: Player = {
+      id: 'p1', name: 'P1', color: '#22c55e',
+      attributes: { health: NaN, armor: NaN, power: NaN, pointsAvailable: 0 },
+    };
+    const game = createGame('battle', ['p1'], [player], false, 1, false, [], false, settings);
+    const gp = game.players[0];
+    expect(Number.isFinite(gp.hp)).toBe(true);
+    expect(Number.isFinite(gp.maxHp)).toBe(true);
+    expect(Number.isFinite(gp.armorPct)).toBe(true);
+    expect(Number.isFinite(gp.powerPct)).toBe(true);
+    expect(gp.hp).toBeGreaterThan(0);
+  });
+
+  it('recalculates health when scaling config shrinks the base', () => {
+    // Player leveled up and spent 4 points on health under an old config where
+    // base was 400 and perPoint was 25 (health=500). Now base is 300, perPoint
+    // is 25, level 2 gives 5 points. The stored 500 would imply 8 points spent
+    // (500-300)/25, but the player only has 5. Reconcile should clamp.
+    const player: Player = {
+      id: 'p1', name: 'P1', color: '#000', level: 2,
+      attributes: { health: 500, armor: 0, power: 0, pointsAvailable: 0 },
+    };
+    const out = reconcilePlayerPoints(player, settings);
+    const cfg = settings.powerUpScaling;
+    // Level 2 → 5 attribute points. All 5 go to health (since armor/power are 0).
+    expect(out.attributes?.health).toBe(cfg.attributeStartHealth + 5 * cfg.healthPerPoint);
+    expect(out.attributes?.pointsAvailable).toBe(0);
   });
 });

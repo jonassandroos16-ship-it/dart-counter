@@ -1,7 +1,7 @@
 export type PlayerSoundId = 'none' | 'hero' | 'villain' | 'cyborg' | 'mystic' | 'beast' | 'champion';
 
 export interface PlayerAttributes {
-  health: number;      // current max health (starts 400)
+  health: number;      // current max health (starts 300)
   armor: number;       // current armor % (starts 0, capped at 60)
   power: number;       // current power % — boosts attack damage (starts 0)
   pointsAvailable: number; // unspent attribute points

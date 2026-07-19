@@ -12,6 +12,9 @@ import { finishSimpleGame } from '../finish';
 import { GameOver } from '../GameOver';
 import { BattleVisitOverlay } from '../BattleVisitOverlay';
 
+const numOr = (v: unknown, fallback: number): number =>
+  typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+
 export function BattleBoard({ game, setGame, settings, players, games, toast, music, onQuit, setGames, setPlayers, popups, onGameOver }: {
   game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[]; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void;
 }) {
@@ -62,10 +65,10 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
     // to every dart and power boosts every successful hit. Surge doubles each
     // dart's value for damage purposes (mirroring the score multiplier).
     const darts = [...game.darts] as Dart[];
-    const power = cur.powerPct || 0;
-    const armor = victim.armorPct || 0;
+    const power = numOr(cur.powerPct, 0);
+    const armor = numOr(victim.armorPct, 0);
     let totalDamage = 0;
-    let hp = victim.hp || 0;
+    let hp = numOr(victim.hp, 0);
     for (const d of darts) {
       const dartValue = surgeActive ? d.value * 2 : d.value;
       const dmg = computeBattleDartDamage(dartValue, power, armor, settings);
@@ -77,7 +80,7 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
     victim.damageTaken = (victim.damageTaken || 0) + totalDamage;
     cur.attacks = [...(cur.attacks || []), { target: victim.id, damage: totalDamage, visit: cur.visits.length + 1, date: new Date().toISOString() }];
     cur.score += scored;
-    cur.visits.push({ darts, scored, remaining: cur.hp, leg: 1, mode: 'battle', date: new Date().toISOString() });
+    cur.visits.push({ darts, scored, remaining: numOr(cur.hp, 0), leg: 1, mode: 'battle', date: new Date().toISOString() });
     cur.dartsThrown += darts.length;
     Sound.play('impact', {}, settings);
     setLastHit({ target: victim.id, damage: totalDamage });
@@ -136,7 +139,11 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
 
   if (game.finished) return <GameOver game={game} onNewGame={() => { setGame(null); onGameOver(); music.startContext('setup', settings); }} onViewStats={() => { setGame(null); onGameOver(); }} />;
 
-  const hpPct = (pl: any) => Math.max(0, Math.min(100, ((pl.hp || 0) / (pl.maxHp || 1)) * 100));
+  const hpPct = (pl: any) => Math.max(0, Math.min(100, ((numOr(pl.hp, 0)) / (numOr(pl.maxHp, 1) || 1)) * 100));
+  const curHp = numOr(p.hp, 0);
+  const curMaxHp = numOr(p.maxHp, 0);
+  const curArmor = numOr(p.armorPct, 0);
+  const curPower = numOr(p.powerPct, 0);
 
   return (
     <div className="view-noscroll">
@@ -148,8 +155,8 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
           </div>
           <span className="muted small">BATTLE · {alive.length} ALIVE</span>
         </div>
-        <div className="pc-remaining" style={{ fontSize: 28 }}>{p.hp} HP</div>
-        <div className="checkout-hint center">❤️ {p.hp}/{p.maxHp} · 🛡️ {p.armorPct} armor · ⚡ {p.powerPct} power</div>
+        <div className="pc-remaining" style={{ fontSize: 28 }}>{curHp} HP</div>
+        <div className="checkout-hint center">❤️ {curHp}/{curMaxHp} · 🛡️ {curArmor} armor · ⚡ {curPower} power</div>
         <div style={{ width: '100%', height: 8, borderRadius: 4, background: 'var(--bg-3)', overflow: 'hidden', margin: '4px 0' }}>
           <div style={{ height: '100%', width: `${hpPct(p)}%`, background: p.color, transition: 'width .3s' }} />
         </div>
@@ -194,12 +201,12 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
                   <span className="po-name">{pl.name}</span>
                   {defeated && <span className="pill" style={{ fontSize: 9, background: '#ef4444', color: '#fff' }}>DEFEATED</span>}
                 </div>
-                <span className="pill" style={{ fontSize: 10 }}>{pl.hp} HP</span>
+                <span className="pill" style={{ fontSize: 10 }}>{numOr(pl.hp, 0)} HP</span>
               </div>
               <div style={{ marginTop: 4, height: 6, borderRadius: 3, background: 'var(--bg-3)', overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${hpPct(pl)}%`, background: pl.color, transition: 'width .3s' }} />
               </div>
-              <div className="po-sub">🛡️ {pl.armorPct} · ⚡ {pl.powerPct}{pl.damageDealt ? ` · 💥 ${pl.damageDealt}` : ''}</div>
+              <div className="po-sub">🛡️ {numOr(pl.armorPct, 0)} · ⚡ {numOr(pl.powerPct, 0)}{pl.damageDealt ? ` · 💥 ${pl.damageDealt}` : ''}</div>
             </div>
           );
         })}
