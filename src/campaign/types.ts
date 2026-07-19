@@ -57,6 +57,9 @@ export interface CampaignLevel {
   name: string;
   is_boss: boolean;
   enemies: string[]; // enemy ids into the EnemyDatabase
+  // Coop power-up id unlocked the first time this level is beaten. The
+  // boss level (last level) carries the strongest advanced power-up.
+  reward_power_up?: string;
 }
 
 export interface CampaignConfig {
@@ -68,12 +71,27 @@ export interface CampaignConfig {
 // Coop power-ups are single-use abilities the party can activate during a
 // player's turn (before throwing). They cost one charge from the party's
 // shared pool, which fills as the party lands doubles/triples/bulls.
+//
+// Power-ups come in two tiers:
+//   - 'starter': the original five, available from the start of every game.
+//   - 'advanced': five stronger, flashier power-ups unlocked as rewards for
+//     clearing specific Coop campaign levels. The strongest sits on the
+//     boss level. Each is more powerful than the one before it.
+export type CoopPowerUpTier = 'starter' | 'advanced';
+
 export type CoopPowerUpId =
+  // Starter (always available)
   | 'coop_heal'        // Restore party HP
   | 'coop_buff_power'  // Give all players +power for N turns
   | 'coop_buff_acc'    // Give all players +accuracy for N turns
   | 'coop_freeze'      // Freeze all enemies for N turns (skip their attacks)
-  | 'coop_shield';     // Add a temporary shield that absorbs one enemy hit
+  | 'coop_shield'      // Add a temporary shield that absorbs one enemy hit
+  // Advanced (unlocked as level rewards)
+  | 'coop_meteor'      // L1: Massive AoE damage to every enemy
+  | 'coop_phantom'    // L2: Next 3 darts auto-bullseye
+  | 'coop_time_warp'  // L3: Enemies take 3 turns of double damage
+  | 'coop_ressurect'  // L4: Full party HP + clear all debuffs
+  | 'coop_apocalypse'; // L5 (boss): Devastating nuke + freeze + heal combo
 
 export interface CoopPowerUpDef {
   id: CoopPowerUpId;
@@ -81,6 +99,7 @@ export interface CoopPowerUpDef {
   icon: string;
   desc: string;
   cost: number; // charge cost to activate
+  tier: CoopPowerUpTier;
 }
 
 // A buff currently active on a player (e.g. +power for 2 more turns).
@@ -106,6 +125,7 @@ export interface ActiveEnemy {
   shields: ShieldLayer[]; // remaining shields (front = next to break)
   defeated: boolean;
   frozenTurns: number;  // when > 0 the enemy skips its next attack(s)
+  vulnerableTurns: number; // when > 0, enemy takes +50% damage from all sources (Time Warp)
 }
 
 export interface CoopPlayer {
@@ -193,9 +213,15 @@ export interface CampaignBattleState {
   // When true, the UI is expected to wait for the player to tap "Continue"
   // before advancing. Used by the dart-by-dart overlays.
   awaitContinue: boolean;
+  // Phantom Darts power-up: when > 0, the next darts thrown by the current
+  // player are auto-converted to bullseyes (50 each).
+  phantomDarts: number;
 }
 
 // Persisted progress (also stored to localStorage + Supabase).
 export interface CampaignProgress {
   highest_level_beaten: number;
+  // Advanced coop power-up ids unlocked by clearing levels. Starter
+  // power-ups are always available and not tracked here.
+  unlockedPowerUps?: string[];
 }

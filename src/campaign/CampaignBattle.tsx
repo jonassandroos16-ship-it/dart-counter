@@ -4,6 +4,7 @@ import {
   addDart, undoDart, resolvePlayerVisit, applyNextPlayerDart,
   prepareEnemyTurn, applyNextEnemyAttack, setTarget, startBattle, getLevel,
   describeShield, getCoopPowerUp, canActivateCoopPowerUp, activateCoopPowerUp,
+  levelRewardPowerUp,
 } from './engine';
 import type { Player, Settings } from '../types';
 import { Sound } from '../sound';
@@ -15,7 +16,7 @@ interface Props {
   progress: CampaignProgress;
   settings: Settings;
   players: Player[];
-  onWin: (newHighest: number) => void;
+  onWin: (newHighest: number, unlockedPowerUpId: string | null) => void;
   onLose: () => void;
   onQuit: () => void;
 }
@@ -33,7 +34,13 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
       Sound.play('win', {}, settings);
       bumpCoopStat('levelsCleared');
       const newHighest = Math.max(progress.highest_level_beaten, levelId);
-      onWin(newHighest);
+      // Determine if this level grants a power-up reward the player hasn't
+      // already unlocked. The first time a level is beaten, the reward is
+      // unlocked; replaying a level does not re-grant it.
+      const rewardId = levelRewardPowerUp(levelId);
+      const alreadyUnlocked = !!rewardId && (progress.unlockedPowerUps || []).includes(rewardId);
+      const grantId = rewardId && !alreadyUnlocked ? rewardId : null;
+      onWin(newHighest, grantId);
     } else if (state.outcome === 'defeat') {
       Sound.play('kill', {}, settings);
       onLose();
@@ -85,10 +92,14 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
   const onActivatePowerUp = (id: CoopPowerUpId) => {
     setState(prev => activateCoopPowerUp(prev, id));
     Sound.play('impact', {}, settings);
-    if (id === 'coop_heal') bumpCoopStat('healsUsed');
+    if (id === 'coop_heal' || id === 'coop_ressurect') bumpCoopStat('healsUsed');
     else if (id === 'coop_freeze') bumpCoopStat('freezesUsed');
     else if (id === 'coop_buff_power' || id === 'coop_buff_acc') bumpCoopStat('buffsUsed');
     else if (id === 'coop_shield') bumpCoopStat('shieldsUsed');
+    else if (id === 'coop_apocalypse') {
+      bumpCoopStat('healsUsed');
+      bumpCoopStat('freezesUsed');
+    }
   };
 
   const partyHpPct = Math.max(0, Math.min(100, (state.partyHp / state.partyMaxHp) * 100));
@@ -176,6 +187,7 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
           const isTarget = i === state.targetIdx && !e.defeated;
           const canTarget = state.phase === 'player' && !e.defeated && !state.pendingPlayerDarts.length;
           const frozen = e.frozenTurns > 0;
+          const vulnerable = e.vulnerableTurns > 0;
           return (
             <div
               key={e.id}
@@ -184,9 +196,9 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
               style={{
                 cursor: canTarget ? 'pointer' : 'default',
                 opacity: e.defeated ? 0.4 : 1,
-                borderColor: isTarget ? 'var(--accent)' : e.defeated ? 'var(--border)' : frozen ? 'color-mix(in srgb,#60a5fa 60%,var(--border))' : 'var(--border)',
+                borderColor: isTarget ? 'var(--accent)' : e.defeated ? 'var(--border)' : frozen ? 'color-mix(in srgb,#60a5fa 60%,var(--border))' : vulnerable ? 'color-mix(in srgb,#fbbf24 60%,var(--border))' : 'var(--border)',
                 boxShadow: isTarget ? '0 0 0 2px var(--accent)' : 'none',
-                background: e.defeated ? 'var(--bg-3)' : frozen ? 'color-mix(in srgb,#60a5fa 12%,var(--bg-2))' : 'var(--bg-2)',
+                background: e.defeated ? 'var(--bg-3)' : frozen ? 'color-mix(in srgb,#60a5fa 12%,var(--bg-2))' : vulnerable ? 'color-mix(in srgb,#fbbf24 12%,var(--bg-2))' : 'var(--bg-2)',
               }}
             >
               <div className="row between">
@@ -194,6 +206,7 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
                   <span className="po-name">{e.name}</span>
                   {e.defeated && <span className="pill" style={{ fontSize: 9, background: '#ef4444', color: '#fff' }}>DEFEATED</span>}
                   {frozen && <span className="pill" style={{ fontSize: 9, background: '#60a5fa', color: '#0b0e13' }}>❄ FROZEN {e.frozenTurns}</span>}
+                  {vulnerable && !e.defeated && <span className="pill" style={{ fontSize: 9, background: '#fbbf24', color: '#0b0e13' }}>⏳ VULN {e.vulnerableTurns}</span>}
                 </div>
                 <span className="pill" style={{ fontSize: 10 }}>{e.hp} HP</span>
               </div>
@@ -243,6 +256,12 @@ export function CampaignBattle({ levelId, progress, settings, players, onWin, on
           </div>
         );
       })()}
+
+      {state.phantomDarts > 0 && state.phase === 'player' && (
+        <div className="pill" style={{ marginTop: 6, background: 'color-mix(in srgb,#22d3ee 22%,var(--bg-3))', color: '#cffafe', borderColor: 'transparent' }}>
+          👻 Phantom Darts active — next {state.phantomDarts} dart{state.phantomDarts === 1 ? '' : 's'} auto-bullseye
+        </div>
+      )}
 
       {state.phase === 'player' && state.outcome === 'ongoing' && !state.pendingPlayerDarts.length && (
         <div className="play-input">

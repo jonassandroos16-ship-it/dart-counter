@@ -2,7 +2,7 @@ import type { CampaignProgress } from './types';
 import type { Player as AppPlayer } from '../types';
 import { CAMPAIGN_LEVELS } from './campaignLevels';
 import { ENEMY_DATABASE } from './enemyDatabase';
-import { isLevelUnlocked } from './engine';
+import { isLevelUnlocked, getCoopPowerUp } from './engine';
 import { initials } from '../store';
 
 export function CampaignMap({
@@ -17,6 +17,7 @@ export function CampaignMap({
   onBack: () => void;
 }) {
   const levels = CAMPAIGN_LEVELS.levels;
+  const unlockedPowerUps = progress.unlockedPowerUps || [];
   return (
     <div className="view-scroll">
       <div className="row between" style={{ marginBottom: 12 }}>
@@ -46,6 +47,8 @@ export function CampaignMap({
           const unlocked = isLevelUnlocked(lvl.level_id, progress.highest_level_beaten);
           const beaten = lvl.level_id <= progress.highest_level_beaten;
           const isBoss = lvl.is_boss;
+          const reward = lvl.reward_power_up ? getCoopPowerUp(lvl.reward_power_up as any) : null;
+          const rewardUnlocked = reward ? unlockedPowerUps.includes(reward.id) : false;
           return (
             <div key={lvl.level_id} style={{ position: 'relative' }}>
               {i > 0 && (
@@ -83,6 +86,17 @@ export function CampaignMap({
                   <div className="muted small" style={{ marginTop: 2 }}>
                     {lvl.enemies.map(id => ENEMY_DATABASE[id]?.name || id).join(' · ')}
                   </div>
+                  {reward && (
+                    <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span className="pill" style={{
+                        fontSize: 10, padding: '2px 8px', borderColor: 'transparent',
+                        background: rewardUnlocked ? 'color-mix(in srgb,var(--accent) 22%,var(--bg-3))' : isBoss ? 'color-mix(in srgb,#ef4444 18%,var(--bg-3))' : 'var(--bg-3)',
+                        color: rewardUnlocked ? 'var(--text)' : isBoss ? '#fca5a5' : 'var(--muted)',
+                      }}>
+                        {rewardUnlocked ? `${reward.icon} ${reward.name} (unlocked)` : `🎁 Reward: ${reward.icon} ${reward.name}`}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div style={{ flex: '0 0 auto' }}>
                   {unlocked ? (

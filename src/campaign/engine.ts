@@ -3,6 +3,7 @@ import type {
   CampaignBattleState,
   CampaignDart,
   CampaignLevel,
+  CampaignProgress,
   CoopPlayer,
   CoopPowerUpDef,
   CoopPowerUpId,
@@ -21,15 +22,39 @@ import { CAMPAIGN_LEVELS } from './campaignLevels';
 import type { Player, Settings } from '../types';
 
 export const COOP_POWER_UPS: CoopPowerUpDef[] = [
-  { id: 'coop_heal', name: 'Heal', icon: '❤️', desc: 'Restore 80 party HP instantly.', cost: 100 },
-  { id: 'coop_buff_power', name: 'Power Buff', icon: '⚡', desc: 'All players +10 power for 3 turns.', cost: 80 },
-  { id: 'coop_buff_acc', name: 'Focus Buff', icon: '🎯', desc: 'All players +20% accuracy for 3 turns (visual hint).', cost: 80 },
-  { id: 'coop_freeze', name: 'Freeze', icon: '❄️', desc: 'Freeze all enemies for 2 turns — they cannot attack.', cost: 100 },
-  { id: 'coop_shield', name: 'Party Shield', icon: '🛡️', desc: 'Absorb the next 40 party damage from enemies.', cost: 70 },
+  // ── Starter tier (always available) ───────────────────────────────
+  { id: 'coop_heal', name: 'Heal', icon: '❤️', desc: 'Restore 80 party HP instantly.', cost: 100, tier: 'starter' },
+  { id: 'coop_buff_power', name: 'Power Buff', icon: '⚡', desc: 'All players +10 power for 3 turns.', cost: 80, tier: 'starter' },
+  { id: 'coop_buff_acc', name: 'Focus Buff', icon: '🎯', desc: 'All players +20% accuracy for 3 turns (visual hint).', cost: 80, tier: 'starter' },
+  { id: 'coop_freeze', name: 'Freeze', icon: '❄️', desc: 'Freeze all enemies for 2 turns — they cannot attack.', cost: 100, tier: 'starter' },
+  { id: 'coop_shield', name: 'Party Shield', icon: '🛡️', desc: 'Absorb the next 40 party damage from enemies.', cost: 70, tier: 'starter' },
+  // ── Advanced tier (unlocked as level rewards) ──────────────────────
+  // Each is stronger than the one before it. Apocalypse is the boss reward.
+  { id: 'coop_meteor', name: 'Meteor Strike', icon: '☄️', desc: 'Rain fire on every enemy — 60 damage to each, ignoring shields.', cost: 90, tier: 'advanced' },
+  { id: 'coop_phantom', name: 'Phantom Darts', icon: '👻', desc: 'Your next 3 darts auto-hit bullseye (50 each) on the targeted enemy.', cost: 80, tier: 'advanced' },
+  { id: 'coop_time_warp', name: 'Time Warp', icon: '⏳', desc: 'Enemies take 50% more damage from all sources for 3 turns.', cost: 110, tier: 'advanced' },
+  { id: 'coop_ressurect', name: 'Resurrection', icon: '✨', desc: 'Restore the party to full HP and clear all enemy shields.', cost: 130, tier: 'advanced' },
+  { id: 'coop_apocalypse', name: 'Apocalypse', icon: '🔥', desc: 'BOSS REWARD: 150 damage to every enemy, freeze them for 2 turns, and fully heal the party.', cost: 150, tier: 'advanced' },
 ];
 
 export function getCoopPowerUp(id: CoopPowerUpId): CoopPowerUpDef | undefined {
   return COOP_POWER_UPS.find(p => p.id === id);
+}
+
+// Starter power-ups are always available. Advanced power-ups unlock as level
+// rewards. This helper returns the full list of ids a player can equip given
+// their campaign progress.
+export function unlockedCoopPowerUps(progress: CampaignProgress | undefined | null): string[] {
+  const starter = COOP_POWER_UPS.filter(p => p.tier === 'starter').map(p => p.id);
+  const advanced = (progress?.unlockedPowerUps || []) as string[];
+  return [...starter, ...advanced];
+}
+
+// Returns the reward power-up id for a level, or null if none.
+export function levelRewardPowerUp(levelId: number): string | null {
+  const level = getLevel(levelId);
+  if (!level || !level.reward_power_up) return null;
+  return level.reward_power_up;
 }
 
 let instanceCounter = 0;
@@ -146,6 +171,7 @@ export function startBattle(
       shields: def.shields.map(s => ({ ...s })),
       defeated: false,
       frozenTurns: 0,
+      vulnerableTurns: 0,
     };
   });
   return {
@@ -167,6 +193,7 @@ export function startBattle(
     pendingPlayerDarts: [],
     pendingEnemyAttacks: [],
     awaitContinue: false,
+    phantomDarts: 0,
   };
 }
 
@@ -267,7 +294,7 @@ export function addDart(
   else if (base === 25) { value = mult === 2 ? 50 : 25; label = mult === 2 ? 'Bull' : '25'; }
   else if (base === 0) { value = 0; label = 'Miss'; }
   else { value = base * mult; label = (mult === 2 ? 'D' : mult === 3 ? 'T' : '') + base; }
-  const dart: CampaignDart = {
+  let dart: CampaignDart = {
     value,
     label: labelOverride || label,
     base,
@@ -275,7 +302,17 @@ export function addDart(
     isDouble: !!(isBull || (base === 25 && value === 50) || mult === 2),
     isBull: !!isBull || base === 25,
   };
-  return { ...state, darts: [...state.darts, dart] };
+  let nextDarts = [...state.darts, dart];
+  let phantomDarts = state.phantomDarts;
+  // Phantom Darts power-up: convert thrown darts into bullseyes. Each
+  // consumed dart decrements the counter. Misses (base 0) are not converted
+  // so the player can still intentionally miss if they want.
+  if (phantomDarts > 0 && base !== 0) {
+    dart = { value: 50, label: '👻 Bull', base: 50, mult: 2, isDouble: true, isBull: true };
+    nextDarts = [...state.darts, dart];
+    phantomDarts = phantomDarts - 1;
+  }
+  return { ...state, darts: nextDarts, phantomDarts };
 }
 
 export function undoDart(state: CampaignBattleState): CampaignBattleState {
@@ -361,11 +398,13 @@ export function resolvePlayerVisit(state: CampaignBattleState): CampaignBattleSt
       continue;
     }
     const dmg = computePlayerDartDamage(dart, power, t.armor);
-    t.hp = Math.max(0, t.hp - dmg);
+    // Time Warp: vulnerable enemies take +50% damage.
+    const finalDmg = t.vulnerableTurns > 0 ? Math.round(dmg * 1.5) : dmg;
+    t.hp = Math.max(0, t.hp - finalDmg);
     const defeated = t.hp <= 0;
     if (defeated) t.defeated = true;
     steps.push({
-      dart, damage: dmg, kind: defeated ? 'defeated' : 'damage',
+      dart, damage: finalDmg, kind: defeated ? 'defeated' : 'damage',
       enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
     });
     if (defeated) {
@@ -549,9 +588,15 @@ function finishEnemyTurn(state: CampaignBattleState): CampaignBattleState {
       .map(b => ({ ...b, turnsLeft: b.turnsLeft - 1 }))
       .filter(b => b.turnsLeft > 0),
   }));
+  // Decrement enemy vulnerability timers (Time Warp).
+  const enemies = state.enemies.map(e => ({
+    ...e,
+    vulnerableTurns: Math.max(0, e.vulnerableTurns - 1),
+  }));
   return {
     ...state,
     players,
+    enemies,
     phase: 'player',
     playerTurnIdx: 0,
     darts: [],
@@ -600,6 +645,40 @@ export function activateCoopPowerUp(state: CampaignBattleState, id: CoopPowerUpI
     // just heal 40 (acts as absorbtion).
     const healed = Math.min(state.partyMaxHp, state.partyHp + 40);
     return { ...state, partyHp: healed, powerUpCharge: charge };
+  }
+  // ── Advanced tier ───────────────────────────────────────────────────
+  if (id === 'coop_meteor') {
+    // 60 damage to every alive enemy, ignoring shields (shields are not
+    // consumed since the meteor strikes directly).
+    const enemies = state.enemies.map(e => {
+      if (e.defeated) return e;
+      const hp = Math.max(0, e.hp - 60);
+      return { ...e, hp, defeated: hp <= 0 };
+    });
+    return { ...state, enemies, powerUpCharge: charge };
+  }
+  if (id === 'coop_phantom') {
+    // The next 3 darts thrown by the current player auto-bullseye.
+    return { ...state, phantomDarts: 3, powerUpCharge: charge };
+  }
+  if (id === 'coop_time_warp') {
+    // All alive enemies take +50% damage for 3 rounds.
+    const enemies = state.enemies.map(e => e.defeated ? e : { ...e, vulnerableTurns: 3 });
+    return { ...state, enemies, powerUpCharge: charge };
+  }
+  if (id === 'coop_ressurect') {
+    // Full party HP and clear all enemy shields.
+    const enemies = state.enemies.map(e => ({ ...e, shields: [] }));
+    return { ...state, partyHp: state.partyMaxHp, enemies, powerUpCharge: charge };
+  }
+  if (id === 'coop_apocalypse') {
+    // Boss reward: 150 dmg to every alive enemy + freeze 2 turns + full heal.
+    const enemies = state.enemies.map(e => {
+      if (e.defeated) return e;
+      const hp = Math.max(0, e.hp - 150);
+      return { ...e, hp, defeated: hp <= 0, frozenTurns: 2, shields: [] };
+    });
+    return { ...state, enemies, partyHp: state.partyMaxHp, powerUpCharge: charge };
   }
   return state;
 }

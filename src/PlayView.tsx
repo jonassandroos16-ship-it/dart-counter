@@ -16,6 +16,8 @@ import { CampaignMap } from './campaign/CampaignMap';
 import { CampaignBattle } from './campaign/CampaignBattle';
 import { CoopSetupView } from './campaign/CoopSetupView';
 import { useCampaignProgress } from './campaign/progress';
+import { getCoopPowerUp } from './campaign/engine';
+import type { CoopPowerUpId } from './campaign/types';
 
 interface Props {
   players: Player[];
@@ -32,7 +34,7 @@ interface Props {
   popups: PopupControls;
 }
 
-type CoopStage = 'none' | 'setup' | 'map' | 'battle';
+type CoopStage = 'none' | 'setup' | 'map' | 'battle' | 'reward';
 
 export function PlayView({ players, games, settings, activeGame, setActiveGame, setGames, setPlayers, toast, music, onQuit, onGameOver, popups }: Props) {
   const game = activeGame;
@@ -42,6 +44,8 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
   const [coopPlayerIds, setCoopPlayerIds] = useState<string[]>([]);
   const [coopLevelId, setCoopLevelId] = useState<number | null>(null);
   const [mode, setMode] = useState<'menu' | 'competitive'>('menu');
+  const [rewardPowerUpId, setRewardPowerUpId] = useState<string | null>(null);
+  const [rewardLevelId, setRewardLevelId] = useState<number | null>(null);
   const { progress, setProgress } = useCampaignProgress();
 
   useEffect(() => {
@@ -56,12 +60,23 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
       progress={progress}
       settings={settings}
       players={coopPlayers}
-      onWin={(newHighest) => {
-        setProgress(prev => ({ ...prev, highest_level_beaten: newHighest }));
-        toast(`Level ${coopLevelId} cleared!`);
-        setCoopStage('map');
-        setCoopLevelId(null);
-        music.startContext('setup', settings);
+      onWin={(newHighest, unlockedPowerUpId) => {
+        const unlockedList = unlockedPowerUpId
+          ? Array.from(new Set([...(progress.unlockedPowerUps || []), unlockedPowerUpId]))
+          : (progress.unlockedPowerUps || []);
+        setProgress(prev => ({ ...prev, highest_level_beaten: newHighest, unlockedPowerUps: unlockedList }));
+        if (unlockedPowerUpId) {
+          // Show the post-game unlock screen before returning to the map.
+          setRewardPowerUpId(unlockedPowerUpId);
+          setRewardLevelId(coopLevelId);
+          setCoopStage('reward');
+          music.startContext('setup', settings);
+        } else {
+          toast(`Level ${coopLevelId} cleared!`);
+          setCoopStage('map');
+          setCoopLevelId(null);
+          music.startContext('setup', settings);
+        }
       }}
       onLose={() => {
         toast('Party defeated — try again.');
@@ -73,6 +88,23 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
         setCoopStage('map');
         setCoopLevelId(null);
         music.startContext('setup', settings);
+      }}
+    />;
+  }
+
+  if (coopStage === 'reward' && rewardPowerUpId) {
+    const pu = getCoopPowerUp(rewardPowerUpId as CoopPowerUpId);
+    return <PowerUpUnlockOverlay
+      powerUpName={pu?.name || rewardPowerUpId}
+      powerUpIcon={pu?.icon || '✨'}
+      powerUpDesc={pu?.desc || ''}
+      tier={pu?.tier || 'advanced'}
+      levelId={rewardLevelId}
+      onContinue={() => {
+        setRewardPowerUpId(null);
+        setRewardLevelId(null);
+        setCoopStage('map');
+        setCoopLevelId(null);
       }}
     />;
   }
@@ -128,4 +160,53 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
     onPickCompetitive={() => { setMode('competitive'); music.startContext('setup', settings); }}
     onPickCoop={() => { setCoopStage('setup'); music.startContext('setup', settings); }}
   />;
+}
+
+// Post-game overlay shown when a Coop campaign level unlocks a new advanced
+// power-up. Lets the player see what they earned before returning to the map.
+function PowerUpUnlockOverlay({
+  powerUpName, powerUpIcon, powerUpDesc, tier, levelId, onContinue,
+}: {
+  powerUpName: string;
+  powerUpIcon: string;
+  powerUpDesc: string;
+  tier: 'starter' | 'advanced';
+  levelId: number | null;
+  onContinue: () => void;
+}) {
+  const isBoss = levelId === 5;
+  return (
+    <div className="battle-overlay-bg" style={{ alignItems: 'center', justifyContent: 'center' }}>
+      <div className="battle-overlay" style={{ maxWidth: 420, textAlign: 'center', padding: 24 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.18em', color: isBoss ? '#fca5a5' : 'var(--accent)', textTransform: 'uppercase' }}>
+          {isBoss ? '☠ BOSS REWARD UNLOCKED' : 'NEW POWER-UP UNLOCKED'}
+        </div>
+        <div style={{
+          margin: '14px auto 10px',
+          width: 96, height: 96, borderRadius: '50%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 48,
+          background: isBoss
+            ? 'radial-gradient(circle at 30% 30%, color-mix(in srgb,#ef4444 60%,var(--bg-3)) 0%, var(--bg-3) 80%)'
+            : 'radial-gradient(circle at 30% 30%, color-mix(in srgb,var(--accent) 45%,var(--bg-3)) 0%, var(--bg-3) 80%)',
+          border: `2px solid ${isBoss ? '#ef4444' : 'var(--accent)'}`,
+          boxShadow: isBoss ? '0 0 24px color-mix(in srgb,#ef4444 50%,transparent)' : '0 0 18px color-mix(in srgb,var(--accent) 50%,transparent)',
+          animation: 'popIn .5s ease',
+        }}>
+          {powerUpIcon}
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 900 }}>{powerUpName}</div>
+        <div className="pill" style={{ marginTop: 6, fontSize: 10, background: 'var(--bg-3)', color: 'var(--muted)', borderColor: 'transparent' }}>
+          {tier === 'advanced' ? 'ADVANCED TIER' : 'STARTER TIER'}
+        </div>
+        <div className="muted" style={{ marginTop: 10, fontSize: 13, lineHeight: 1.4 }}>{powerUpDesc}</div>
+        <div className="muted small" style={{ marginTop: 10, fontStyle: 'italic' }}>
+          Equip it from the Players tab → Power-Ups → Coop section.
+        </div>
+        <button className="btn primary block" style={{ marginTop: 16 }} onClick={onContinue}>
+          Continue
+        </button>
+      </div>
+    </div>
+  );
 }

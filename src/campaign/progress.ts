@@ -7,13 +7,14 @@ const KEY = 'dc_campaign_progress';
 function loadLocal(): CampaignProgress {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { highest_level_beaten: 0 };
+    if (!raw) return { highest_level_beaten: 0, unlockedPowerUps: [] };
     const p = JSON.parse(raw) as Partial<CampaignProgress>;
     return {
       highest_level_beaten: Math.max(0, p.highest_level_beaten || 0),
+      unlockedPowerUps: Array.isArray(p.unlockedPowerUps) ? Array.from(new Set(p.unlockedPowerUps.filter((x): x is string => typeof x === 'string'))) : [],
     };
   } catch {
-    return { highest_level_beaten: 0 };
+    return { highest_level_beaten: 0, unlockedPowerUps: [] };
   }
 }
 
@@ -39,6 +40,10 @@ export function useCampaignProgress() {
         setProgressState(prev => {
           const merged: CampaignProgress = {
             highest_level_beaten: Math.max(prev.highest_level_beaten, remote.highest_level_beaten || 0),
+            unlockedPowerUps: Array.from(new Set([
+              ...(prev.unlockedPowerUps || []),
+              ...(remote.unlockedPowerUps || []),
+            ])),
           };
           saveLocal(merged);
           return merged;
