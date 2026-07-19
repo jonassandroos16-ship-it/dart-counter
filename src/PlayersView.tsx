@@ -6,6 +6,7 @@ import { initials } from './store';
 import { Modal } from './Popups';
 import { BADGES, getBadgeInfo, getBadgeContext, computeLifetimeBadgeCounts, buildCoopBadgeCtx } from './badges';
 import { POWER_UPS, getPowerUpInfo } from './powerups';
+import { COOP_POWER_UPS, getCoopPowerUp } from './campaign/engine';
 import { Sound } from './sound';
 
 // Resolve a player's effective level from XP (the source of truth) rather than
@@ -146,6 +147,8 @@ function EditPlayerModal({ player, players, isNew, games, settings, onClose, set
                       unlocked: Array.from(new Set([...((p.powerUps?.unlocked || [])), ...allPuIds])),
                       active: p.powerUps?.active ?? null,
                       pointsAvailable: (p.powerUps?.pointsAvailable ?? 0) + 100,
+                      coopUnlocked: COOP_POWER_UPS.map(pu => pu.id),
+                      coopActive: p.powerUps?.coopActive ?? null,
                     },
                     attributes: {
                       ...(p.attributes || defaultAttributes(settings)),
@@ -457,7 +460,9 @@ function PowerUpsTab({ player, settings, setPlayers, toast }: { player: Player; 
   const spent = pwr.unlocked.length;
   const available = Math.max(0, totalPoints - spent);
   const [selectedId, setSelectedId] = useState<string | null>(pwr.active);
+  const [selectedCoopId, setSelectedCoopId] = useState<string | null>(pwr.coopActive);
   const selected = getPowerUpInfo(selectedId) || null;
+  const selectedCoop = getCoopPowerUp(selectedCoopId as any) || null;
 
   const unlock = (id: string) => {
     if (pwr.unlocked.includes(id)) return;
@@ -472,16 +477,24 @@ function PowerUpsTab({ player, settings, setPlayers, toast }: { player: Player; 
     toast(id ? 'Power-up equipped' : 'Power-up unequipped');
   };
 
+  const equipCoop = (id: string | null) => {
+    setPlayers((prev: Player[]) => prev.map(p => p.id === player.id ? { ...p, powerUps: { ...pwr, coopActive: id } } : p));
+    setSelectedCoopId(id);
+    toast(id ? 'Coop power-up equipped' : 'Coop power-up unequipped');
+  };
+
   return (
     <>
-      <div className="muted small" style={{ marginBottom: 10 }}>Unlock power-ups with points (you earn {cfg.pointsPerLevel} per level, starting with {cfg.startingPoints}). Equip one — only a single power-up can be active at a time.</div>
+      <div className="muted small" style={{ marginBottom: 10 }}>Competitive power-ups are used in normal game modes. Unlock them with points (you earn {cfg.pointsPerLevel} per level, starting with {cfg.startingPoints}). Equip one per type — only a single power-up can be active at a time.</div>
       <div className="card" style={{ padding: 12, marginBottom: 10 }}>
         <div className="row between"><b>Level</b><span className="xp-pill">Lvl {level}</span></div>
         <div className="row between" style={{ marginTop: 6 }}><span className="muted small">Total points earned</span><span className="small"><b>{totalPoints}</b></span></div>
         <div className="row between" style={{ marginTop: 4 }}><span className="muted small">Unlocked</span><span className="small"><b>{spent}</b> / {POWER_UPS.length}</span></div>
         <div className="row between" style={{ marginTop: 4 }}><span className="muted small">Available</span><span className="xp-pill">{available} pts</span></div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, maxHeight: '34vh', overflow: 'auto' }}>
+
+      <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6, marginTop: 4 }}>Competitive Power-Ups</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, maxHeight: '26vh', overflow: 'auto' }}>
         {POWER_UPS.map((pu) => {
           const isUnlocked = pwr.unlocked.includes(pu.id);
           const isActive = pwr.active === pu.id;
@@ -518,6 +531,45 @@ function PowerUpsTab({ player, settings, setPlayers, toast }: { player: Player; 
       ) : (
         <div style={{ marginTop: 12, padding: 12, borderRadius: 12, background: 'var(--bg-3)', border: '1px solid var(--border)' }}>
           <div className="muted small">Select a power-up to see its description and unlock/equip it.</div>
+        </div>
+      )}
+
+      <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6, marginTop: 18 }}>Coop Power-Ups <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>(unlocked for everyone)</span></div>
+      <div className="muted small" style={{ marginBottom: 8 }}>Coop power-ups are used in Co-op Campaign mode. All of them are unlocked from the start — equip one to use it during Coop battles.</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, maxHeight: '24vh', overflow: 'auto' }}>
+        {COOP_POWER_UPS.map((pu) => {
+          const isActive = pwr.coopActive === pu.id;
+          const isSelected = selectedCoopId === pu.id;
+          return (
+            <button key={pu.id} onClick={() => setSelectedCoopId(pu.id)} title={pu.desc}
+              style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: 10, borderRadius: 10, background: isSelected ? 'color-mix(in srgb,#fca5a5 22%,var(--bg-3))' : 'var(--bg-3)', border: `1px solid ${isActive ? '#ef4444' : isSelected ? 'color-mix(in srgb,#ef4444 50%,var(--border))' : 'var(--border)'}`, cursor: 'pointer', color: 'inherit', textAlign: 'center' }}>
+              <div style={{ fontSize: 24 }}>{pu.icon}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, lineHeight: 1.1 }}>{pu.name}</div>
+              {isActive ? <span className="xp-pill" style={{ fontSize: 9, background: '#ef4444', color: '#fff' }}>Active</span> : null}
+            </button>
+          );
+        })}
+      </div>
+      {selectedCoop ? (
+        <div style={{ marginTop: 12, padding: 12, borderRadius: 12, background: 'var(--bg-3)', border: '1px solid var(--border)' }}>
+          <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+            <div style={{ fontSize: 26 }}>{selectedCoop.icon}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>{selectedCoop.name}</div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 2, lineHeight: 1.3 }}>{selectedCoop.desc}</div>
+            </div>
+          </div>
+          <div className="row" style={{ gap: 8, marginTop: 10 }}>
+            {pwr.coopActive === selectedCoop.id ? (
+              <button className="btn block ghost" onClick={() => equipCoop(null)}>Unequip</button>
+            ) : (
+              <button className="btn block primary" onClick={() => equipCoop(selectedCoop.id)}>Equip</button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div style={{ marginTop: 12, padding: 12, borderRadius: 12, background: 'var(--bg-3)', border: '1px solid var(--border)' }}>
+          <div className="muted small">Select a Coop power-up to see its description and equip it.</div>
         </div>
       )}
     </>
