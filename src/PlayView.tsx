@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Game, GamePlayer, GameRecord, Player, Settings } from './types';
 import { MODES, ATC_TARGETS, atcLabel, BUILTIN_TITLES, buildTitleCheck, getTitleInfo, SCORE_POPUPS, MILESTONES, TEAM_COLORS, TEAM_NAMES, showdownBgFor } from './constants';
-import { createGame, recordFromGame, checkoutHint, leadTrailBadge, visitAvg, levelFromXP, getPlayerXPById, allVisitsFor, computeBattleDamage } from './logic';
+import { createGame, recordFromGame, checkoutHint, leadTrailBadge, visitAvg, levelFromXP, getPlayerXPById, allVisitsFor, computeBattleDamage, playerStats } from './logic';
 import { initials } from './store';
 import { Sound } from './sound';
 import type { MusicEngine } from './music';
 import type { PopupControls } from './Popups';
-import { computeGameBadges, getBadgeInfo } from './badges';
+import { computeGameBadges, getBadgeInfo, getBadgeContext } from './badges';
 import { BadgeInfoPopup, Modal } from './Popups';
 import { getPowerUpInfo } from './powerups';
 
@@ -54,10 +54,17 @@ function activatePowerUp(game: Game, playerIdx: number, settings: Settings, toas
   if (!pl || pl.powerUpUsed) { toast('Power-up already used'); return null; }
   const cap = settings.powerUpScaling.chargeMax;
   if ((pl.powerUpCharge || 0) < cap) { toast('Power-up not fully charged'); return null; }
+  // Power-up cannot be activated at the start of a visit — at least one dart
+  // must be thrown first. This prevents "instant" activation the moment a
+  // round begins even when the orb is already at 100%.
+  if (!game.darts.length) { toast('Throw at least one dart before activating'); return null; }
   const puId = pl.powerUpId;
   const pu = getPowerUpInfo(puId);
   if (!pu) { toast('No power-up equipped'); return null; }
-  const { game: nextGame, message } = pu.apply(game, playerIdx);
+  const { game: nextGame, message, ok } = pu.apply(game, playerIdx);
+  // If the apply call signalled a failure (ok === false), do NOT consume the
+  // charge — the player keeps their full orb and can try again later.
+  if (ok === false) { toast(message); return null; }
   const players = nextGame.players.map((p: any, i: number) => {
     if (i !== playerIdx) return p;
     const updated: any = { ...p, powerUpUsed: true, powerUpCharge: 0 };
@@ -77,7 +84,8 @@ function PowerUpOrb({ game, curIdx, settings, onActivate }: { game: Game; curIdx
   const cap = settings.powerUpScaling.chargeMax;
   const charge = Math.min(cap, pl.powerUpCharge || 0);
   const pct = Math.round((charge / cap) * 100);
-  const ready = !pl.powerUpUsed && charge >= cap && !!pu;
+  const ready = !pl.powerUpUsed && charge >= cap && !!pu && game.darts.length > 0;
+  const chargedButWaiting = !pl.powerUpUsed && charge >= cap && !!pu && game.darts.length === 0;
   const [open, setOpen] = useState(false);
   const R = 22;
   const C = 2 * Math.PI * R;
@@ -86,14 +94,15 @@ function PowerUpOrb({ game, curIdx, settings, onActivate }: { game: Game; curIdx
     <>
       <button
         onClick={() => setOpen(true)}
-        title={pu ? `${pu.name} (${pct}% charged)` : 'No power-up equipped'}
+        title={pu ? `${pu.name} (${pct}% charged${chargedButWaiting ? ' — throw a dart to activate' : ''})` : 'No power-up equipped'}
+        className={chargedButWaiting ? 'pu-orb-charged-waiting' : undefined}
         style={{
           position: 'relative', width: 52, height: 52, borderRadius: '50%',
-          background: ready ? 'color-mix(in srgb,var(--accent) 18%,var(--bg-3))' : 'var(--bg-3)',
-          border: `2px solid ${ready ? 'var(--accent)' : 'var(--border)'}`,
+          background: ready || chargedButWaiting ? 'color-mix(in srgb,var(--accent) 18%,var(--bg-3))' : 'var(--bg-3)',
+          border: `2px solid ${ready || chargedButWaiting ? 'var(--accent)' : 'var(--border)'}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           cursor: 'pointer', padding: 0, color: 'inherit',
-          boxShadow: ready ? '0 0 12px color-mix(in srgb,var(--accent) 50%,transparent)' : 'none',
+          boxShadow: ready || chargedButWaiting ? '0 0 12px color-mix(in srgb,var(--accent) 50%,transparent)' : 'none',
           transition: 'box-shadow .2s, border-color .2s',
         }}
       >
@@ -114,7 +123,7 @@ function PowerUpOrb({ game, curIdx, settings, onActivate }: { game: Game; curIdx
             <h3 style={{ margin: '0 0 6px' }}>{pu.name}</h3>
             <div className="muted" style={{ fontSize: 13, lineHeight: 1.4, marginBottom: 12, maxWidth: 280 }}>{pu.desc}</div>
             <div className="muted small" style={{ marginBottom: 12 }}>
-              {pl.powerUpUsed ? 'Already used this match.' : ready ? 'Fully charged — ready to activate!' : `${pct}% charged — keep hitting doubles, triples and bulls to charge.`}
+              {pl.powerUpUsed ? 'Already used this match.' : ready ? 'Fully charged — ready to activate!' : chargedButWaiting ? 'Fully charged — throw at least one dart this visit to activate.' : `${pct}% charged — keep hitting doubles, triples and bulls to charge.`}
             </div>
             <div className="row" style={{ gap: 8, justifyContent: 'center' }}>
               <button className="btn ghost" onClick={() => setOpen(false)}>Close</button>
@@ -153,7 +162,7 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
   }, []);
 
   if (showdown) {
-    return <Showdown game={showdown} players={players} settings={settings} music={music}
+    return <Showdown game={showdown} players={players} games={games} settings={settings} music={music}
       onClose={() => {
         Sound.play('showdown_close', {}, settings);
         setShowdown(null);
@@ -1431,22 +1440,72 @@ function BattleBoard({ game, setGame, settings, toast, music, onQuit, setGames, 
   );
 }
 
-function Showdown({ game, players, settings, onClose }: {
-  game: Game; players: Player[]; settings: Settings; music: MusicEngine; onClose: () => void;
+const SHOWDOWN_TAGLINES = [
+  'The oche is set.', 'Let the darts fly.', 'Three darts. One winner.', 'Steady hand, sharp eye.',
+  'No mercy on the board.', 'Aim true.', 'Chalk ready, game on.', 'Bullseye or bust.',
+  'Leg by leg.', 'The crowd goes quiet...', 'Tension rising.', 'One leg closer to glory.',
+];
+
+function pickTagline(seed: number) {
+  return SHOWDOWN_TAGLINES[seed % SHOWDOWN_TAGLINES.length];
+}
+
+function Showdown({ game, players, games, settings, onClose }: {
+  game: Game; players: Player[]; games: GameRecord[]; settings: Settings; music: MusicEngine; onClose: () => void;
 }) {
   const teamMode = !!game.teamMode;
   const teamCount = game.teamCount || 2;
+  const mode = MODES[game.mode];
+  const modeName = mode?.label || game.mode;
+  const legsLabel = game.legsBestOf > 1 ? `Best of ${game.legsBestOf}` : 'Single leg';
+  const powerUpsOn = !!game.powerUpsEnabled;
 
   const sides = useMemo(() => {
     if (!teamMode) {
-      return game.players.map((pl, i) => ({ kind: 'player' as const, idx: i, name: pl.name, color: pl.color, members: [{ id: pl.id, name: pl.name, color: pl.color }] }));
+      return game.players.map((pl, i) => {
+        const p = players.find(pp => pp.id === pl.id);
+        const xp = getPlayerXPById(pl.id, players);
+        const li = levelFromXP(xp.xp, settings);
+        const ti = getTitleInfo(xp.selectedTitle, settings.customTitles);
+        const bi = getBadgeInfo(xp.selectedBadge);
+        const ctx = xp.showBadgeContext ? getBadgeContext(xp.selectedBadge, pl.id, games as any) : null;
+        const pu = getPowerUpInfo(p?.powerUps?.active);
+        const stats = playerStats(pl.id, games as any);
+        return {
+          kind: 'player' as const, idx: i, name: pl.name, color: pl.color,
+          members: [{ id: pl.id, name: pl.name, color: pl.color }],
+          level: li.level, title: ti, badge: bi, badgeCtx: ctx, powerUp: pu, stats,
+        };
+      });
     }
     return Array.from({ length: teamCount }, (_, ti) => {
-      const members = game.players.filter(pl => pl.team === ti).map(pl => ({ id: pl.id, name: pl.name, color: pl.color }));
+      const members = game.players.filter(pl => pl.team === ti).map(pl => {
+        const p = players.find(pp => pp.id === pl.id);
+        const xp = getPlayerXPById(pl.id, players);
+        const li = levelFromXP(xp.xp, settings);
+        const tinfo = getTitleInfo(xp.selectedTitle, settings.customTitles);
+        const binfo = getBadgeInfo(xp.selectedBadge);
+        const bctx = xp.showBadgeContext ? getBadgeContext(xp.selectedBadge, pl.id, games as any) : null;
+        const pu = getPowerUpInfo(p?.powerUps?.active);
+        return { id: pl.id, name: pl.name, color: pl.color, level: li.level, title: tinfo, badge: binfo, badgeCtx: bctx, powerUp: pu };
+      });
       const name = `Team ${ti + 1}`;
       return { kind: 'team' as const, idx: ti, name, color: TEAM_COLORS[ti % TEAM_COLORS.length], members };
     });
-  }, [game.players, teamMode, teamCount]);
+  }, [game.players, teamMode, teamCount, players, settings, games]);
+
+  // Champion = highest level player (only when 2+ players and no tie at the top).
+  const championIdx = useMemo(() => {
+    if (teamMode || sides.length < 2) return -1;
+    const ps = sides.filter(s => s.kind === 'player') as any[];
+    if (ps.length < 2) return -1;
+    const maxLevel = Math.max(...ps.map((s: any) => s.level || 1));
+    const top = ps.filter((s: any) => (s.level || 1) === maxLevel);
+    if (top.length !== 1) return -1;
+    return (top[0] as any).idx;
+  }, [sides, teamMode]);
+
+  const tagline = useMemo(() => pickTagline(Math.floor(Math.random() * SHOWDOWN_TAGLINES.length)), []);
 
   useEffect(() => {
     const t = setTimeout(() => Sound.play('vs', {}, settings), 700);
@@ -1470,29 +1529,60 @@ function Showdown({ game, players, settings, onClose }: {
   return (
     <div className="showdown-bg" style={{ background: showdownBgFor(players) }} onClick={onClose}>
       <div className="showdown-flash" />
+      <div className="showdown-header">
+        <div className="sd-mode-name">{modeName}</div>
+        <div className="sd-tagline">{tagline}</div>
+        <div className="sd-meta-row">
+          <span className="sd-chip">{legsLabel}</span>
+          {game.doubleOut && <span className="sd-chip">Double Out</span>}
+          {powerUpsOn && <span className="sd-chip sd-chip-accent">⚡ Power-Ups</span>}
+          {teamMode && <span className="sd-chip">Teams</span>}
+        </div>
+      </div>
       <div className={`showdown-grid showdown-cols-${sides.length}`}>
-        {sides.map((s, i) => (
-          <div key={i} className="showdown-card" style={{ animationDelay: `${0.15 + i * 0.18}s`, borderColor: s.color }}>
+        {sides.map((s, i) => {
+          const isChampion = !teamMode && s.kind === 'player' && s.idx === championIdx;
+          const stat = !teamMode && (s as any).stats ? (s as any).stats : null;
+          const statLabel = stat ? (stat.competitiveGames >= 2 && stat.winRate > 0
+            ? `${Math.round(stat.winRate)}% wins`
+            : stat.highScore > 0 ? `Best ${stat.highScore}` : null) : null;
+          return (
+          <div key={i} className={`showdown-card${isChampion ? ' sd-champion' : ''}`} style={{ animationDelay: `${0.15 + i * 0.18}s`, borderColor: s.color }}>
             <div className="sd-team-color" style={{ background: s.color }} />
+            {isChampion && <div className="sd-crown" title="Highest level — the defending champion">👑 Champion</div>}
             <div className="sd-card-inner">
               <div className="sd-name" style={{ color: s.color }}>{s.name}</div>
               {teamMode && s.kind === 'team' ? (
                 <div className="sd-members">
                   {s.members.map(m => (
                     <div key={m.id} className="sd-member">
-                      <span className="avatar" style={{ width: 28, height: 28, fontSize: 13, background: m.color }}>{initials(m.name)}</span>
+                      <span className="avatar" style={{ width: 28, height: 28, fontSize: 13, background: m.color }}>{m.badge ? m.badge.icon : initials(m.name)}</span>
                       <span className="sd-member-name">{m.name}</span>
+                      {m.level > 1 && <span className="sd-lvl-mini">L{m.level}</span>}
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="sd-solo-avatar" style={{ background: s.color }}>
-                  {initials(s.name)}
-                </div>
+                <>
+                  <div className="sd-solo-avatar" style={{ background: s.color }}>
+                    {s.badge ? s.badge.icon : initials(s.name)}
+                  </div>
+                  {s.badgeCtx ? (
+                    <div className="sd-badge-ctx" title={`${s.badgeCtx.label}: ${s.badgeCtx.value}`}>{s.badge?.icon} {s.badgeCtx.value}</div>
+                  ) : null}
+                  {statLabel ? <div className="sd-stat-teaser">{statLabel}</div> : null}
+                </>
               )}
+              <div className="sd-accents">
+                {!teamMode && s.level > 1 ? <span className="sd-acc sd-acc-lvl">Lvl {s.level}</span> : null}
+                {!teamMode && s.title ? <span className="sd-acc sd-acc-title" title={s.title.desc}>{s.title.icon || ''} {s.title.name}</span> : null}
+                {!teamMode && s.badge ? <span className="sd-acc sd-acc-badge" title={s.badge.desc}>{s.badge.icon} {s.badge.name}</span> : null}
+                {!teamMode && s.powerUp ? <span className="sd-acc sd-acc-pu" title={s.powerUp.desc}>{s.powerUp.icon} {s.powerUp.name}</span> : null}
+              </div>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
       {sides.length >= 2 && Array.from({ length: Math.max(1, sides.length - 1) }, (_, i) => (
         <div key={`vs-${i}`} className="showdown-vs" style={{ animationDelay: `${0.5 + i * 0.2}s` }}>VS</div>
