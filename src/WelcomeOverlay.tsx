@@ -12,7 +12,7 @@ export function WelcomeOverlay({ onDone }: { onDone?: () => void }) {
   if (hidden) return null;
 
   return (
-    <div className={`welcome-overlay ${gone ? 'welcome-gone' : ''}`} onClick={dismiss}>
+    <div className={`welcome-overlay ${gone ? 'welcome-gone' : ''}`}>
       <div className="welcome-stage">
         <div className="welcome-rings" aria-hidden>
           <span className="ring r1" />
