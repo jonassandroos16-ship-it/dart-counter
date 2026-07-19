@@ -12,12 +12,14 @@ import { AtcBoard } from './play/boards/AtcBoard';
 import { KillerBoard } from './play/boards/KillerBoard';
 import { HighScoreBoard } from './play/boards/HighScoreBoard';
 import { BattleBoard } from './play/boards/BattleBoard';
+import { ChapterSelect } from './campaign/ChapterSelect';
 import { CampaignMap } from './campaign/CampaignMap';
 import { CampaignBattle } from './campaign/CampaignBattle';
 import { CoopSetupView } from './campaign/CoopSetupView';
 import { useCampaignProgress } from './campaign/progress';
 import { getCoopPowerUp } from './campaign/engine';
-import type { CoopPowerUpId } from './campaign/types';
+import { getChapter, isChapterComplete } from './campaign/campaignLevels';
+import type { CoopPowerUpId, CampaignBattleState, CampaignChapter } from './campaign/types';
 
 interface Props {
   players: Player[];
@@ -35,7 +37,14 @@ interface Props {
   onImmersiveChange?: (immersive: boolean) => void;
 }
 
-type CoopStage = 'none' | 'setup' | 'map' | 'battle' | 'reward';
+type CoopStage = 'none' | 'setup' | 'chapters' | 'map' | 'battle' | 'postgame';
+
+interface PostGameInfo {
+  chapterId: string;
+  levelId: number;
+  stats: CampaignBattleState['stats'];
+  rewardPowerUpId: string | null;
+}
 
 export function PlayView({ players, games, settings, activeGame, setActiveGame, setGames, setPlayers, toast, music, onQuit, onGameOver, popups, onImmersiveChange }: Props) {
   const game = activeGame;
@@ -43,10 +52,10 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
   const [showdown, setShowdown] = useState<Game | null>(null);
   const [coopStage, setCoopStage] = useState<CoopStage>('none');
   const [coopPlayerIds, setCoopPlayerIds] = useState<string[]>([]);
+  const [coopChapterId, setCoopChapterId] = useState<string | null>(null);
   const [coopLevelId, setCoopLevelId] = useState<number | null>(null);
   const [mode, setMode] = useState<'menu' | 'competitive'>('menu');
-  const [rewardPowerUpId, setRewardPowerUpId] = useState<string | null>(null);
-  const [rewardLevelId, setRewardLevelId] = useState<number | null>(null);
+  const [postGame, setPostGame] = useState<PostGameInfo | null>(null);
   const { progress, setProgress } = useCampaignProgress();
 
   useEffect(() => {
@@ -55,34 +64,37 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
   }, []);
 
   // Tell the app shell when we're in an immersive view (active game, showdown,
-  // or coop battle/reward) so it can hide the bottom navigation bar.
-  const immersive = !!(game || showdown || coopStage === 'battle' || coopStage === 'reward');
+  // or coop battle/postgame) so it can hide the bottom navigation bar.
+  const immersive = !!(game || showdown || coopStage === 'battle' || coopStage === 'postgame');
   useEffect(() => { onImmersiveChange?.(immersive); }, [immersive, onImmersiveChange]);
 
-  if (coopStage === 'battle' && coopLevelId != null) {
+  if (coopStage === 'battle' && coopLevelId != null && coopChapterId) {
     const coopPlayers = coopPlayerIds.map(id => players.find(p => p.id === id)).filter(Boolean) as Player[];
     return <CampaignBattle
       levelId={coopLevelId}
+      chapterId={coopChapterId}
       progress={progress}
       settings={settings}
       players={coopPlayers}
-      onWin={(newHighest, unlockedPowerUpId) => {
+      onWin={(newHighest, unlockedPowerUpId, stats) => {
         const unlockedList = unlockedPowerUpId
           ? Array.from(new Set([...(progress.unlockedPowerUps || []), unlockedPowerUpId]))
           : (progress.unlockedPowerUps || []);
-        setProgress(prev => ({ ...prev, highest_level_beaten: newHighest, unlockedPowerUps: unlockedList }));
-        if (unlockedPowerUpId) {
-          // Show the post-game unlock screen before returning to the map.
-          setRewardPowerUpId(unlockedPowerUpId);
-          setRewardLevelId(coopLevelId);
-          setCoopStage('reward');
-          music.startContext('setup', settings);
-        } else {
-          toast(`Level ${coopLevelId} cleared!`);
-          setCoopStage('map');
-          setCoopLevelId(null);
-          music.startContext('setup', settings);
-        }
+        // Per-chapter progress: store the highest cleared level index.
+        const chapter = getChapter(coopChapterId);
+        const clearedIdx = chapter ? chapter.levels.findIndex(l => l.level_id === coopLevelId) : -1;
+        const prevChapterCleared = progress.chapters?.[coopChapterId] ?? 0;
+        const newChapterCleared = Math.max(prevChapterCleared, clearedIdx + 1);
+        setProgress(prev => ({
+          ...prev,
+          highest_level_beaten: newHighest,
+          unlockedPowerUps: unlockedList,
+          chapters: { ...(prev.chapters || {}), [coopChapterId]: newChapterCleared },
+        }));
+        // Always show the post-game screen — power-up info only if unlocked.
+        setPostGame({ chapterId: coopChapterId, levelId: coopLevelId, stats, rewardPowerUpId: unlockedPowerUpId });
+        setCoopStage('postgame');
+        music.startContext('setup', settings);
       }}
       onLose={() => {
         toast('Party defeated — try again.');
@@ -98,29 +110,42 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
     />;
   }
 
-  if (coopStage === 'reward' && rewardPowerUpId) {
-    const pu = getCoopPowerUp(rewardPowerUpId as CoopPowerUpId);
-    return <PowerUpUnlockOverlay
-      powerUpName={pu?.name || rewardPowerUpId}
-      powerUpIcon={pu?.icon || '✨'}
-      powerUpDesc={pu?.desc || ''}
-      tier={pu?.tier || 'advanced'}
-      levelId={rewardLevelId}
+  if (coopStage === 'postgame' && postGame) {
+    const chapter = getChapter(postGame.chapterId) || null;
+    const level = chapter?.levels.find(l => l.level_id === postGame.levelId) || null;
+    const pu = postGame.rewardPowerUpId ? getCoopPowerUp(postGame.rewardPowerUpId as CoopPowerUpId) : null;
+    const isBoss = level?.is_boss ?? false;
+    const chapterComplete = chapter ? isChapterComplete(chapter.id, { chapters: { [chapter.id]: (progress.chapters?.[chapter.id] ?? 0) } }) : false;
+    return <PostGameOverlay
+      chapter={chapter}
+      levelName={level?.name || `Level ${postGame.levelId}`}
+      isBoss={isBoss}
+      stats={postGame.stats}
+      rewardPowerUp={pu ? { name: pu.name, icon: pu.icon, desc: pu.desc, tier: pu.tier } : null}
+      chapterComplete={chapterComplete}
       onContinue={() => {
-        setRewardPowerUpId(null);
-        setRewardLevelId(null);
-        setCoopStage('map');
+        setPostGame(null);
+        setCoopStage('chapters');
         setCoopLevelId(null);
       }}
     />;
   }
 
-  if (coopStage === 'map') {
+  if (coopStage === 'map' && coopChapterId) {
     const coopPlayers = coopPlayerIds.map(id => players.find(p => p.id === id)).filter(Boolean) as Player[];
     return <CampaignMap
       progress={progress}
       players={coopPlayers}
+      chapterId={coopChapterId}
       onPick={(id) => { setCoopLevelId(id); setCoopStage('battle'); music.stop(); }}
+      onBack={() => { setCoopStage('chapters'); music.startContext('setup', settings); }}
+    />;
+  }
+
+  if (coopStage === 'chapters') {
+    return <ChapterSelect
+      progress={progress}
+      onPick={(id) => { setCoopChapterId(id); setCoopStage('map'); }}
       onBack={() => { setCoopStage('setup'); music.startContext('setup', settings); }}
     />;
   }
@@ -129,7 +154,7 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
     return <CoopSetupView
       players={players}
       settings={settings}
-      onStart={(ids) => { setCoopPlayerIds(ids); setCoopStage('map'); }}
+      onStart={(ids) => { setCoopPlayerIds(ids); setCoopStage('chapters'); }}
       onBack={() => { setCoopStage('none'); setMode('menu'); music.startContext('setup', settings); }}
     />;
   }
@@ -168,51 +193,110 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
   />;
 }
 
-// Post-game overlay shown when a Coop campaign level unlocks a new advanced
-// power-up. Lets the player see what they earned before returning to the map.
-function PowerUpUnlockOverlay({
-  powerUpName, powerUpIcon, powerUpDesc, tier, levelId, onContinue,
+// ── Post-game overlay ────────────────────────────────────────────────
+//
+// Always shown after a Coop campaign level is cleared. Displays the level
+// name, a "DEFEATED" callout, the battle stats (visits, darts, damage,
+// enemies defeated, power-ups used, party HP lost), and a short story
+// beat. If the level granted a new power-up, the power-up card is shown
+// below the stats. If this was the chapter's boss, the chapter outro is
+// shown as the story beat.
+function PostGameOverlay({
+  chapter, levelName, isBoss, stats, rewardPowerUp, chapterComplete, onContinue,
 }: {
-  powerUpName: string;
-  powerUpIcon: string;
-  powerUpDesc: string;
-  tier: 'starter' | 'advanced';
-  levelId: number | null;
+  chapter: CampaignChapter | null;
+  levelName: string;
+  isBoss: boolean;
+  stats: CampaignBattleState['stats'];
+  rewardPowerUp: { name: string; icon: string; desc: string; tier: 'starter' | 'advanced' } | null;
+  chapterComplete: boolean;
   onContinue: () => void;
 }) {
-  const isBoss = levelId === 5;
+  const theme = chapter?.theme;
+  const accent = theme?.accent || 'var(--accent)';
+  const bg = theme?.background || 'var(--bg)';
+  const storyBit = isBoss
+    ? chapter?.story.outro
+    : chapter?.levels.find(l => l.name === levelName)?.story_bit;
   return (
-    <div className="battle-overlay-bg" style={{ alignItems: 'center', justifyContent: 'center' }}>
-      <div className="battle-overlay" style={{ maxWidth: 420, textAlign: 'center', padding: 24 }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.18em', color: isBoss ? '#fca5a5' : 'var(--accent)', textTransform: 'uppercase' }}>
-          {isBoss ? '☠ BOSS REWARD UNLOCKED' : 'NEW POWER-UP UNLOCKED'}
+    <div className="battle-overlay-bg" style={{ alignItems: 'center', justifyContent: 'center', background: `rgba(0,0,0,.65)` }}>
+      <div className="battle-overlay" style={{ maxWidth: 440, padding: 20, background: `linear-gradient(180deg, ${bg} 0%, var(--bg-2) 100%)` }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.18em', color: accent, textTransform: 'uppercase' }}>
+            {chapter?.name}
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4 }}>{levelName}</div>
+          <div style={{
+            margin: '10px auto 6px',
+            width: 80, height: 80, borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 40,
+            background: `radial-gradient(circle at 30% 30%, color-mix(in srgb, ${accent} 45%, var(--bg-3)) 0%, var(--bg-3) 80%)`,
+            border: `2px solid ${accent}`,
+            boxShadow: `0 0 18px color-mix(in srgb, ${accent} 45%, transparent)`,
+          }}>
+            {isBoss ? '☠' : '✓'}
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 900, color: accent, letterSpacing: '.04em' }}>
+            DEFEATED
+          </div>
         </div>
-        <div style={{
-          margin: '14px auto 10px',
-          width: 96, height: 96, borderRadius: '50%',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 48,
-          background: isBoss
-            ? 'radial-gradient(circle at 30% 30%, color-mix(in srgb,#ef4444 60%,var(--bg-3)) 0%, var(--bg-3) 80%)'
-            : 'radial-gradient(circle at 30% 30%, color-mix(in srgb,var(--accent) 45%,var(--bg-3)) 0%, var(--bg-3) 80%)',
-          border: `2px solid ${isBoss ? '#ef4444' : 'var(--accent)'}`,
-          boxShadow: isBoss ? '0 0 24px color-mix(in srgb,#ef4444 50%,transparent)' : '0 0 18px color-mix(in srgb,var(--accent) 50%,transparent)',
-          animation: 'popIn .5s ease',
-        }}>
-          {powerUpIcon}
+
+        <div className="card" style={{ padding: 12, marginTop: 14, background: 'var(--bg-3)' }}>
+          <div className="muted small" style={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>Battle stats</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+            <Stat label="Visits" value={stats.visitsUsed} />
+            <Stat label="Darts" value={stats.dartsThrown} />
+            <Stat label="Damage" value={stats.damageDealt} />
+            <Stat label="Enemies" value={stats.enemiesDefeated} />
+            <Stat label="Power-ups" value={stats.powerUpsUsed} />
+            <Stat label="HP lost" value={stats.partyHpLost} />
+          </div>
         </div>
-        <div style={{ fontSize: 22, fontWeight: 900 }}>{powerUpName}</div>
-        <div className="pill" style={{ marginTop: 6, fontSize: 10, background: 'var(--bg-3)', color: 'var(--muted)', borderColor: 'transparent' }}>
-          {tier === 'advanced' ? 'ADVANCED TIER' : 'STARTER TIER'}
-        </div>
-        <div className="muted" style={{ marginTop: 10, fontSize: 13, lineHeight: 1.4 }}>{powerUpDesc}</div>
-        <div className="muted small" style={{ marginTop: 10, fontStyle: 'italic' }}>
-          Equip it from the Players tab → Power-Ups → Coop section.
-        </div>
+
+        {rewardPowerUp && (
+          <div className="card" style={{ marginTop: 12, padding: 14, background: `color-mix(in srgb, ${accent} 14%, var(--bg-3))`, borderColor: `color-mix(in srgb, ${accent} 50%, var(--border))` }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: accent, textTransform: 'uppercase', marginBottom: 6 }}>
+              {isBoss ? 'Boss Reward Unlocked' : 'New Power-Up Unlocked'}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ fontSize: 32 }}>{rewardPowerUp.icon}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 900, fontSize: 16 }}>{rewardPowerUp.name}</div>
+                <div className="muted small" style={{ marginTop: 2, lineHeight: 1.4 }}>{rewardPowerUp.desc}</div>
+              </div>
+            </div>
+            <div className="muted small" style={{ marginTop: 8, fontStyle: 'italic' }}>
+              Equip it from Players → Power-Ups → Coop section.
+            </div>
+          </div>
+        )}
+
+        {storyBit && (
+          <div className="muted" style={{ marginTop: 14, fontSize: 13, lineHeight: 1.55, fontStyle: 'italic', textAlign: 'center' }}>
+            {storyBit}
+          </div>
+        )}
+
+        {chapterComplete && (
+          <div className="pill" style={{ marginTop: 12, display: 'inline-flex', alignSelf: 'center', background: accent, color: '#04150a', borderColor: 'transparent' }}>
+            Chapter complete
+          </div>
+        )}
+
         <button className="btn primary block" style={{ marginTop: 16 }} onClick={onContinue}>
           Continue
         </button>
       </div>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <div style={{ fontWeight: 900, fontSize: 18 }}>{value}</div>
+      <div className="muted small" style={{ marginTop: 2 }}>{label}</div>
     </div>
   );
 }

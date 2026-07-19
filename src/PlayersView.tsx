@@ -7,7 +7,7 @@ import { Modal } from './Popups';
 import { BADGES, getBadgeInfo, getBadgeContext, computeLifetimeBadgeCounts, buildCoopBadgeCtx } from './badges';
 import { POWER_UPS, getPowerUpInfo } from './powerups';
 import { COOP_POWER_UPS, getCoopPowerUp, unlockedCoopPowerUps } from './campaign/engine';
-import { CAMPAIGN_LEVELS } from './campaign/campaignLevels';
+import { CAMPAIGN_CHAPTERS } from './campaign/campaignLevels';
 import { useCampaignProgress } from './campaign/progress';
 import type { CoopPowerUpId, CoopPowerUpDef } from './campaign/types';
 import { Sound } from './sound';
@@ -616,9 +616,10 @@ function PowerUpsTab({ player, settings, setPlayers, toast }: { player: Player; 
 }
 
 // Tiny helper that returns the campaign levels with their reward power-up
-// metadata, used by PowerUpsTab to label locked advanced coop tiles.
+// metadata, used by PowerUpsTab to label locked advanced coop tiles. Now
+// chapter-aware: returns levels across all chapters.
 function getLevelNames(): { level_id: number; name: string; is_boss: boolean; reward_power_up?: string }[] {
-  return CAMPAIGN_LEVELS.levels;
+  return CAMPAIGN_CHAPTERS.flatMap(ch => ch.levels);
 }
 
 export { conditionLabel };
