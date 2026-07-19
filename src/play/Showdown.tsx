@@ -18,6 +18,40 @@ function pickTagline(seed: number) {
   return SHOWDOWN_TAGLINES[seed % SHOWDOWN_TAGLINES.length];
 }
 
+// Showdown titles: each player can earn one highlight title based on their
+// lifetime stats. The first matching rule (in priority order) wins, and a
+// rule only fires when exactly one player is the leader so ties are skipped.
+type ShowdownTitle = {
+  id: string;
+  label: string;
+  icon: string;
+  pick: (stats: ReturnType<typeof playerStats>) => number;
+  desc: string;
+};
+
+const SHOWDOWN_TITLES: ShowdownTitle[] = [
+  { id: 'champion', label: 'Champion', icon: '👑', desc: 'Highest level — the defending champion',
+    pick: () => 0 }, // handled separately via level, but kept for ordering
+  { id: 'top_scorer', label: 'Top Scorer', icon: '📈', desc: 'Highest single-visit score',
+    pick: (s) => s.highScore || 0 },
+  { id: 'ton_master', label: 'Ton Master', icon: '💯', desc: 'Most 100+ visits',
+    pick: (s) => (s.tons || 0) + (s.n140 || 0) + (s.n180 || 0) },
+  { id: 'max_king', label: 'Maximum King', icon: '💥', desc: 'Most 180s',
+    pick: (s) => s.n180 || 0 },
+  { id: 'checkout_master', label: 'Checkout Master', icon: '🎯', desc: 'Highest checkout',
+    pick: (s) => s.highCheckout || 0 },
+  { id: 'win_rate_king', label: 'Winner', icon: '🏆', desc: 'Best win rate (min 2 games)',
+    pick: (s) => s.competitiveGames >= 2 ? s.winRate : -1 },
+  { id: 'first9_flyer', label: 'Fast Starter', icon: '🚀', desc: 'Best first-9 average',
+    pick: (s) => s.first9 || 0 },
+  { id: 'sharpshooter', label: 'Sharpshooter', icon: '🔫', desc: 'Best 3-dart average',
+    pick: (s) => s.avg || 0 },
+  { id: 'finisher', label: 'The Finisher', icon: '✅', desc: 'Most legs finished',
+    pick: (s) => s.legsFinished || 0 },
+  { id: 'veteran', label: 'Veteran', icon: '🎖️', desc: 'Most games played',
+    pick: (s) => s.games || 0 },
+];
+
 export function Showdown({ game, players, games, settings, onClose }: {
   game: Game; players: Player[]; games: GameRecord[]; settings: Settings; music: MusicEngine; onClose: () => void;
 }) {
@@ -77,6 +111,31 @@ export function Showdown({ game, players, games, settings, onClose }: {
     return (top[0] as any).idx;
   }, [sides, teamMode]);
 
+  // Resolve one extra "showdown title" per player based on lifetime stats.
+  // A title only fires if exactly one player leads that metric, so we never
+  // show a tied label. Champion (level) is already handled above, so we skip
+  // it here to avoid duplicate crowns.
+  const showdownTitles = useMemo<Record<number, { label: string; icon: string; desc: string }>>(() => {
+    const out: Record<number, { label: string; icon: string; desc: string }> = {};
+    if (teamMode || sides.length < 2) return out;
+    const ps = sides.filter(s => s.kind === 'player') as any[];
+    if (ps.length < 2) return out;
+    const usedByPlayer = new Set<number>();
+    for (const rule of SHOWDOWN_TITLES) {
+      if (rule.id === 'champion') continue; // already shown via crown
+      const scored = ps.map((s: any) => ({ idx: s.idx, n: rule.pick(s.stats) }));
+      const max = Math.max(...scored.map(x => x.n));
+      if (max <= 0) continue;
+      const leaders = scored.filter(x => x.n === max);
+      if (leaders.length !== 1) continue;
+      const winnerIdx = leaders[0].idx;
+      if (usedByPlayer.has(winnerIdx)) continue;
+      usedByPlayer.add(winnerIdx);
+      out[winnerIdx] = { label: rule.label, icon: rule.icon, desc: rule.desc };
+    }
+    return out;
+  }, [sides, teamMode]);
+
   const tagline = useMemo(() => pickTagline(Math.floor(Math.random() * SHOWDOWN_TAGLINES.length)), []);
 
   useEffect(() => {
@@ -114,14 +173,16 @@ export function Showdown({ game, players, games, settings, onClose }: {
       <div className={`showdown-grid showdown-cols-${sides.length}`}>
         {sides.map((s, i) => {
           const isChampion = !teamMode && s.kind === 'player' && s.idx === championIdx;
+          const sdTitle = !teamMode && s.kind === 'player' ? showdownTitles[s.idx] : null;
           const stat = !teamMode && (s as any).stats ? (s as any).stats : null;
           const statLabel = stat ? (stat.competitiveGames >= 2 && stat.winRate > 0
             ? `${Math.round(stat.winRate)}% wins`
             : stat.highScore > 0 ? `Best ${stat.highScore}` : null) : null;
           return (
-          <div key={i} className={`showdown-card${isChampion ? ' sd-champion' : ''}${s.bgCss ? ' sd-has-bg' : ''}`} style={{ animationDelay: `${0.15 + i * 0.18}s`, borderColor: s.color, ...(s.bgCss ? { background: s.bgCss } : {}) }}>
+          <div key={i} className={`showdown-card${isChampion ? ' sd-champion' : ''}${sdTitle ? ' sd-titled' : ''}${s.bgCss ? ' sd-has-bg' : ''}`} style={{ animationDelay: `${0.15 + i * 0.18}s`, borderColor: s.color, ...(s.bgCss ? { background: s.bgCss } : {}) }}>
             <div className="sd-team-color" style={{ background: s.color }} />
             {isChampion && <div className="sd-crown" title="Highest level — the defending champion">👑 Champion</div>}
+            {!isChampion && sdTitle && <div className="sd-crown sd-crown-alt" title={sdTitle.desc}>{sdTitle.icon} {sdTitle.label}</div>}
             <div className="sd-card-inner">
               <div className="sd-name" style={{ color: s.color }}>{s.name}</div>
               {teamMode && s.kind === 'team' ? (
