@@ -10,6 +10,7 @@ import { StatsView } from './StatsView';
 import { HistoryView } from './HistoryView';
 import { SettingsView } from './SettingsView';
 import { Toast, MilestonePopup, LevelUpPopup, TitleUnlockPopup, KillPopup, FrozenPopup, usePopupState } from './Popups';
+import { WelcomeOverlay } from './WelcomeOverlay';
 
 type View = 'play' | 'players' | 'stats' | 'history' | 'settings';
 
@@ -74,7 +75,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      
+      <WelcomeOverlay />
       {view === 'play' && (
         <PlayView players={db.players} games={db.games} settings={db.settings}
           activeGame={db.activeGame} setActiveGame={db.setActiveGame}

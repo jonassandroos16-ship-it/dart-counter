@@ -9,6 +9,7 @@
 @import './styles/calendar.css';
 @import './styles/showdown.css';
 @import './styles/powerups.css';
+@import './styles/welcome.css';
 
 @tailwind base;
 @tailwind components;
