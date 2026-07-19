@@ -29,7 +29,6 @@ export default function App() {
   const popups = usePopupState();
   const [view, setView] = useState<View>('play');
   const [navOpen, setNavOpen] = useState(() => localStorage.getItem('dc_nav_open') !== '0');
-  const [immersive, setImmersive] = useState(false);
   const musicRef = useRef<MusicEngine>(new MusicEngine());
   const backfilledRef = useRef(false);
   const { progress: campaignProgress } = useCampaignProgress();
@@ -95,7 +94,7 @@ export default function App() {
           setGames={db.setGames} setPlayers={db.setPlayers} toast={show} music={musicRef.current}
           onQuit={() => { musicRef.current.startContext('setup', db.settings); }}
           onGameOver={() => {}}
-          popups={popups} onImmersiveChange={setImmersive} />
+          popups={popups} />
       )}
       {view === 'players' && <div className="view-scroll"><PlayersView players={db.players} games={db.games} settings={db.settings} setPlayers={db.setPlayers} toast={show} /></div>}
       {view === 'stats' && <StatsView players={db.players} games={db.games} settings={db.settings} />}
@@ -103,16 +102,15 @@ export default function App() {
       {view === 'settings' && <SettingsView players={db.players} games={db.games} settings={db.settings} setSettings={db.setSettings} setPlayers={db.setPlayers} setGames={db.setGames} toast={show} hasDatabase={db.hasDatabase} connected={db.connected} upToDate={db.upToDate} lastSync={db.lastSync} syncing={db.syncing} onSync={db.manualSync} />}
 
       <button
-        className={`nav-toggle${navOpen ? ' open' : ''}${immersive ? ' hidden' : ''}`}
+        className={`nav-toggle${navOpen ? ' open' : ''}`}
         onClick={() => setNavOpen(o => !o)}
         aria-label={navOpen ? 'Hide navigation' : 'Show navigation'}
         aria-expanded={navOpen}
-        tabIndex={immersive ? -1 : 0}
       >
         {navOpen ? <ChevronDown size={18} strokeWidth={2.5} /> : <ChevronUp size={18} strokeWidth={2.5} />}
       </button>
 
-      <nav className={`nav${navOpen ? ' open' : ''}${immersive ? ' hidden' : ''}`} aria-hidden={!navOpen || immersive}>
+      <nav className={`nav${navOpen ? ' open' : ''}`} aria-hidden={!navOpen}>
         {NAV.map(n => {
           const Icon = n.icon;
           return (
