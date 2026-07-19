@@ -11,6 +11,7 @@ import { HistoryView } from './HistoryView';
 import { SettingsView } from './SettingsView';
 import { Toast, MilestonePopup, LevelUpPopup, TitleUnlockPopup, KillPopup, FrozenPopup, usePopupState } from './Popups';
 import { WelcomeOverlay } from './WelcomeOverlay';
+import { useCampaignProgress } from './campaign/progress';
 
 type View = 'play' | 'players' | 'stats' | 'history' | 'settings';
 
@@ -29,6 +30,7 @@ export default function App() {
   const [view, setView] = useState<View>('play');
   const musicRef = useRef<MusicEngine>(new MusicEngine());
   const backfilledRef = useRef(false);
+  const { progress: campaignProgress } = useCampaignProgress();
 
   useEffect(() => { applyTheme(db.settings); }, [db.settings]);
 
@@ -41,9 +43,9 @@ export default function App() {
     if (backfilledRef.current) return;
     if (!db.players.length) return;
     backfilledRef.current = true;
-    const { players: next, changed } = retroUnlockAll(db.players, db.games, db.settings.customTitles || []);
+    const { players: next, changed } = retroUnlockAll(db.players, db.games, db.settings.customTitles || [], campaignProgress);
     if (changed) db.setPlayers(next);
-  }, [db.players, db.games, db.settings.customTitles]);
+  }, [db.players, db.games, db.settings.customTitles, campaignProgress]);
 
   // Reconcile attribute & power-up points whenever player levels, scaling
   // settings, or developer mode toggles change so newly-earned points become

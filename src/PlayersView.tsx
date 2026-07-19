@@ -4,7 +4,7 @@ import { COLORS, allTitles, getTitleInfo, conditionLabel, titleProgressInfo, PLA
 import { levelFromXP, getPlayerXP, playerStats, allVisitsFor, defaultAttributes, defaultPowerUps, totalAttributePointsForLevel, totalPowerUpPointsForLevel } from './logic';
 import { initials } from './store';
 import { Modal } from './Popups';
-import { BADGES, getBadgeInfo, getBadgeContext, computeLifetimeBadgeCounts } from './badges';
+import { BADGES, getBadgeInfo, getBadgeContext, computeLifetimeBadgeCounts, buildCoopBadgeCtx } from './badges';
 import { POWER_UPS, getPowerUpInfo } from './powerups';
 import { Sound } from './sound';
 
@@ -44,7 +44,7 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
         const bi = getBadgeInfo(xp.selectedBadge);
         const avatarContent = bi ? bi.icon : initials(p.name);
         const totalBadgeEarns = Object.values(xp.badgeCounts || {}).reduce((a: number, b: number) => a + b, 0);
-        const ctx = xp.showBadgeContext ? getBadgeContext(xp.selectedBadge, p.id, games as any) : null;
+        const ctx = xp.showBadgeContext ? getBadgeContext(xp.selectedBadge, p.id, games as any, buildCoopBadgeCtx()) : null;
         const attrs = p.attributes || defaultAttributes(settings);
         const pwr = p.powerUps || defaultPowerUps(settings);
         const activePu = getPowerUpInfo(pwr.active);
@@ -304,7 +304,7 @@ function BadgesTab({ player, games, setPlayers, toast }: { player: Player; games
     return merged;
   }, [xp.badgeCounts, player.id, games]);
   const totalEarns = Object.values(badgeCounts).reduce((a: number, b: number) => a + b, 0);
-  const previewCtx = selected && selected.context ? getBadgeContext(selected.id, player.id, games as any) : null;
+  const previewCtx = selected && selected.context ? getBadgeContext(selected.id, player.id, games as any, buildCoopBadgeCtx()) : null;
 
   const equip = (id: string | null) => {
     setEquipped(id); setSelectedId(id);

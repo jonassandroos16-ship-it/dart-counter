@@ -5,6 +5,7 @@ import { Sound } from './sound';
 import type { MusicEngine } from './music';
 import type { PopupControls } from './Popups';
 import { SetupView } from './play/SetupView';
+import { ModeSelectView } from './play/ModeSelectView';
 import { Showdown } from './play/Showdown';
 import { X01Board } from './play/boards/X01Board';
 import { AtcBoard } from './play/boards/AtcBoard';
@@ -13,6 +14,7 @@ import { HighScoreBoard } from './play/boards/HighScoreBoard';
 import { BattleBoard } from './play/boards/BattleBoard';
 import { CampaignMap } from './campaign/CampaignMap';
 import { CampaignBattle } from './campaign/CampaignBattle';
+import { CoopSetupView } from './campaign/CoopSetupView';
 import { useCampaignProgress } from './campaign/progress';
 
 interface Props {
@@ -30,12 +32,16 @@ interface Props {
   popups: PopupControls;
 }
 
+type CoopStage = 'none' | 'setup' | 'map' | 'battle';
+
 export function PlayView({ players, games, settings, activeGame, setActiveGame, setGames, setPlayers, toast, music, onQuit, onGameOver, popups }: Props) {
   const game = activeGame;
   const setGame = setActiveGame;
   const [showdown, setShowdown] = useState<Game | null>(null);
-  const [campaignView, setCampaignView] = useState<'none' | 'map' | 'battle'>('none');
-  const [campaignLevelId, setCampaignLevelId] = useState<number | null>(null);
+  const [coopStage, setCoopStage] = useState<CoopStage>('none');
+  const [coopPlayerIds, setCoopPlayerIds] = useState<string[]>([]);
+  const [coopLevelId, setCoopLevelId] = useState<number | null>(null);
+  const [mode, setMode] = useState<'menu' | 'competitive'>('menu');
   const { progress, setProgress } = useCampaignProgress();
 
   useEffect(() => {
@@ -43,39 +49,50 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (campaignView === 'battle' && campaignLevelId != null) {
+  if (coopStage === 'battle' && coopLevelId != null) {
+    const coopPlayers = coopPlayerIds.map(id => players.find(p => p.id === id)).filter(Boolean) as Player[];
     return <CampaignBattle
-      levelId={campaignLevelId}
+      levelId={coopLevelId}
       progress={progress}
       settings={settings}
-      onWin={(newHighest, partyHp) => {
-        setProgress(prev => ({ ...prev, highest_level_beaten: newHighest, current_party_hp: partyHp }));
-        toast(`Level ${campaignLevelId} cleared!`);
-        setCampaignView('map');
-        setCampaignLevelId(null);
+      players={coopPlayers}
+      onWin={(newHighest) => {
+        setProgress(prev => ({ ...prev, highest_level_beaten: newHighest }));
+        toast(`Level ${coopLevelId} cleared!`);
+        setCoopStage('map');
+        setCoopLevelId(null);
         music.startContext('setup', settings);
       }}
-      onLose={(partyHp) => {
-        setProgress(prev => ({ ...prev, current_party_hp: Math.max(1, Math.floor(partyHp || progress.party_max_hp / 2)) }));
-        toast('Party defeated — HP restored to half.');
-        setCampaignView('map');
-        setCampaignLevelId(null);
+      onLose={() => {
+        toast('Party defeated — try again.');
+        setCoopStage('map');
+        setCoopLevelId(null);
         music.startContext('setup', settings);
       }}
       onQuit={() => {
-        setProgress(prev => ({ ...prev, current_party_hp: prev.current_party_hp }));
-        setCampaignView('map');
-        setCampaignLevelId(null);
+        setCoopStage('map');
+        setCoopLevelId(null);
         music.startContext('setup', settings);
       }}
     />;
   }
 
-  if (campaignView === 'map') {
+  if (coopStage === 'map') {
+    const coopPlayers = coopPlayerIds.map(id => players.find(p => p.id === id)).filter(Boolean) as Player[];
     return <CampaignMap
       progress={progress}
-      onPick={(id) => { setCampaignLevelId(id); setCampaignView('battle'); music.stop(); }}
-      onBack={() => { setCampaignView('none'); music.startContext('setup', settings); }}
+      players={coopPlayers}
+      onPick={(id) => { setCoopLevelId(id); setCoopStage('battle'); music.stop(); }}
+      onBack={() => { setCoopStage('setup'); music.startContext('setup', settings); }}
+    />;
+  }
+
+  if (coopStage === 'setup') {
+    return <CoopSetupView
+      players={players}
+      settings={settings}
+      onStart={(ids) => { setCoopPlayerIds(ids); setCoopStage('map'); }}
+      onBack={() => { setCoopStage('none'); setMode('menu'); music.startContext('setup', settings); }}
     />;
   }
 
@@ -95,11 +112,20 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
     if (game.mode === 'battle') return <BattleBoard game={game} setGame={setGame} settings={settings} players={players} games={games} toast={toast} music={music} onQuit={() => { setGame(null); onQuit(); }} setGames={setGames} setPlayers={setPlayers} popups={popups} onGameOver={onGameOver} />;
     return <X01Board game={game} setGame={setGame} settings={settings} players={players} games={games} setGames={setGames} setPlayers={setPlayers} toast={toast} music={music} onQuit={() => { setGame(null); onQuit(); }} onGameOver={onGameOver} popups={popups} />;
   }
-  return <SetupView players={players} onOpenCampaign={() => { setCampaignView('map'); music.startContext('setup', settings); }} onStart={(mode, ids, dbl, legs, teamMode, teamAssignment, powerUps) => {
-    const g = createGame(mode, ids, players, dbl, legs, teamMode, teamAssignment, powerUps, settings);
-    Sound.play('showdown', {}, settings);
-    music.stop();
-    setActiveGame(g);
-    setShowdown(g);
-  }} />;
+
+  if (mode === 'competitive') {
+    return <SetupView players={players} onBackToModeSelect={() => { setMode('menu'); music.startContext('setup', settings); }} onStart={(mode, ids, dbl, legs, teamMode, teamAssignment, powerUps) => {
+      const g = createGame(mode, ids, players, dbl, legs, teamMode, teamAssignment, powerUps, settings);
+      Sound.play('showdown', {}, settings);
+      music.stop();
+      setActiveGame(g);
+      setShowdown(g);
+    }} />;
+  }
+
+  return <ModeSelectView
+    players={players}
+    onPickCompetitive={() => { setMode('competitive'); music.startContext('setup', settings); }}
+    onPickCoop={() => { setCoopStage('setup'); music.startContext('setup', settings); }}
+  />;
 }
