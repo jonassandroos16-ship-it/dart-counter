@@ -307,6 +307,7 @@ export function addDart(
   mult: number,
   labelOverride?: string,
   isBull?: boolean,
+  settings?: Settings,
 ): CampaignBattleState {
   if (state.phase !== 'player') return state;
   if (state.darts.length >= 3) return state;
@@ -332,6 +333,14 @@ export function addDart(
     phantomDarts = phantomDarts - 1;
   }
 
+  // Power-up charge: every dart thrown contributes to the party's shared
+  // coop power-up orb. Mirrors the competitive `addDartToGame` flow, which
+  // calls `chargeFromDart` per dart. Without this, the coop orb never
+  // charges (it stayed at 0% forever).
+  const chargeCap = settings?.powerUpScaling?.chargeMax ?? 100;
+  const gained = settings ? chargeFromDart(dart, settings) : 0;
+  const powerUpCharge = Math.min(chargeCap, state.powerUpCharge + gained);
+
   // Snapshot enemies at the start of the visit so undo can restore them.
   const visitEnemiesSnapshot = state.darts.length === 0
     ? state.enemies.map(e => ({ ...e, shields: e.shields.map(s => ({ ...s })) }))
@@ -340,7 +349,7 @@ export function addDart(
   // Resolve this dart immediately against the targeted enemy.
   const thrower = state.players[state.playerTurnIdx];
   if (!thrower) {
-    return { ...state, darts: [...state.darts, dart], phantomDarts, visitEnemiesSnapshot };
+    return { ...state, darts: [...state.darts, dart], phantomDarts, visitEnemiesSnapshot, powerUpCharge };
   }
   const power = effectivePower(thrower);
 
@@ -356,6 +365,7 @@ export function addDart(
         darts: [...state.darts, dart],
         phantomDarts,
         visitEnemiesSnapshot,
+        powerUpCharge,
       };
     }
     targetIdx = firstAlive;
@@ -405,10 +415,11 @@ export function addDart(
     phantomDarts,
     visitEnemiesSnapshot,
     outcome,
+    powerUpCharge,
   };
 }
 
-export function undoDart(state: CampaignBattleState): CampaignBattleState {
+export function undoDart(state: CampaignBattleState, settings?: Settings): CampaignBattleState {
   if (!state.darts.length) return state;
   // Restore enemies from the visit snapshot (taken when the first dart was
   // thrown). If this was the first dart, clear the snapshot.
@@ -421,6 +432,11 @@ export function undoDart(state: CampaignBattleState): CampaignBattleState {
   // Recompute outcome — undoing a dart could un-defeat an enemy.
   const anyAlive = enemies.some(e => !e.defeated);
   const outcome: CampaignBattleState['outcome'] = !anyAlive ? 'victory' : 'ongoing';
+  // Revert the power-up charge added by the undone dart so the orb reflects
+  // only darts still on the board.
+  const undoneDart = state.darts[state.darts.length - 1];
+  const revert = settings ? chargeFromDart(undoneDart, settings) : 0;
+  const powerUpCharge = Math.max(0, state.powerUpCharge - revert);
   return {
     ...state,
     enemies,
@@ -428,6 +444,7 @@ export function undoDart(state: CampaignBattleState): CampaignBattleState {
     resolvedDarts,
     visitEnemiesSnapshot,
     outcome,
+    powerUpCharge,
   };
 }
 

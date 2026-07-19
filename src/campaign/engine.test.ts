@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   addDart, computePlayerDartDamage, dartMatchesShield, describeShield, getLevel,
   isLevelUnlocked, prepareEnemyTurn, applyNextEnemyAttack, resolvePlayerVisit,
-  setTarget, startBattle, totalLevels,
+  setTarget, startBattle, totalLevels, undoDart,
   partyMaxHpFor, partyArmorFor, partyPowerFor, COOP_POWER_UPS,
   canActivateCoopPowerUp, activateCoopPowerUp,
 } from './engine';
@@ -253,5 +253,30 @@ describe('campaign engine', () => {
     expect(ids).toContain('coop_buff_acc');
     expect(ids).toContain('coop_freeze');
     expect(ids).toContain('coop_shield');
+  });
+
+  it('coop power-up orb charges as darts are thrown', () => {
+    const lvl = getLevel(1)!;
+    const state = startBattle(lvl, makePlayers(1), settings);
+    expect(state.powerUpCharge).toBe(0);
+    // T20: 12 (triple) + 60 * 0.05 = 15
+    let s = addDart(state, 20, 3, undefined, false, settings);
+    expect(s.powerUpCharge).toBe(15);
+    // Bull: 15 + 50 * 0.05 = 17.5
+    s = addDart(s, 50, 1, 'Bull', true, settings);
+    expect(s.powerUpCharge).toBeCloseTo(32.5, 5);
+    // Undo reverts the last dart's charge.
+    s = undoDart(s, settings);
+    expect(s.powerUpCharge).toBe(15);
+  });
+
+  it('coop power-up orb charge is capped at chargeMax', () => {
+    const lvl = getLevel(1)!;
+    const state = startBattle(lvl, makePlayers(1), settings);
+    // Pre-charge close to the cap, then verify a dart can't push it past.
+    const near = { ...state, powerUpCharge: 95 };
+    // Bull adds 15 + 50*0.05 = 17.5 → would be 112.5, capped at 100.
+    const s = addDart(near, 50, 1, 'Bull', true, settings);
+    expect(s.powerUpCharge).toBe(settings.powerUpScaling.chargeMax);
   });
 });
