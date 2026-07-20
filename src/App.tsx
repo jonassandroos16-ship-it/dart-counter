@@ -9,7 +9,7 @@ import { PlayersView } from './PlayersView';
 import { StatsView } from './StatsView';
 import { HistoryView } from './HistoryView';
 import { SettingsView } from './SettingsView';
-import { Toast, MilestonePopup, LevelUpPopup, TitleUnlockPopup, KillPopup, FrozenPopup, usePopupState } from './Popups';
+import { Toast, MilestonePopup, LevelUpPopup, TitleUnlockPopup, KillPopup, FrozenPopup, ShieldBlockedPopup, usePopupState } from './Popups';
 import { WelcomeOverlay } from './WelcomeOverlay';
 import { useCampaignProgress } from './campaign/progress';
 
@@ -128,6 +128,7 @@ export default function App() {
       {popups.titleUnlock && <TitleUnlockPopup {...popups.titleUnlock} onDone={() => popups.setTitleUnlock(null)} settings={db.settings} />}
       {popups.kill && <KillPopup {...popups.kill} onDone={() => popups.setKill(null)} settings={db.settings} />}
       {popups.frozen && <FrozenPopup {...popups.frozen} onDone={() => popups.setFrozen(null)} settings={db.settings} />}
+      {popups.shieldBlocked && <ShieldBlockedPopup {...popups.shieldBlocked} onDone={() => popups.setShieldBlocked(null)} settings={db.settings} />}
     </div>
   );
 }

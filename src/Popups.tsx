@@ -120,12 +120,30 @@ export function FrozenPopup({ name, onDone, settings }: { name: string; onDone: 
   );
 }
 
+export function ShieldBlockedPopup({ attacker, defender, onDone, settings }: { attacker: string; defender: string; onDone: () => void; settings?: Settings }) {
+  useEffect(() => {
+    Sound.playSfx('kill', settings || ({} as Settings));
+    const t = setTimeout(onDone, 2600);
+    return () => clearTimeout(t);
+  }, [onDone, settings]);
+  return (
+    <div className="kill-bg" onClick={onDone}>
+      <div className="kill" style={{ borderColor: '#38bdf8', background: 'linear-gradient(180deg, color-mix(in srgb,#38bdf8 22%,var(--bg-2)) 0%, var(--bg-2) 100%)' }}>
+        <div className="kill-emoji">🏰</div>
+        <div className="kill-title" style={{ color: '#7dd3fc' }}>SHIELD BLOCKED!</div>
+        <div className="kill-sub"><b>{defender}</b>'s Shield absorbed <b>{attacker}</b>'s attack.</div>
+      </div>
+    </div>
+  );
+}
+
 export interface PopupState {
   milestone: { emoji: string; title: string; sub: string; record?: boolean } | null;
   levelUp: { level: number; name: string; xpGained: number; reason: string } | null;
   titleUnlock: { icon: string; name: string; player: string; desc: string } | null;
   kill: { killer: string; victim: string } | null;
   frozen: { name: string } | null;
+  shieldBlocked: { attacker: string; defender: string } | null;
 }
 
 export function usePopupState(): PopupState & {
@@ -134,13 +152,15 @@ export function usePopupState(): PopupState & {
   setTitleUnlock: (p: PopupState['titleUnlock']) => void;
   setKill: (p: PopupState['kill']) => void;
   setFrozen: (p: PopupState['frozen']) => void;
+  setShieldBlocked: (p: PopupState['shieldBlocked']) => void;
 } {
   const [milestone, setMilestone] = useState<PopupState['milestone']>(null);
   const [levelUp, setLevelUp] = useState<PopupState['levelUp']>(null);
   const [titleUnlock, setTitleUnlock] = useState<PopupState['titleUnlock']>(null);
   const [kill, setKill] = useState<PopupState['kill']>(null);
   const [frozen, setFrozen] = useState<PopupState['frozen']>(null);
-  return { milestone, setMilestone, levelUp, setLevelUp, titleUnlock, setTitleUnlock, kill, setKill, frozen, setFrozen };
+  const [shieldBlocked, setShieldBlocked] = useState<PopupState['shieldBlocked']>(null);
+  return { milestone, setMilestone, levelUp, setLevelUp, titleUnlock, setTitleUnlock, kill, setKill, frozen, setFrozen, shieldBlocked, setShieldBlocked };
 }
 
-export type PopupControls = Pick<ReturnType<typeof usePopupState>, 'setMilestone' | 'setLevelUp' | 'setTitleUnlock' | 'setKill' | 'setFrozen'>;
+export type PopupControls = Pick<ReturnType<typeof usePopupState>, 'setMilestone' | 'setLevelUp' | 'setTitleUnlock' | 'setKill' | 'setFrozen' | 'setShieldBlocked'>;

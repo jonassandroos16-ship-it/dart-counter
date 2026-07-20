@@ -6,7 +6,7 @@ import { Sound } from '../../sound';
 import type { MusicEngine } from '../../music';
 import type { PopupControls } from '../../Popups';
 import { PowerUpOrb, AttributeStrip, BadgeAvatar } from '../common';
-import { addDartToGame, undoDart, KeypadPad, clearVisitPowerUpFlags } from '../dart';
+import { addDartToGame, undoDart, KeypadPad, clearVisitPowerUpFlags, tickShield } from '../dart';
 import { activatePowerUp } from '../powerups';
 import { runMilestones, awardXP, checkTitleUnlocks, awardBadges } from '../rewards';
 import { GameOver } from '../GameOver';
@@ -133,6 +133,8 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
       const nextLeg = game.leg + 1;
       const nextTurn = (nextLeg - 1) % game.players.length;
       newPlayers.forEach(pl => pl.score = MODES[game.mode].start);
+      // Shield: tick down the current player's shield at the end of their visit.
+      if (game.powerUpsEnabled) newPlayers[game.turn] = tickShield(newPlayers[game.turn]);
       Sound.play('win', {}, settings);
       toast(`${cur.name} wins leg ${game.leg}`);
       setGame({ ...game, players: newPlayers, leg: nextLeg, turn: nextTurn, roundStartTurn: nextTurn, checkedOutThisRound: [], thrownThisRound: [], darts: [], mult: 1 });
@@ -170,6 +172,13 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
   };
 
   const advanceTurn = (g: Game): Game => {
+    // Shield: tick down the current player's shield at the end of their visit.
+    if (g.powerUpsEnabled && !g.teamMode) {
+      const c = g.players[g.turn] as any;
+      if (c && c._shieldTurns > 0) {
+        g = { ...g, players: g.players.map((pl, i) => i === g.turn ? tickShield(pl) : pl) };
+      }
+    }
     if (g.teamMode) {
       const tc = g.teamCount || 2;
       const ros: number[][] = Array.from({ length: tc }, () => []);
@@ -289,6 +298,11 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
             🔥 Hot Streak! Each dart this visit earns +5 bonus per dart before it.
           </div>
         )}
+        {game.powerUpsEnabled && (p as any)._shieldTurns > 0 && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#38bdf8 18%,var(--bg-3))', border: '1px solid #38bdf8', color: '#7dd3fc' }}>
+            🏰 Shield active! Protected from power-up attacks for {(p as any)._shieldTurns} more turn{(p as any)._shieldTurns === 1 ? '' : 's'}.
+          </div>
+        )}
         <div className="pc-slots">
           {Array.from({ length: (game.powerUpsEnabled && (p as any)._fourthDart) ? 4 : (game.powerUpsEnabled && (p as any)._oneDartNext ? 1 : 3) }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`} style={i === 3 ? { borderColor: 'var(--accent)' } : {}}>{d ? d.label : (i === 3 ? '🎯' : '–')}</div>; })}
         </div>
@@ -297,6 +311,7 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
           <PowerUpOrb game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
             activatePowerUp(game, game.turn, settings, toast, {
+              popups,
               onReroll: (plan) => new Promise<boolean>((resolve) => {
                 setReroll(plan);
                 setRerollResolve(() => resolve);
@@ -323,6 +338,7 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
                     <BadgeAvatar playerId={pl.id} players={players} games={games} size={22} fontSize={12} color={pl.color} />
                     <span className="po-name">{pl.name}</span>
                     {game.teamMode && <span style={{ fontSize: 9, fontWeight: 800, color: plTeamColor }}>T{plTeam + 1}</span>}
+                    {game.powerUpsEnabled && (pl as any)._shieldTurns > 0 && <span title="Shielded" style={{ fontSize: 11 }}>🏰</span>}
                   </div>
                   <div className="row" style={{ gap: 4 }}>
                     {game.teamMode && game.legsBestOf > 1 ? <span className="pill" style={{ fontSize: 10, background: plTeamColor, color: '#04150a' }}>{(game.teamLegsWon || [])[plTeam] || 0}</span> : null}

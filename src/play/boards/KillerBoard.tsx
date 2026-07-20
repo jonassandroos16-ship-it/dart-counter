@@ -4,7 +4,7 @@ import { Sound } from '../../sound';
 import type { MusicEngine } from '../../music';
 import type { PopupControls } from '../../Popups';
 import { PowerUpOrb, BadgeAvatar } from '../common';
-import { addDartToGame, undoDart, clearVisitPowerUpFlags } from '../dart';
+import { addDartToGame, undoDart, clearVisitPowerUpFlags, tickShield } from '../dart';
 import { activatePowerUp } from '../powerups';
 import { finishSimpleGame } from '../finish';
 import { GameOver } from '../GameOver';
@@ -75,6 +75,8 @@ export function KillerBoard({ game, setGame, settings, players, games, toast, mu
     if (killedThisVisit) popups.setKill(killedThisVisit);
     let nextTurn = (game.turn + 1) % game.players.length;
     while (newPlayers[nextTurn].eliminated) nextTurn = (nextTurn + 1) % newPlayers.length;
+    // Shield: tick down the current player's shield at the end of their visit.
+    if (game.powerUpsEnabled) newPlayers[game.turn] = tickShield(newPlayers[game.turn]);
     if (game.powerUpsEnabled) {
       let guards = 0;
       while (guards < newPlayers.length) {
@@ -138,6 +140,11 @@ export function KillerBoard({ game, setGame, settings, players, games, toast, mu
             🔥 Hot Streak! Each dart this visit earns +5 bonus per dart before it.
           </div>
         )}
+        {game.powerUpsEnabled && (p as any)._shieldTurns > 0 && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#38bdf8 18%,var(--bg-3))', border: '1px solid #38bdf8', color: '#7dd3fc' }}>
+            🏰 Shield active! Protected from power-up attacks for {(p as any)._shieldTurns} more turn{(p as any)._shieldTurns === 1 ? '' : 's'}.
+          </div>
+        )}
         <div className="pc-slots">
           {Array.from({ length: (game.powerUpsEnabled && (p as any)._fourthDart) ? 4 : (game.powerUpsEnabled && (p as any)._oneDartNext ? 1 : 3) }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`} style={i === 3 ? { borderColor: 'var(--accent)' } : {}}>{d ? d.label : (i === 3 ? '🎯' : '–')}</div>; })}
         </div>
@@ -145,6 +152,7 @@ export function KillerBoard({ game, setGame, settings, players, games, toast, mu
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
           <PowerUpOrb game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
             activatePowerUp(game, game.turn, settings, toast, {
+              popups,
               onReroll: (plan) => new Promise<boolean>((resolve) => {
                 setReroll(plan);
                 setRerollResolve(() => resolve);
@@ -162,6 +170,7 @@ export function KillerBoard({ game, setGame, settings, players, games, toast, mu
                 <BadgeAvatar playerId={pl.id} players={players} games={games} size={22} fontSize={10} color={pl.color} />
                 <span className="po-name">{pl.name}</span>
                 {(pl.killerHits || 0) >= 5 && <span className="pill" style={{ background: '#ef4444', color: '#fff', fontSize: 9 }}>KILLER</span>}
+                {game.powerUpsEnabled && (pl as any)._shieldTurns > 0 && <span title="Shielded" style={{ fontSize: 11 }}>🏰</span>}
               </div>
               <span className="pill" style={{ fontSize: 10 }}>{'❤️'.repeat(pl.lives || 0) || '💀'}</span>
             </div>

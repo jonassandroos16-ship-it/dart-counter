@@ -46,6 +46,7 @@ export function defaultSettings(): Settings {
         pu_bullseye_frenzy: 80, // bulls score double — medium
         pu_hot_streak: 90,     // compounding bonus — strong self-buff
         pu_swap: 110,          // steal leader's score — very strong
+        pu_shield: 90,         // 2-turn protection — strong defensive
       },
     },
   };

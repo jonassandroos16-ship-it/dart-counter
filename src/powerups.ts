@@ -14,6 +14,11 @@ export interface PowerUpResult {
   message: string;
   // When false, the apply call failed (no effect, no charge should be consumed).
   ok?: boolean;
+  // When true, an attack power-up was blocked by a Shield. The caller still
+  // consumes the charge (the attacker used their power-up) but the effect is
+  // nullified and the shield is broken. Lets the activator surface distinct
+  // "shield blocked!" feedback instead of the generic success message.
+  shieldBlocked?: boolean;
 }
 
 export interface PowerUpDef {
@@ -28,6 +33,32 @@ export interface PowerUpDef {
   apply: (game: any, curIdx: number) => PowerUpResult;
 }
 
+// Power-up ids that TARGET another player (attacks). These are the ones a
+// Shield can block. Self-buff power-ups (Surge, Fourth Dart, Reroll, etc.)
+// are NOT attacks and ignore shields entirely.
+export const ATTACK_POWER_UP_IDS = [
+  'pu_blocker',
+  'pu_cripple',
+  'pu_steal',
+  'pu_freeze',
+  'pu_swap',
+] as const;
+
+export function isAttackPowerUp(id: string | null | undefined): boolean {
+  return !!id && (ATTACK_POWER_UP_IDS as readonly string[]).includes(id);
+}
+
+// If the target of an attack power-up is shielded, break the shield and
+// nullify the effect. Returns the mutated game (shield removed) or the
+// original game when no shield was present. Used by attack power-ups to
+// respect Shield in a single place.
+export function breakShieldIfPresent(game: any, targetIdx: number): { game: any; blocked: boolean } {
+  const pl = game.players?.[targetIdx] as any;
+  if (!pl || !(pl._shieldTurns > 0)) return { game, blocked: false };
+  const players = game.players.map((p: any, i: number) => i === targetIdx ? (() => { const n = { ...p }; delete n._shieldTurns; return n; })() : p);
+  return { game: { ...game, players }, blocked: true };
+}
+
 export const POWER_UPS: PowerUpDef[] = [
   {
     id: 'pu_fourth_dart',
@@ -40,10 +71,17 @@ export const POWER_UPS: PowerUpDef[] = [
     id: 'pu_blocker',
     name: 'Blocker',
     icon: '🛡️',
-    desc: 'Every other player only gets ONE dart on their next visit (instead of three).',
+    desc: 'Every other player only gets ONE dart on their next visit (instead of three). Blocked by Shield.',
     apply: (game, curIdx) => {
-      const players = (game.players || []).map((pl: any, i: number) => i === curIdx ? pl : { ...pl, _oneDartNext: true });
-      return { game: { ...game, players }, message: 'Blocker! Opponents only get one dart next visit.' };
+      // Shield: each shielded opponent blocks the effect on themselves and
+      // breaks their shield. Non-shielded opponents are still blocked to 1 dart.
+      const players = (game.players || []).map((pl: any, i: number) => {
+        if (i === curIdx) return pl;
+        if (pl._shieldTurns > 0) { const n = { ...pl }; delete n._shieldTurns; return n; }
+        return { ...pl, _oneDartNext: true };
+      });
+      const anyShielded = (game.players || []).some((pl: any, i: number) => i !== curIdx && pl._shieldTurns > 0);
+      return { game: { ...game, players }, message: anyShielded ? 'Blocker — a Shield absorbed the hit for that player!' : 'Blocker! Opponents only get one dart next visit.', shieldBlocked: anyShielded };
     },
   },
   {
@@ -85,7 +123,7 @@ export const POWER_UPS: PowerUpDef[] = [
     id: 'pu_cripple',
     name: 'Cripple',
     icon: '🦾',
-    desc: 'The leading opponent only scores 50% on their next visit. They are warned when they throw.',
+    desc: 'The leading opponent only scores 50% on their next visit. They are warned when they throw. Blocked by Shield.',
     apply: (game, curIdx) => {
       const players = [...(game.players || [])];
       if (players.length < 2) return { game, message: 'Cripple: no opponents to cripple.', ok: false };
@@ -94,6 +132,11 @@ export const POWER_UPS: PowerUpDef[] = [
       const target = isHighScore
         ? others.reduce((a, b) => b.pl.score > a.pl.score ? b : a)
         : others.reduce((a, b) => b.pl.score < a.pl.score ? b : a);
+      // Shield: if the target is shielded, break the shield and nullify.
+      if ((target.pl as any)._shieldTurns > 0) {
+        const newPlayers = players.map((pl: any, i: number) => i === target.i ? (() => { const n = { ...pl }; delete n._shieldTurns; return n; })() : pl);
+        return { game: { ...game, players: newPlayers }, message: `Cripple absorbed by ${target.pl.name}'s Shield!`, shieldBlocked: true };
+      }
       const newPlayers = players.map((pl: any, i: number) => i === target.i ? { ...pl, _crippledNext: true } : pl);
       return { game: { ...game, players: newPlayers }, message: `Cripple! ${target.pl.name} scores 50% next visit.` };
     },
@@ -102,7 +145,7 @@ export const POWER_UPS: PowerUpDef[] = [
     id: 'pu_steal',
     name: 'Steal',
     icon: '🥷',
-    desc: 'Steal 30 points from the leading opponent (added to your score in High Score, subtracted from their remaining in x01).',
+    desc: 'Steal 30 points from the leading opponent (added to your score in High Score, subtracted from their remaining in x01). Blocked by Shield.',
     apply: (game, curIdx) => {
       const players = [...(game.players || [])];
       if (players.length < 2) return { game, message: 'Steal: no opponents to steal from.', ok: false };
@@ -111,6 +154,11 @@ export const POWER_UPS: PowerUpDef[] = [
       const target = isHighScore
         ? others.reduce((a, b) => b.pl.score > a.pl.score ? b : a)
         : others.reduce((a, b) => b.pl.score < a.pl.score ? b : a);
+      // Shield: if the target is shielded, break the shield and nullify.
+      if ((target.pl as any)._shieldTurns > 0) {
+        const newPlayers = players.map((pl: any, i: number) => i === target.i ? (() => { const n = { ...pl }; delete n._shieldTurns; return n; })() : pl);
+        return { game: { ...game, players: newPlayers }, message: `Steal absorbed by ${target.pl.name}'s Shield!`, shieldBlocked: true };
+      }
       const STEAL = 30;
       const newPlayers = players.map((pl: any, i: number) => {
         if (i === curIdx) return isHighScore ? { ...pl, score: pl.score + STEAL } : { ...pl, score: Math.max(0, pl.score - STEAL) };
@@ -124,10 +172,17 @@ export const POWER_UPS: PowerUpDef[] = [
     id: 'pu_freeze',
     name: 'Freeze',
     icon: '❄️',
-    desc: 'Freeze the leading opponent — their next visit scores 0 and ends immediately.',
+    desc: 'Freeze the leading opponent — their next visit scores 0 and ends immediately. Blocked by Shield.',
     apply: (game, curIdx) => {
-      const players = (game.players || []).map((pl: any, i: number) => i === curIdx ? pl : { ...pl, _frozenNext: true });
-      return { game: { ...game, players }, message: 'Freeze! The leader misses their next visit.' };
+      // Original behavior: freezes every other player. Shield: each shielded
+      // opponent blocks the freeze on themselves and breaks their shield.
+      const anyShielded = (game.players || []).some((pl: any, i: number) => i !== curIdx && pl._shieldTurns > 0);
+      const players = (game.players || []).map((pl: any, i: number) => {
+        if (i === curIdx) return pl;
+        if (pl._shieldTurns > 0) { const n = { ...pl }; delete n._shieldTurns; return n; }
+        return { ...pl, _frozenNext: true };
+      });
+      return { game: { ...game, players }, message: anyShielded ? 'Freeze — a Shield absorbed the hit for that player!' : 'Freeze! The leader misses their next visit.', shieldBlocked: anyShielded };
     },
   },
   {
@@ -164,7 +219,7 @@ export const POWER_UPS: PowerUpDef[] = [
     id: 'pu_swap',
     name: 'Swap',
     icon: '🔄',
-    desc: 'Swap your current score with the leading opponent. In High Score you take their points; in x01 you take their lower remaining. A dramatic comeback swing — use it when you are far behind.',
+    desc: 'Swap your current score with the leading opponent. In High Score you take their points; in x01 you take their lower remaining. A dramatic comeback swing — use it when you are far behind. Blocked by Shield.',
     apply: (game, curIdx) => {
       const players = [...(game.players || [])];
       if (players.length < 2) return { game, message: 'Swap: no opponents to swap with.', ok: false };
@@ -180,6 +235,11 @@ export const POWER_UPS: PowerUpDef[] = [
       // behind the leader. Otherwise the power-up would be a self-sabotage.
       const behind = isHighScore ? target.pl.score > me.score : target.pl.score < me.score;
       if (!behind) return { game, message: 'Swap: you are already leading — nothing to swap.', ok: false };
+      // Shield: if the target is shielded, break the shield and nullify.
+      if ((target.pl as any)._shieldTurns > 0) {
+        const newPlayers = players.map((pl: any, i: number) => i === target.i ? (() => { const n = { ...pl }; delete n._shieldTurns; return n; })() : pl);
+        return { game: { ...game, players: newPlayers }, message: `Swap absorbed by ${target.pl.name}'s Shield!`, shieldBlocked: true };
+      }
       const myScore = me.score;
       const targetScore = target.pl.score;
       const newPlayers = players.map((pl: any, i: number) => {
@@ -188,6 +248,16 @@ export const POWER_UPS: PowerUpDef[] = [
         return pl;
       });
       return { game: { ...game, players: newPlayers }, message: `Swap! You traded scores with ${target.pl.name}.` };
+    },
+  },
+  {
+    id: 'pu_shield',
+    name: 'Shield',
+    icon: '🏰',
+    desc: 'Shield yourself from all power-up attacks for your next 2 turns. If an opponent uses an attack power-up on you, the Shield absorbs it and breaks — their effect is cancelled.',
+    apply: (game, curIdx) => {
+      const players = (game.players || []).map((pl: any, i: number) => i === curIdx ? { ...pl, _shieldTurns: 2 } : pl);
+      return { game: { ...game, players }, message: 'Shield active! Protected from power-up attacks for 2 turns.' };
     },
   },
 ];

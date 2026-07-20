@@ -1,6 +1,7 @@
 import type { Game, Settings } from '../types';
 import { getPowerUpInfo, planReroll, type RerollPlan } from '../powerups';
 import { Sound } from '../sound';
+import type { PopupControls } from '../Popups';
 
 // Activation threshold for a given power-up id. Falls back to `chargeMax`
 // when not configured, so existing behavior is unchanged by default.
@@ -73,6 +74,10 @@ export interface ActivateOptions {
   // animating (or `false` to cancel the activation without consuming the
   // charge). If omitted, reroll applies instantly with no overlay.
   onReroll?: (plan: RerollPlan) => Promise<boolean>;
+  // Popups controller. When supplied, a Shield-blocked attack surfaces a
+  // dedicated popup so the defender sees clear feedback that their Shield
+  // absorbed the hit.
+  popups?: PopupControls;
 }
 
 export async function activatePowerUp(game: Game, playerIdx: number, settings: Settings, toast: (m: string) => void, opts: ActivateOptions = {}): Promise<Game | null> {
@@ -110,13 +115,24 @@ export async function activatePowerUp(game: Game, playerIdx: number, settings: S
     return withUses;
   }
 
-  const { game: nextGame, message, ok } = pu.apply(game, playerIdx);
+  const { game: nextGame, message, ok, shieldBlocked } = pu.apply(game, playerIdx);
   // If the apply call signalled a failure (ok === false), do NOT consume the
   // charge — the player keeps their full orb and can try again later.
   if (ok === false) { toast(message); return null; }
   const withUses = consumeCharge(nextGame, playerIdx, puId);
   toast(message);
-  Sound.playSfx('impact', settings);
+  if (shieldBlocked) {
+    Sound.playSfx('kill', settings);
+    // Surface a dedicated popup so the defender sees clear feedback. We
+    // identify the defender as the first shielded opponent who lost their
+    // shield as a result of this attack.
+    const defender = (game.players || []).find((pl: any, i: number) => i !== playerIdx && (pl as any)._shieldTurns > 0 && !((withUses.players || [])[i] as any)?._shieldTurns);
+    const defenderName = defender?.name || 'opponent';
+    const attackerName = game.players[playerIdx]?.name || 'Attacker';
+    if (opts.popups?.setShieldBlocked) opts.popups.setShieldBlocked({ attacker: attackerName, defender: defenderName });
+  } else {
+    Sound.playSfx('impact', settings);
+  }
   return withUses;
 }
 
@@ -138,6 +154,7 @@ function consumeCharge(game: Game, playerIdx: number, puId: string | null | unde
     if (puId === 'pu_bullseye_frenzy') updated._usedBullseyeFrenzy = true;
     if (puId === 'pu_hot_streak') updated._usedHotStreak = true;
     if (puId === 'pu_swap') updated._usedSwap = true;
+    if (puId === 'pu_shield') updated._usedShield = true;
     return updated;
   });
   return { ...game, players };

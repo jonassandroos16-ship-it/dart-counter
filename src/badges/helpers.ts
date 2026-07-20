@@ -46,6 +46,7 @@ const PU_FLAG_MAP: Record<string, string> = {
   pu_fourth_dart: '_usedFourthDart',
   pu_rethrow: '_usedRethrow',
   pu_cripple: '_usedCripple',
+  pu_shield: '_usedShield',
 };
 
 export function pickPowerUpWinner(game: any, puId: string): string | null {

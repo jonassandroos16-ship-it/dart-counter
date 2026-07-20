@@ -48,6 +48,19 @@ export function clearVisitPowerUpFlags(pl: any): any {
   return changed ? next : pl;
 }
 
+// Decrement the player's Shield turn counter at the end of their visit.
+// Shield lasts 2 of the shielded player's own turns; it also breaks early if
+// an attack power-up is blocked (handled in the attack power-up's apply).
+// When the counter reaches 0 the shield is removed entirely.
+export function tickShield(pl: any): any {
+  if (!(pl._shieldTurns > 0)) return pl;
+  const next = pl._shieldTurns - 1;
+  const updated: any = { ...pl };
+  if (next <= 0) delete updated._shieldTurns;
+  else updated._shieldTurns = next;
+  return updated;
+}
+
 // Shared keypad/multiplier input block. `onAdd` is called with the chosen base
 // and current multiplier; `onUndo` and `onEnter` are wired to the action row.
 export function KeypadPad({ game, setGame, onAdd, onUndo, onEnter, enterLabel = 'Enter visit' }: {

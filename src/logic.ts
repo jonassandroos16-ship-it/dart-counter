@@ -97,6 +97,7 @@ export function recordFromGame(game: Game): GameRecord {
           : pu._usedBullseyeFrenzy ? 'pu_bullseye_frenzy'
           : pu._usedHotStreak ? 'pu_hot_streak'
           : pu._usedSwap ? 'pu_swap'
+          : pu._usedShield ? 'pu_shield'
           : null;
         r.usedPowerUp = used;
       }
