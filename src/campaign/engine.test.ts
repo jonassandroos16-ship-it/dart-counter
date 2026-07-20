@@ -8,7 +8,7 @@ import {
 } from './engine';
 import { ENEMY_DATABASE } from './enemyDatabase';
 import { CAMPAIGN_LEVELS } from './campaignLevels';
-import type { CampaignDart } from './types';
+import type { CampaignDart, CoopClassId, CoopPassiveId } from './types';
 import type { Player } from '../types';
 import { defaultSettings } from '../constants';
 
@@ -328,7 +328,7 @@ describe('campaign engine', () => {
     const lvl = getLevel(1)!;
     const players = makePlayers(1).map(p => ({
       ...p,
-      coopProgress: { classId: 'warrior', xp: 0, unlockedPassives: ['war_power_1'], equippedPassives: ['war_power_1'] },
+      coopProgress: { classId: 'warrior' as CoopClassId, xp: 0, unlockedPassives: ['war_power_1'] as CoopPassiveId[], equippedPassives: ['war_power_1'] as CoopPassiveId[] },
     }));
     const state = startBattle(lvl, players, settings);
     expect(state.players[0].power).toBe(10 + 3);
@@ -340,7 +340,7 @@ describe('campaign engine', () => {
     const players = makePlayers(1).map(p => ({
       ...p,
       attributes: { health: 100, armor: 0, power: 0, pointsAvailable: 0 },
-      coopProgress: { classId: 'priest', xp: 200, unlockedPassives: ['pri_hp_1', 'pri_hp_2', 'pri_hp_3'], equippedPassives: ['pri_hp_3'] },
+      coopProgress: { classId: 'priest' as CoopClassId, xp: 200, unlockedPassives: ['pri_hp_1', 'pri_hp_2', 'pri_hp_3'] as CoopPassiveId[], equippedPassives: ['pri_hp_3'] as CoopPassiveId[] },
     }));
     const state = startBattle(lvl, players, settings);
     // 100 base + 300 bonus = 400, under the 500 cap.

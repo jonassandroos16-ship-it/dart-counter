@@ -619,7 +619,8 @@ export function addDart(
     t.hp = Math.max(0, t.hp - finalDmg);
     const defeated = t.hp <= 0;
     if (defeated) t.defeated = true;
-    step = {\n      dart, damage: finalDmg, kind: defeated ? 'defeated' : 'damage',
+    step = {
+      dart, damage: finalDmg, kind: defeated ? 'defeated' : 'damage',
       enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
     };
   }
