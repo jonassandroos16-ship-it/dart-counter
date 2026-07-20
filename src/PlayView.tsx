@@ -17,7 +17,7 @@ import { CampaignMap } from './campaign/CampaignMap';
 import { CampaignBattle } from './campaign/CampaignBattle';
 import { CoopSetupView } from './campaign/CoopSetupView';
 import { useCampaignProgress } from './campaign/progress';
-import { getCoopPowerUp } from './campaign/engine';
+import { getCoopPowerUp, coopXpForBattle, addCoopXpForPlayer, defaultCoopProgress } from './campaign/engine';
 import { getChapter, isChapterComplete } from './campaign/campaignLevels';
 import type { CoopPowerUpId, CampaignBattleState, CampaignChapter } from './campaign/types';
 
@@ -43,6 +43,7 @@ interface PostGameInfo {
   levelId: number;
   stats: CampaignBattleState['stats'];
   rewardPowerUpId: string | null;
+  coopXpGained?: number;
 }
 
 export function PlayView({ players, games, settings, activeGame, setActiveGame, setGames, setPlayers, toast, music, onQuit, onGameOver, popups }: Props) {
@@ -85,13 +86,35 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
           unlockedPowerUps: unlockedList,
           chapters: { ...(prev.chapters || {}), [coopChapterId]: newChapterCleared },
         }));
+        // Grant Coop XP to every player in the party based on battle stats.
+        // Wins give more XP than losses; darts thrown and enemies defeated
+        // add bonus XP. Unlocked passives auto-grant via addCoopXpForPlayer.
+        const xpGained = coopXpForBattle(stats, true);
+        const coopPlayerIds = (coopPlayers || []).map(p => p.id);
+        setPlayers((prev: Player[]) => prev.map(p => {
+          if (!coopPlayerIds.includes(p.id)) return p;
+          const cur = p.coopProgress || defaultCoopProgress();
+          const { progress: nextProg } = addCoopXpForPlayer(cur, xpGained);
+          return { ...p, coopProgress: nextProg };
+        }));
         // Always show the post-game screen — power-up info only if unlocked.
-        setPostGame({ chapterId: coopChapterId, levelId: coopLevelId, stats, rewardPowerUpId: unlockedPowerUpId });
+        setPostGame({ chapterId: coopChapterId, levelId: coopLevelId, stats, rewardPowerUpId: unlockedPowerUpId, coopXpGained: xpGained });
         setCoopStage('postgame');
         music.startContext('setup', settings);
       }}
       onLose={() => {
-        toast('Party defeated — try again.');
+        // Even on a loss, the party earns a small amount of Coop XP for
+        // participating. Wins give the bulk of the XP.
+        const coopPlayersLocal = (coopPlayerIds.map(id => players.find(p => p.id === id)).filter(Boolean) as Player[]) || [];
+        const xpGained = coopXpForBattle({ visitsUsed: 0, dartsThrown: 0, damageDealt: 0, enemiesDefeated: 0, powerUpsUsed: 0, partyHpLost: 0 } as CampaignBattleState['stats'], false);
+        const ids = coopPlayersLocal.map(p => p.id);
+        setPlayers((prev: Player[]) => prev.map(p => {
+          if (!ids.includes(p.id)) return p;
+          const cur = p.coopProgress || defaultCoopProgress();
+          const { progress: nextProg } = addCoopXpForPlayer(cur, xpGained);
+          return { ...p, coopProgress: nextProg };
+        }));
+        toast(`Party defeated — earned ${xpGained} Coop XP. Try again.`);
         setCoopStage('map');
         setCoopLevelId(null);
         music.startContext('setup', settings);
@@ -117,6 +140,7 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
       stats={postGame.stats}
       rewardPowerUp={pu ? { name: pu.name, icon: pu.icon, desc: pu.desc, tier: pu.tier } : null}
       chapterComplete={chapterComplete}
+      coopXpGained={postGame.coopXpGained}
       onContinue={() => {
         setPostGame(null);
         setCoopStage('chapters');
@@ -196,7 +220,7 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
 // below the stats. If this was the chapter's boss, the chapter outro is
 // shown as the story beat.
 function PostGameOverlay({
-  chapter, levelName, isBoss, stats, rewardPowerUp, chapterComplete, onContinue,
+  chapter, levelName, isBoss, stats, rewardPowerUp, chapterComplete, coopXpGained, onContinue,
 }: {
   chapter: CampaignChapter | null;
   levelName: string;
@@ -204,6 +228,7 @@ function PostGameOverlay({
   stats: CampaignBattleState['stats'];
   rewardPowerUp: { name: string; icon: string; desc: string; tier: 'starter' | 'advanced' } | null;
   chapterComplete: boolean;
+  coopXpGained?: number;
   onContinue: () => void;
 }) {
   const theme = chapter?.theme;
@@ -262,6 +287,18 @@ function PostGameOverlay({
             </div>
             <div className="muted small" style={{ marginTop: 8, fontStyle: 'italic' }}>
               Equip it from Players → Power-Ups → Coop section.
+            </div>
+          </div>
+        )}
+
+        {coopXpGained != null && coopXpGained > 0 && (
+          <div className="card" style={{ marginTop: 12, padding: 12, background: 'var(--bg-3)' }}>
+            <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+              <div style={{ fontSize: 26 }}>✨</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 800, fontSize: 14 }}>+{coopXpGained} Coop XP earned</div>
+                <div className="muted small" style={{ marginTop: 2, lineHeight: 1.4 }}>Each party member gained Coop XP toward unlocking new class passives. Check Players → Class to spend any newly unlocked passives.</div>
+              </div>
             </div>
           </div>
         )}

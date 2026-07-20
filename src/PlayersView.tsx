@@ -6,10 +6,10 @@ import { initials } from './store';
 import { Modal } from './Popups';
 import { BADGES, getBadgeInfo, getBadgeContext, computeLifetimeBadgeCounts, buildCoopBadgeCtx } from './badges';
 import { POWER_UPS, getPowerUpInfo } from './powerups';
-import { COOP_POWER_UPS, getCoopPowerUp, unlockedCoopPowerUps } from './campaign/engine';
+import { COOP_POWER_UPS, getCoopPowerUp, unlockedCoopPowerUps, COOP_CLASSES, COOP_PASSIVES, getCoopClass, getCoopPassive, passivesForClass, unlockedPassivesForPlayer, selectClassForPlayer, equipPassiveForPlayer, addCoopXpForPlayer, defaultCoopProgress } from './campaign/engine';
 import { CAMPAIGN_CHAPTERS } from './campaign/campaignLevels';
 import { useCampaignProgress } from './campaign/progress';
-import type { CoopPowerUpId, CoopPowerUpDef } from './campaign/types';
+import type { CoopPowerUpId, CoopPowerUpDef, CoopClassId, CoopPassiveId, PlayerCoopProgress } from './campaign/types';
 import { Sound } from './sound';
 
 // Resolve a player's effective level from XP (the source of truth) rather than
@@ -96,7 +96,7 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
 }
 
 function EditPlayerModal({ player, players, isNew, games, settings, onClose, setPlayers, toast }: { player: Player; players: Player[]; isNew: boolean; games: any[]; settings: Settings; onClose: () => void; setPlayers: (updater: any) => void; toast: (m: string) => void }) {
-  const [tab, setTab] = useState<'basic' | 'titles' | 'badges' | 'sound' | 'attributes' | 'powerups'>('basic');
+  const [tab, setTab] = useState<'basic' | 'titles' | 'badges' | 'sound' | 'attributes' | 'powerups' | 'class'>('basic');
   const [name, setName] = useState(player.name);
   const [color, setColor] = useState(player.color || COLORS[0]);
   const [sound, setSound] = useState<PlayerSoundId>(player.sound || 'none');
@@ -115,6 +115,7 @@ function EditPlayerModal({ player, players, isNew, games, settings, onClose, set
         <button className={tab === 'sound' ? 'on' : ''} onClick={() => setTab('sound')}>Sound</button>
         <button className={tab === 'attributes' ? 'on' : ''} onClick={() => setTab('attributes')}>Stats</button>
         <button className={tab === 'powerups' ? 'on' : ''} onClick={() => setTab('powerups')}>Power-Ups</button>
+        <button className={tab === 'class' ? 'on' : ''} onClick={() => setTab('class')}>Class</button>
       </div>
 
       {tab === 'basic' && (
@@ -157,6 +158,20 @@ function EditPlayerModal({ player, players, isNew, games, settings, onClose, set
                       ...(p.attributes || defaultAttributes(settings)),
                       pointsAvailable: (p.attributes?.pointsAvailable ?? 0) + 100,
                     },
+                    // Grant max Coop XP and unlock all passives for the
+                    // player's currently selected class (or default to
+                    // warrior so the dev sees something immediately).
+                    coopProgress: (() => {
+                      const cur = p.coopProgress || defaultCoopProgress();
+                      const classId = cur.classId || 'warrior';
+                      const allPassives = passivesForClass(classId).map(pp => pp.id);
+                      return {
+                        classId,
+                        xp: 9999,
+                        unlockedPassives: allPassives,
+                        equippedPassives: cur.equippedPassives?.length ? cur.equippedPassives : [allPassives[allPassives.length - 1]],
+                      };
+                    })(),
                   };
                 }));
               }
@@ -222,6 +237,10 @@ function EditPlayerModal({ player, players, isNew, games, settings, onClose, set
 
       {tab === 'powerups' && (
         <PowerUpsTab player={livePlayer} settings={settings} setPlayers={setPlayers} toast={toast} />
+      )}
+
+      {tab === 'class' && (
+        <ClassTab player={livePlayer} settings={settings} setPlayers={setPlayers} toast={toast} />
       )}
 
       <div className="row" style={{ gap: 10, marginTop: 16 }}>
@@ -620,6 +639,139 @@ function PowerUpsTab({ player, settings, setPlayers, toast }: { player: Player; 
 // chapter-aware: returns levels across all chapters.
 function getLevelNames(): { level_id: number; name: string; is_boss: boolean; reward_power_up?: string }[] {
   return CAMPAIGN_CHAPTERS.flatMap(ch => ch.levels);
+}
+
+// ── Class & Passives tab ──────────────────────────────────────────────
+//
+// Lets the player pick one of three Coop classes (Warrior, Priest, Rogue)
+// and equip/unlock passives for that class. Passives grant team-wide stat
+// bonuses during Coop battles. Higher-tier passives unlock with Coop XP,
+// earned by playing Coop battles.
+function ClassTab({ player, settings, setPlayers, toast }: { player: Player; settings: Settings; setPlayers: (updater: any) => void; toast: (m: string) => void }) {
+  const prog: PlayerCoopProgress = player.coopProgress || defaultCoopProgress();
+  const selectedClass = getCoopClass(prog.classId);
+  const classPassives = selectedClass ? passivesForClass(selectedClass.id) : [];
+  const unlockedIds = unlockedPassivesForPlayer(prog);
+
+  const pickClass = (classId: CoopClassId) => {
+    setPlayers((prev: Player[]) => prev.map(p => {
+      if (p.id !== player.id) return p;
+      const cur = p.coopProgress || defaultCoopProgress();
+      const next = selectClassForPlayer(cur, classId);
+      return { ...p, coopProgress: next };
+    }));
+    const cls = getCoopClass(classId);
+    toast(`${cls?.name || classId} class selected — starter passive equipped`);
+  };
+
+  const equip = (passiveId: CoopPassiveId) => {
+    setPlayers((prev: Player[]) => prev.map(p => {
+      if (p.id !== player.id) return p;
+      const cur = p.coopProgress || defaultCoopProgress();
+      const next = equipPassiveForPlayer(cur, passiveId);
+      return { ...p, coopProgress: next };
+    }));
+    const def = getCoopPassive(passiveId);
+    toast(`${def?.name || passiveId} equipped`);
+  };
+
+  return (
+    <>
+      <div className="muted small" style={{ marginBottom: 10 }}>
+        Pick a Coop class to grant your party a team-wide passive bonus during Coop battles. Each class has a starter passive (always active) plus stronger passives you unlock with Coop XP earned by playing Coop.
+      </div>
+
+      {/* Class selection */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, marginBottom: 14 }}>
+        {COOP_CLASSES.map(c => {
+          const isSelected = prog.classId === c.id;
+          return (
+            <button key={c.id} onClick={() => pickClass(c.id)} title={c.desc}
+              style={{
+                position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: 12, borderRadius: 10,
+                background: isSelected ? 'color-mix(in srgb,var(--accent) 22%,var(--bg-3))' : 'var(--bg-3)',
+                border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
+                boxShadow: isSelected ? '0 0 10px color-mix(in srgb,var(--accent) 40%,transparent)' : 'none',
+                cursor: 'pointer', color: 'inherit', textAlign: 'center',
+              }}>
+              <div style={{ fontSize: 28 }}>{c.icon}</div>
+              <div style={{ fontSize: 13, fontWeight: 800 }}>{c.name}</div>
+              {isSelected ? <span className="xp-pill" style={{ fontSize: 10 }}>Selected</span> : null}
+            </button>
+          );
+        })}
+      </div>
+
+      {selectedClass ? (
+        <>
+          <div className="card" style={{ padding: 12, marginBottom: 12 }}>
+            <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+              <div style={{ fontSize: 26 }}>{selectedClass.icon}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{selectedClass.name}</div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 2, lineHeight: 1.3 }}>{selectedClass.desc}</div>
+              </div>
+            </div>
+            <div className="row between" style={{ marginTop: 10 }}>
+              <span className="muted small">Coop XP</span>
+              <span className="xp-pill">{prog.xp || 0} XP</span>
+            </div>
+            <div className="xp-bar" style={{ width: '100%', marginTop: 6 }}>
+              <div style={{ width: `${Math.min(100, Math.round(((prog.xp || 0) % 150) / 150 * 100))}%` }} />
+            </div>
+            <div className="muted small" style={{ marginTop: 4 }}>Earn Coop XP by playing Coop battles — wins give more than losses.</div>
+          </div>
+
+          {/* Passives for the selected class — 3 tiers, each stronger than the last. */}
+          <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Passives</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {classPassives.map(p => {
+              const isUnlocked = unlockedIds.includes(p.id);
+              const isEquipped = (prog.equippedPassives || []).includes(p.id);
+              const xpPct = Math.min(100, Math.round(((prog.xp || 0) / p.xpRequired) * 100));
+              return (
+                <div key={p.id} style={{
+                  position: 'relative',
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: 14, borderRadius: 12, background: 'var(--bg-3)',
+                  border: `1px solid ${isEquipped ? 'var(--accent)' : isUnlocked ? 'var(--border)' : 'var(--border)'}`,
+                  opacity: isUnlocked ? 1 : 0.7, overflow: 'hidden', minHeight: 64,
+                }}>
+                  {isUnlocked ? null : (
+                    <div style={{ position: 'absolute', inset: 0, width: `${xpPct}%`, background: 'color-mix(in srgb,var(--accent) 18%,var(--bg-3))', transition: 'width .4s ease', pointerEvents: 'none', zIndex: 0 }} />
+                  )}
+                  <div style={{ position: 'relative', zIndex: 1, fontSize: 26, width: 34, textAlign: 'center' }}>{isUnlocked ? p.icon : '🔒'}</div>
+                  <div style={{ position: 'relative', zIndex: 1, flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.2 }}>
+                      {p.name}
+                      <span className="pill" style={{ fontSize: 10, marginLeft: 6 }}>TIER {p.tier}</span>
+                    </div>
+                    <div className="muted" style={{ fontSize: 11, marginTop: 2, lineHeight: 1.3 }}>{p.desc}</div>
+                    {!isUnlocked && (
+                      <div className="muted" style={{ fontSize: 11, marginTop: 4, fontWeight: 600 }}>
+                        {prog.xp || 0} / {p.xpRequired} Coop XP to unlock
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ position: 'relative', zIndex: 1 }}>
+                    {isEquipped ? <span className="xp-pill" style={{ fontSize: 11 }}>Equipped</span>
+                      : isUnlocked ? <button className="btn sm ghost" style={{ fontSize: 12, padding: '6px 10px' }} onClick={() => equip(p.id)}>Equip</button>
+                        : <span className="muted" style={{ fontSize: 11 }}>Locked</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <div style={{ padding: 18, borderRadius: 12, background: 'var(--bg-3)', border: '1px solid var(--border)', textAlign: 'center' }}>
+          <div style={{ fontSize: 28, marginBottom: 6 }}>🛡️</div>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>No class selected</div>
+          <div className="muted" style={{ fontSize: 12, lineHeight: 1.4 }}>Pick a class above to start earning Coop XP and unlocking passives. Your equipped passive grants a team-wide stat bonus to the whole party during Coop battles.</div>
+        </div>
+      )}
+    </>
+  );
 }
 
 export { conditionLabel };

@@ -4,7 +4,7 @@ import {
   addDart, undoDart, resolvePlayerVisit,
   prepareEnemyTurn, applyNextEnemyAttack, setTarget, startBattle, getLevel,
   describeShield, getCoopPowerUp, canActivateCoopPowerUp, activateCoopPowerUp,
-  levelRewardPowerUp,
+  levelRewardPowerUp, getCoopClass,
 } from './engine';
 import { getChapter } from './campaignLevels';
 import type { Player, Settings } from '../types';
@@ -150,7 +150,7 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
               const can = canActivateCoopPowerUp(state, pu.id);
               return (
                 <CoopPowerUpOrb
-                  charge={state.powerUpCharge}
+                  charge={thrower.powerUpCharge}
                   pu={pu}
                   canActivate={can && state.darts.length === 0}
                   onActivate={() => onActivatePowerUp(pu.id)}
@@ -173,6 +173,8 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
         <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
           {state.players.map((p, i) => {
             const isThrower = state.phase === 'player' && i === state.playerTurnIdx;
+            const srcPlayer = players.find(sp => sp.id === p.id);
+            const classDef = getCoopClass(srcPlayer?.coopProgress?.classId);
             return (
               <div key={p.id} style={{
                 display: 'flex', alignItems: 'center', gap: 4,
@@ -185,6 +187,22 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
               }}>
                 <span className="avatar" style={{ width: 18, height: 18, fontSize: 9, background: isThrower ? 'rgba(0,0,0,.25)' : p.color }}>{initials(p.name)}</span>
                 {p.name}
+                {classDef && (
+                  <span title={`${classDef.name}: ${classDef.desc}`} style={{ fontSize: 11, marginLeft: 2 }}>
+                    {classDef.icon}
+                  </span>
+                )}
+                {/* Per-player charge pip — shows each player's own orb progress. */}
+                <span title={`${p.name}'s power-up charge`} style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  minWidth: 22, padding: '1px 5px', borderRadius: 8, fontSize: 9, fontWeight: 800,
+                  background: isThrower ? 'rgba(0,0,0,.2)' : 'var(--bg-2)',
+                  color: isThrower ? '#0b0e13' : 'var(--muted)',
+                  border: '1px solid var(--border)',
+                  marginLeft: 2,
+                }}>
+                  {Math.round(p.powerUpCharge)}%
+                </span>
                 {p.buffs.length > 0 && (
                   <span style={{ display: 'inline-flex', gap: 3, marginLeft: 4 }}>
                     {p.buffs.map(b => (
@@ -199,6 +217,28 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
             );
           })}
         </div>
+
+        {/* Passive bonus summary — shows the team-wide stat bonuses
+            contributed by each player's equipped class passives. */}
+        {state.passiveBonus && (state.passiveBonus.power > 0 || state.passiveBonus.health > 0 || state.passiveBonus.armor > 0) && (
+          <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {state.passiveBonus.power > 0 && (
+              <span className="pill" style={{ fontSize: 10, background: 'color-mix(in srgb,#fbbf24 18%,var(--bg-3))', color: '#fbbf24', borderColor: 'transparent' }}>
+                ⚡ +{state.passiveBonus.power} party power
+              </span>
+            )}
+            {state.passiveBonus.health > 0 && (
+              <span className="pill" style={{ fontSize: 10, background: 'color-mix(in srgb,#22c55e 18%,var(--bg-3))', color: '#86efac', borderColor: 'transparent' }}>
+                ❤️ +{state.passiveBonus.health} party HP
+              </span>
+            )}
+            {state.passiveBonus.armor > 0 && (
+              <span className="pill" style={{ fontSize: 10, background: 'color-mix(in srgb,#60a5fa 18%,var(--bg-3))', color: '#93c5fd', borderColor: 'transparent' }}>
+                🛡️ +{state.passiveBonus.armor} party armor
+              </span>
+            )}
+          </div>
+        )}
 
         {state.phase === 'player' && thrower && (
           <>
@@ -500,7 +540,7 @@ function DartOverlay({ state, onContinue, onEndVisit }: {
                       {e.defeated ? <span style={{ color: '#ef4444', fontWeight: 800 }}>DEFEATED</span> : `${e.finalHp} / ${e.maxHp} HP`}
                     </span>
                   </div>
-                  <div className="bo-hp-track">
+                  <div className="bo-hp-tracks">
                     <div className="bo-hp-fill" style={{ width: `${hpPct}%`, background: e.defeated ? 'var(--muted)' : '#ef4444' }} />
                   </div>
                 </div>

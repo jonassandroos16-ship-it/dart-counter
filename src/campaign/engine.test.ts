@@ -194,18 +194,19 @@ describe('campaign engine', () => {
   it('coop power-ups: heal restores party HP and consumes charge', () => {
     const lvl = getLevel(1)!;
     const state = startBattle(lvl, makePlayers(1), settings);
-    const damaged = { ...state, partyHp: state.partyMaxHp - 100, powerUpCharge: 100 };
+    const damaged = { ...state, partyHp: state.partyMaxHp - 100, powerUpCharge: 100, players: state.players.map(p => ({ ...p, powerUpCharge: 100 })) };
     expect(canActivateCoopPowerUp(damaged, 'coop_heal')).toBe(true);
     const after = activateCoopPowerUp(damaged, 'coop_heal');
     // Heal restores 80 HP; 300 - 100 + 80 = 280 (not capped since below max).
     expect(after.partyHp).toBe(state.partyMaxHp - 100 + 80);
     expect(after.powerUpCharge).toBe(0);
+    expect(after.players[0].powerUpCharge).toBe(0);
   });
 
   it('coop power-ups: freeze sets frozenTurns on all alive enemies', () => {
     const lvl = getLevel(1)!;
     const state = startBattle(lvl, makePlayers(1), settings);
-    const charged = { ...state, powerUpCharge: 100 };
+    const charged = { ...state, powerUpCharge: 100, players: state.players.map(p => ({ ...p, powerUpCharge: 100 })) };
     const after = activateCoopPowerUp(charged, 'coop_freeze');
     expect(after.enemies.every(e => e.defeated || e.frozenTurns === 2)).toBe(true);
     // Frozen enemies skip their turn during prepareEnemyTurn.
@@ -218,7 +219,7 @@ describe('campaign engine', () => {
   it('coop power-ups: buff_power adds a power buff to every player', () => {
     const lvl = getLevel(1)!;
     const state = startBattle(lvl, makePlayers(2), settings);
-    const charged = { ...state, powerUpCharge: 80 };
+    const charged = { ...state, powerUpCharge: 80, players: state.players.map(p => ({ ...p, powerUpCharge: 80 })) };
     const after = activateCoopPowerUp(charged, 'coop_buff_power');
     expect(after.players.every(p => p.buffs.some(b => b.kind === 'power' && b.amount === 10 && b.turnsLeft === 3))).toBe(true);
   });
@@ -226,7 +227,7 @@ describe('campaign engine', () => {
   it('coop power-ups: buff_acc distracts all alive enemies (-accuracy/-precision for 3 turns)', () => {
     const lvl = getLevel(1)!;
     const state = startBattle(lvl, makePlayers(1), settings);
-    const charged = { ...state, powerUpCharge: 80 };
+    const charged = { ...state, powerUpCharge: 80, players: state.players.map(p => ({ ...p, powerUpCharge: 80 })) };
     const after = activateCoopPowerUp(charged, 'coop_buff_acc');
     // No player buff is granted — the effect targets enemies instead.
     expect(after.players.every(p => p.buffs.length === 0)).toBe(true);
@@ -276,10 +277,11 @@ describe('campaign engine', () => {
     const lvl = getLevel(1)!;
     const state = startBattle(lvl, makePlayers(1), settings);
     // Pre-charge close to the cap, then verify a dart can't push it past.
-    const near = { ...state, powerUpCharge: 95 };
+    const near = { ...state, powerUpCharge: 95, players: state.players.map(p => ({ ...p, powerUpCharge: 95 })) };
     // Bull adds 15 + 50*0.05 = 17.5 → would be 112.5, capped at 100.
     const s = addDart(near, 50, 1, 'Bull', true, settings);
     expect(s.powerUpCharge).toBe(settings.powerUpScaling.chargeMax);
+    expect(s.players[0].powerUpCharge).toBe(settings.powerUpScaling.chargeMax);
   });
 
   it('coop power-up starts partially charged when configured for the equipped power-up', () => {
@@ -298,5 +300,51 @@ describe('campaign engine', () => {
     const cfg = { ...settings, powerUpScaling: { ...settings.powerUpScaling, startingCharge: { coop_heal: 50 } } };
     const state = startBattle(lvl, makePlayers(1), cfg);
     expect(state.powerUpCharge).toBe(0);
+  });
+
+  it('per-player charge: dart thrown by player 1 does not charge player 2 orb', () => {
+    const lvl = getLevel(1)!;
+    const state = startBattle(lvl, makePlayers(2), settings);
+    expect(state.players[0].powerUpCharge).toBe(0);
+    expect(state.players[1].powerUpCharge).toBe(0);
+    // Player 1 throws T20.
+    let s = addDart(state, 20, 3, undefined, false, settings);
+    expect(s.players[0].powerUpCharge).toBe(15);
+    expect(s.players[1].powerUpCharge).toBe(0);
+  });
+
+  it('per-player charge: using a skill only consumes the thrower charge', () => {
+    const lvl = getLevel(1)!;
+    const state = startBattle(lvl, makePlayers(2), settings);
+    // Both players have full charge.
+    const charged = { ...state, players: state.players.map(p => ({ ...p, powerUpCharge: 100 })), powerUpCharge: 100 };
+    const after = activateCoopPowerUp(charged, 'coop_freeze');
+    // Thrower (player 1, idx 0) spent 100; player 2 keeps 100.
+    expect(after.players[0].powerUpCharge).toBe(0);
+    expect(after.players[1].powerUpCharge).toBe(100);
+  });
+
+  it('passive bonus: warrior starter grants party +3 power', () => {
+    const lvl = getLevel(1)!;
+    const players = makePlayers(1).map(p => ({
+      ...p,
+      coopProgress: { classId: 'warrior', xp: 0, unlockedPassives: ['war_power_1'], equippedPassives: ['war_power_1'] },
+    }));
+    const state = startBattle(lvl, players, settings);
+    expect(state.players[0].power).toBe(10 + 3);
+    expect(state.passiveBonus?.power).toBe(3);
+  });
+
+  it('passive bonus: priest tier 3 grants party +300 max HP (capped at healthMax)', () => {
+    const lvl = getLevel(1)!;
+    const players = makePlayers(1).map(p => ({
+      ...p,
+      attributes: { health: 100, armor: 0, power: 0, pointsAvailable: 0 },
+      coopProgress: { classId: 'priest', xp: 200, unlockedPassives: ['pri_hp_1', 'pri_hp_2', 'pri_hp_3'], equippedPassives: ['pri_hp_3'] },
+    }));
+    const state = startBattle(lvl, players, settings);
+    // 100 base + 300 bonus = 400, under the 500 cap.
+    expect(state.players[0].maxHp).toBe(400);
+    expect(state.passiveBonus?.health).toBe(300);
   });
 });
