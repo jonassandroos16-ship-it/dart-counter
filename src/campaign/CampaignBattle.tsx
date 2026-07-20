@@ -340,6 +340,18 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
         </div>
       )}
 
+      {state.surgeDarts > 0 && state.phase === 'player' && (
+        <div className="pill" style={{ marginTop: 6, background: 'color-mix(in srgb,#fbbf24 22%,var(--bg-3))', color: '#fde68a', borderColor: 'transparent' }}>
+          ⚡ Surge active — next {state.surgeDarts} dart{state.surgeDarts === 1 ? '' : 's'} deal +50% damage
+        </div>
+      )}
+
+      {state.regenTurns > 0 && (
+        <div className="pill" style={{ marginTop: 6, background: 'color-mix(in srgb,#22c55e 22%,var(--bg-3))', color: '#bbf7d0', borderColor: 'transparent' }}>
+          🌿 Regen active — party heals 30 HP/turn for {state.regenTurns} more turn{state.regenTurns === 1 ? '' : 's'}
+        </div>
+      )}
+
       {state.phase === 'player' && state.outcome === 'ongoing' && state.darts.length < 3 && (
         <div className="play-input">
           <div className="pad-card">

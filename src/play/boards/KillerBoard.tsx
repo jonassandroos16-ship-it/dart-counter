@@ -34,6 +34,12 @@ export function KillerBoard({ game, setGame, settings, players, games, toast, mu
     if (cur._crippledNext) delete cur._crippledNext;
     if (cur._fourthDart) delete cur._fourthDart;
     if (cur._oneDartNext) delete cur._oneDartNext;
+    if (cur._doubleTrouble) delete cur._doubleTrouble;
+    if (cur._overchargeNext) delete cur._overchargeNext;
+    if (typeof cur._cursedNext === 'number' && cur._cursedNext > 0) {
+      cur._cursedNext = cur._cursedNext - 1;
+      if (cur._cursedNext <= 0) delete cur._cursedNext;
+    }
     const isKiller = (cur.killerHits || 0) >= 5;
     let killedThisVisit: { killer: string; victim: string } | null = null;
 
@@ -124,6 +130,21 @@ export function KillerBoard({ game, setGame, settings, players, games, toast, mu
         {game.powerUpsEnabled && (p as any)._surgeNext && !(p as any)._surgeArmed && (
           <div className="pu-banner" style={{ background: 'color-mix(in srgb,var(--accent) 18%,var(--bg-3))', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
             ⚡ Surge active! This visit scores double.
+          </div>
+        )}
+        {game.powerUpsEnabled && (p as any)._doubleTrouble && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#a855f7 18%,var(--bg-3))', border: '1px solid #a855f7', color: '#c084fc' }}>
+            ✌️ Double Trouble! Only doubles and bulls count this visit.
+          </div>
+        )}
+        {game.powerUpsEnabled && (p as any)._overchargeNext && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#22d3ee 18%,var(--bg-3))', border: '1px solid #22d3ee', color: '#67e8f9' }}>
+            🔋 Overcharge! This visit scores +25%.
+          </div>
+        )}
+        {game.powerUpsEnabled && typeof (p as any)._cursedNext === 'number' && (p as any)._cursedNext > 0 && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#7c3aed 18%,var(--bg-3))', border: '1px solid #7c3aed', color: '#a78bfa' }}>
+            💀 Cursed! You score 50% this visit ({(p as any)._cursedNext} visit{(p as any)._cursedNext === 1 ? '' : 's'} left).
           </div>
         )}
         <div className="pc-slots">

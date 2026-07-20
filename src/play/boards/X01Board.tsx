@@ -45,9 +45,15 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
     // and is not yet active.
     const surgeActive = !!cur0._surgeNext && !cur0._surgeArmed;
     const crippleActive = !!cur0._crippledNext;
-    const rawScored = game.darts.reduce((a, d) => a + d.value, 0);
+    const doubleTroubleActive = !!cur0._doubleTrouble;
+    const overchargeActive = !!cur0._overchargeNext;
+    const cursedActive = typeof cur0._cursedNext === 'number' && cur0._cursedNext > 0;
+    // Double Trouble: only doubles and bulls score — singles and triples count as 0.
+    const rawScored = game.darts.reduce((a, d) => a + (doubleTroubleActive && !d.isDouble ? 0 : d.value), 0);
     const surgeScored = surgeActive ? rawScored * 2 : rawScored;
-    const scored = crippleActive ? Math.round(surgeScored * 0.5) : surgeScored;
+    const crippleScored = crippleActive ? Math.round(surgeScored * 0.5) : surgeScored;
+    const cursedScored = cursedActive ? Math.round(crippleScored * 0.5) : crippleScored;
+    const scored = overchargeActive ? Math.round(cursedScored * 1.25) : cursedScored;
     const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
     const cur = newPlayers[game.turn] as any;
     if (cur._surgeArmed) delete cur._surgeArmed; // armed this visit — surge stays for next
@@ -55,6 +61,13 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
     if (cur._crippledNext) delete cur._crippledNext;
     if (cur._fourthDart) delete cur._fourthDart;
     if (cur._oneDartNext) delete cur._oneDartNext;
+    if (cur._doubleTrouble) delete cur._doubleTrouble;
+    if (cur._overchargeNext) delete cur._overchargeNext;
+    // Curse persists across two visits — decrement rather than clear.
+    if (typeof cur._cursedNext === 'number' && cur._cursedNext > 0) {
+      cur._cursedNext = cur._cursedNext - 1;
+      if (cur._cursedNext <= 0) delete cur._cursedNext;
+    }
 
     if (game.practice) {
       cur.score += scored;
@@ -262,6 +275,21 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
         {game.powerUpsEnabled && (p as any)._surgeNext && !(p as any)._surgeArmed && (
           <div className="pu-banner" style={{ background: 'color-mix(in srgb,var(--accent) 18%,var(--bg-3))', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
             ⚡ Surge active! This visit scores double.
+          </div>
+        )}
+        {game.powerUpsEnabled && (p as any)._doubleTrouble && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#a855f7 18%,var(--bg-3))', border: '1px solid #a855f7', color: '#c084fc' }}>
+            ✌️ Double Trouble! Only doubles and bulls score this visit.
+          </div>
+        )}
+        {game.powerUpsEnabled && (p as any)._overchargeNext && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#22d3ee 18%,var(--bg-3))', border: '1px solid #22d3ee', color: '#67e8f9' }}>
+            🔋 Overcharge! This visit scores +25%.
+          </div>
+        )}
+        {game.powerUpsEnabled && typeof (p as any)._cursedNext === 'number' && (p as any)._cursedNext > 0 && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#7c3aed 18%,var(--bg-3))', border: '1px solid #7c3aed', color: '#a78bfa' }}>
+            💀 Cursed! You score 50% this visit ({(p as any)._cursedNext} visit{(p as any)._cursedNext === 1 ? '' : 's'} left).
           </div>
         )}
         <div className="pc-slots">
