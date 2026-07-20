@@ -163,14 +163,14 @@ function EditPlayerModal({ player, players, isNew, games, settings, onClose, set
   return (
     <Modal onClose={() => onClose(false)}>
       <h3 style={{ marginBottom: 8 }}>{isNew ? 'Add' : 'Edit'} Player — {name || livePlayer.name}</h3>
-      <div className="tabbar" style={{ marginBottom: 14 }}>
-        <button className={tab === 'basic' ? 'on' : ''} onClick={() => setTab('basic')}>Basic</button>
-        <button className={tab === 'titles' ? 'on' : ''} onClick={() => setTab('titles')}>Titles</button>
-        <button className={tab === 'badges' ? 'on' : ''} onClick={() => setTab('badges')}>Badges</button>
-        <button className={tab === 'sound' ? 'on' : ''} onClick={() => setTab('sound')}>Sound</button>
-        <button className={tab === 'attributes' ? 'on' : ''} onClick={() => setTab('attributes')}>Stats</button>
-        <button className={tab === 'powerups' ? 'on' : ''} onClick={() => setTab('powerups')}>Power-Ups</button>
-        <button className={tab === 'class' ? 'on' : ''} onClick={() => setTab('class')}>Class</button>
+      <div className="tabbar-scroll" style={{ marginBottom: 14 }}>
+        <button className={tab === 'basic' ? 'on' : ''} onClick={() => setTab('basic')}><span className="tab-ico">👤</span>Basic</button>
+        <button className={tab === 'titles' ? 'on' : ''} onClick={() => setTab('titles')}><span className="tab-ico">🏅</span>Titles</button>
+        <button className={tab === 'badges' ? 'on' : ''} onClick={() => setTab('badges')}><span className="tab-ico">🎖️</span>Badges</button>
+        <button className={tab === 'sound' ? 'on' : ''} onClick={() => setTab('sound')}><span className="tab-ico">🔊</span>Sound</button>
+        <button className={tab === 'attributes' ? 'on' : ''} onClick={() => setTab('attributes')}><span className="tab-ico">📊</span>Stats</button>
+        <button className={tab === 'powerups' ? 'on' : ''} onClick={() => setTab('powerups')}><span className="tab-ico">⚡</span>Power-Ups</button>
+        <button className={tab === 'class' ? 'on' : ''} onClick={() => setTab('class')}><span className="tab-ico">🛡️</span>Class</button>
       </div>
 
       {tab === 'basic' && (
@@ -780,7 +780,7 @@ function ClassTab({ player, setPlayers, toast }: { player: Player; setPlayers: (
 
           {/* Passives for the selected class — 3 tiers, 3 passives per tier. */}
           <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Passives</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '34vh', overflow: 'auto' }}>
             {classPassives.map(p => {
               const isUnlocked = unlockedIds.includes(p.id);
               const isEquipped = (prog.equippedPassives || []).includes(p.id);

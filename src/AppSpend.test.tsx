@@ -23,9 +23,9 @@ describe('App — spend on health with reconcile effect', () => {
     // Open the Edit modal for the player
     fireEvent.click(screen.getByText('Edit'));
 
-    // Go to Stats tab (inside the modal tabbar) — it's a button inside .tabbar
-    const tabbar = document.querySelector('.tabbar');
-    const statsTab = Array.from(tabbar!.querySelectorAll('button')).find(b => b.textContent === 'Stats')!;
+    // Go to Stats tab (inside the modal tabbar)
+    const tabbar = document.querySelector('.tabbar-scroll') || document.querySelector('.tabbar');
+    const statsTab = Array.from(tabbar!.querySelectorAll('button')).find(b => (b.textContent || '').includes('Stats'))!;
     fireEvent.click(statsTab);
 
     // Find the Health spend button
@@ -61,8 +61,8 @@ describe('App — spend on health with reconcile effect', () => {
 
     fireEvent.click(screen.getByText('Players'));
     fireEvent.click(screen.getByText('Edit'));
-    const tabbar = document.querySelector('.tabbar');
-    const statsTab = Array.from(tabbar!.querySelectorAll('button')).find(b => b.textContent === 'Stats')!;
+    const tabbar = document.querySelector('.tabbar-scroll') || document.querySelector('.tabbar');
+    const statsTab = Array.from(tabbar!.querySelectorAll('button')).find(b => (b.textContent || '').includes('Stats'))!;
     fireEvent.click(statsTab);
 
     const healthBtn = screen.getByText('+ Spend 1 point on Health') as HTMLButtonElement;
