@@ -94,6 +94,9 @@ export function recordFromGame(game: Game): GameRecord {
           : pu._usedFourthDart ? 'pu_fourth_dart'
           : pu._usedRethrow ? 'pu_rethrow'
           : pu._usedCripple ? 'pu_cripple'
+          : pu._usedDoubleTrouble ? 'pu_double_trouble'
+          : pu._usedOvercharge ? 'pu_overcharge'
+          : pu._usedCurse ? 'pu_curse'
           : null;
         r.usedPowerUp = used;
       }

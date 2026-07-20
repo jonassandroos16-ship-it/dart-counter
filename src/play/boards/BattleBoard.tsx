@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Dart, Game, GamePlayer, GameRecord, Player, Settings } from '../../types';
+import type { Game, GamePlayer, GameRecord, Player, Settings } from '../../types';
 import { SCORE_POPUPS } from '../../constants';
 import { computeBattleDartDamage } from '../../logic';
 import { Sound } from '../../sound';
@@ -49,9 +49,14 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
     const cur0 = game.players[game.turn] as any;
     const surgeActive = !!cur0._surgeNext && !cur0._surgeArmed;
     const crippleActive = !!cur0._crippledNext;
-    const rawScored = game.darts.reduce((a, d) => a + d.value, 0);
+    const doubleTroubleActive = !!cur0._doubleTrouble;
+    const overchargeActive = !!cur0._overchargeNext;
+    const cursedActive = typeof cur0._cursedNext === 'number' && cur0._cursedNext > 0;
+    const rawScored = game.darts.reduce((a, d) => a + (doubleTroubleActive && !d.isDouble ? 0 : d.value), 0);
     const surgeScored = surgeActive ? rawScored * 2 : rawScored;
-    const scored = crippleActive ? Math.round(surgeScored * 0.5) : surgeScored;
+    const crippleScored = crippleActive ? Math.round(surgeScored * 0.5) : surgeScored;
+    const cursedScored = cursedActive ? Math.round(crippleScored * 0.5) : crippleScored;
+    const scored = overchargeActive ? Math.round(cursedScored * 1.25) : cursedScored;
     const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
     const cur = newPlayers[game.turn] as any;
     if (cur._surgeArmed) delete cur._surgeArmed;
@@ -59,6 +64,12 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
     if (cur._crippledNext) delete cur._crippledNext;
     if (cur._fourthDart) delete cur._fourthDart;
     if (cur._oneDartNext) delete cur._oneDartNext;
+    if (cur._doubleTrouble) delete cur._doubleTrouble;
+    if (cur._overchargeNext) delete cur._overchargeNext;
+    if (typeof cur._cursedNext === 'number' && cur._cursedNext > 0) {
+      cur._cursedNext = cur._cursedNext - 1;
+      if (cur._cursedNext <= 0) delete cur._cursedNext;
+    }
 
     let target = targetId;
     const aliveTargets = newPlayers.filter((pl: any) => pl.id !== cur.id && !pl.defeated);
@@ -76,9 +87,13 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
     let totalDamage = 0;
     let hp = victim.hp || 0;
     for (const d of darts) {
-      const dartValue = surgeActive ? d.value * 2 : d.value;
+      // Double Trouble: non-doubles deal 0 damage in battle too.
+      const dartBaseValue = doubleTroubleActive && !d.isDouble ? 0 : d.value;
+      const dartValue = surgeActive ? dartBaseValue * 2 : dartBaseValue;
       const rawDmg = computeBattleDartDamage(dartValue, power, armor, settings);
-      const dmg = crippleActive ? Math.round(rawDmg * 0.5) : rawDmg;
+      let dmg = crippleActive ? Math.round(rawDmg * 0.5) : rawDmg;
+      dmg = cursedActive ? Math.round(dmg * 0.5) : dmg;
+      dmg = overchargeActive ? Math.round(dmg * 1.25) : dmg;
       totalDamage += dmg;
       hp = Math.max(0, hp - dmg);
     }
@@ -175,6 +190,21 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
         {game.powerUpsEnabled && (p as any)._surgeNext && !(p as any)._surgeArmed && (
           <div className="pu-banner" style={{ background: 'color-mix(in srgb,var(--accent) 18%,var(--bg-3))', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
             ⚡ Surge active! This visit scores double.
+          </div>
+        )}
+        {game.powerUpsEnabled && (p as any)._doubleTrouble && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#a855f7 18%,var(--bg-3))', border: '1px solid #a855f7', color: '#c084fc' }}>
+            ✌️ Double Trouble! Only doubles and bulls deal damage this visit.
+          </div>
+        )}
+        {game.powerUpsEnabled && (p as any)._overchargeNext && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#22d3ee 18%,var(--bg-3))', border: '1px solid #22d3ee', color: '#67e8f9' }}>
+            🔋 Overcharge! This visit deals +25% damage.
+          </div>
+        )}
+        {game.powerUpsEnabled && typeof (p as any)._cursedNext === 'number' && (p as any)._cursedNext > 0 && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#7c3aed 18%,var(--bg-3))', border: '1px solid #7c3aed', color: '#a78bfa' }}>
+            💀 Cursed! You deal 50% damage this visit ({(p as any)._cursedNext} visit{(p as any)._cursedNext === 1 ? '' : 's'} left).
           </div>
         )}
         <div className="pc-slots">
