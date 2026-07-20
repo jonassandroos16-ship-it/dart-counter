@@ -48,11 +48,14 @@ describe('campaign engine', () => {
     expect(isLevelUnlocked(6, 4)).toBe(false);
   });
 
-  it('party HP is the sum of selected players health (not capped)', () => {
+  it('party HP is the average of selected players health (capped at healthMax)', () => {
     const players = makePlayers(2);
-    expect(partyMaxHpFor(players, settings)).toBe(600); // 300 + 300, no cap
+    expect(partyMaxHpFor(players, settings)).toBe(300); // (300 + 300) / 2 = 300
     const onePlayer: Player[] = [{ ...players[0], attributes: { health: 300, armor: 0, power: 0, pointsAvailable: 0 } }];
-    expect(partyMaxHpFor(onePlayer, settings)).toBe(300);
+    expect(partyMaxHpFor(onePlayer, settings)).toBe(300); // solo = own health
+    // Two players with 500 health each — average 500, at cap.
+    const tank: Player[] = Array.from({ length: 2 }, () => ({ ...players[0], attributes: { health: 500, armor: 0, power: 0, pointsAvailable: 0 } }));
+    expect(partyMaxHpFor(tank, settings)).toBe(500); // capped at healthMax=500
   });
 
   it('party armor and power are averaged so adding players cannot exceed the cap', () => {
@@ -65,12 +68,12 @@ describe('campaign engine', () => {
     expect(partyPowerFor(heavy, settings)).toBe(25); // capped at powerMax=30
   });
 
-  it('starts a battle with party HP equal to combined player health', () => {
+  it('starts a battle with party HP equal to averaged player health', () => {
     const lvl = getLevel(1)!;
     const players = makePlayers(2);
     const state = startBattle(lvl, players, settings);
-    expect(state.partyMaxHp).toBe(600); // 300 + 300, summed (no cap)
-    expect(state.partyHp).toBe(600);
+    expect(state.partyMaxHp).toBe(300); // (300 + 300) / 2 = 300, averaged
+    expect(state.partyHp).toBe(300);
     expect(state.players.length).toBe(2);
     expect(state.playerTurnIdx).toBe(0);
     expect(state.phase).toBe('player');

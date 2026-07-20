@@ -281,22 +281,26 @@ export function totalLevels(): number {
 
 // ── Party attribute aggregation ──────────────────────────────────────
 //
-// Party HP for a level = sum of each selected player's `health` attribute
-// (NOT capped — the per-player `healthMax` cap applies to individuals, not
-// to the party total). Armor and power are averaged (sum / playerCount) so
-// adding more players can't push armor/power above the configured caps —
-// they share the load. Each player still attacks with their own per-dart
-// power (so high power players hit harder), but the shared armor is what
-// mitigates incoming enemy damage.
+// Party HP, armor and power are all averaged (sum / playerCount) so adding
+// more players can't push any stat above the configured caps — they share
+// the load. Each player still attacks with their own per-dart power (so
+// high power players hit harder), but the shared party HP is what absorbs
+// incoming enemy damage. Averaging HP (instead of summing) keeps the
+// difficulty roughly constant regardless of party size: a 4-player party
+// has the same HP pool as a solo player, so more players means more damage
+// output but not more survivability.
 
 export function partyMaxHpFor(players: Player[], settings: Settings): number {
   const cfg = settings.powerUpScaling;
+  if (!players.length) return 1;
+  const healthMax = Number.isFinite(cfg.healthMax) ? cfg.healthMax : Number.MAX_SAFE_INTEGER;
   const startHealth = Number.isFinite(cfg.attributeStartHealth) ? cfg.attributeStartHealth : 0;
   const sum = players.reduce((acc, p) => {
     const h = p.attributes?.health;
     return acc + (typeof h === 'number' && Number.isFinite(h) ? Math.max(1, h) : startHealth);
   }, 0);
-  return Math.max(1, sum);
+  const avg = sum / players.length;
+  return Math.max(1, Math.min(healthMax, Math.round(avg)));
 }
 
 export function partyArmorFor(players: Player[], settings: Settings): number {
@@ -385,7 +389,13 @@ export function startBattle(
     cp.power = Math.min(powerMax, cp.power + passiveBonus.power);
     cp.armor = Math.min(armorMax, cp.armor + passiveBonus.armor);
   }
-  const partyMaxHp = party.reduce((acc, p) => acc + p.maxHp, 0);
+  // Party HP is the average of per-player maxHp (including passive bonuses),
+  // not the sum — so adding more players doesn't inflate the party's HP
+  // pool. This keeps coop difficulty roughly constant across party sizes:
+  // more players means more damage output, but not more survivability.
+  const partyMaxHp = party.length
+    ? Math.max(1, Math.round(party.reduce((acc, p) => acc + p.maxHp, 0) / party.length))
+    : 1;
   // Legacy shared charge kept for backwards-compat with old saves/tests.
   // Initialized to the first player's charge (mirrors old behavior).
   const powerUpCharge = party.length ? party[0].powerUpCharge : 0;

@@ -86,7 +86,7 @@ export function CoopSetupView({ players, settings, onStart, onBack }: CoopSetupP
           <div className="muted small" style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Party preview</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
             <div>
-              <div className="muted small">Party HP</div>
+              <div className="muted small">Party HP (avg)</div>
               <div style={{ fontWeight: 900, fontSize: 18, color: '#fca5a5' }}>{partyHp}</div>
             </div>
             <div>
@@ -99,7 +99,7 @@ export function CoopSetupView({ players, settings, onStart, onBack }: CoopSetupP
             </div>
           </div>
           <div className="muted small" style={{ marginTop: 6, fontStyle: 'italic' }}>
-            HP is the total of all players' health. Armor & power are averaged so adding more players can't push them above the cap.
+            HP, armor & power are all averaged so adding more players can't push them above the cap — a bigger party hits harder but doesn't tank more.
           </div>
         </div>
         <div className="card" style={{ padding: 10, marginBottom: 12, background: 'var(--bg-3)' }}>
