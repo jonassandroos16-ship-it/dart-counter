@@ -226,10 +226,14 @@ export const BADGES: BadgeDef[] = [
     context: lifetimeKills, contextLabel: 'kills' },
 
   // ============ Power-up matches (only awarded when powerUpsEnabled) ============
-  { id: 'b_power_charged', name: 'Fully Charged', desc: 'Charge your power-up to 100% during a power-up match', icon: '🔋', kind: 'post-game', powerUpOnly: true,
+  { id: 'b_power_charged', name: 'Fully Charged', desc: 'Charge your power-up to full during a power-up match', icon: '🔋', kind: 'post-game', powerUpOnly: true,
     pick: (game) => {
       if (!game || !game.powerUpsEnabled) return null;
-      const charged = (game.players || []).filter((p: any) => (p.powerUpCharge || 0) >= 100).map((p: any) => p.id);
+      // A player counts as "fully charged" if their orb reached the
+      // activation threshold. Since the orb is capped at the per-power-up
+      // threshold, having activated (uses > 0) implies it was full. We also
+      // count players still sitting on a full 100% orb (legacy default).
+      const charged = (game.players || []).filter((p: any) => (p.powerUpCharge || 0) >= 100 || (p.powerUpUses || 0) > 0).map((p: any) => p.id);
       if (!charged.length) return null;
       return charged.length === 1 ? charged[0] : charged;
     } },
