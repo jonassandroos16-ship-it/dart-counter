@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import type { CampaignConfig, CampaignLevel, Difficulty, EnemyDatabase, ExactTarget, ShieldLayer, ShieldType, SpanTarget } from './types';
-import { CAMPAIGN_LEVELS } from './campaignLevels';
+import type { CampaignChapter, CampaignLevel, Difficulty, EnemyDatabase, ExactTarget, ShieldLayer, ShieldType, SpanTarget } from './types';
+import { CAMPAIGN_CHAPTERS } from './campaignLevels';
 import { ENEMY_DATABASE } from './enemyDatabase';
 import { uid } from '../store';
 
@@ -14,35 +14,72 @@ const EXACT_PRESETS: ExactTarget[] = [
 const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'enemy';
 
 export function CampaignEditor({ onBack }: { onBack: () => void }) {
-  const [levels, setLevels] = useState<CampaignConfig>(() => JSON.parse(JSON.stringify(CAMPAIGN_LEVELS)));
+  const [chapters, setChapters] = useState<CampaignChapter[]>(() => JSON.parse(JSON.stringify(CAMPAIGN_CHAPTERS)));
   const [enemies, setEnemies] = useState<EnemyDatabase>(() => JSON.parse(JSON.stringify(ENEMY_DATABASE)));
-  const [selectedLevelId, setSelectedLevelId] = useState<number | null>(levels.levels[0]?.level_id ?? null);
+  const [selectedChapterIdx, setSelectedChapterIdx] = useState<number>(0);
+  const [selectedLevelIdx, setSelectedLevelIdx] = useState<number | null>(0);
   const [selectedEnemyId, setSelectedEnemyId] = useState<string | null>(Object.keys(enemies)[0] ?? null);
   const [jsonOut, setJsonOut] = useState<string | null>(null);
 
-  const selectedLevel = useMemo(
-    () => levels.levels.find(l => l.level_id === selectedLevelId) || null,
-    [levels, selectedLevelId],
-  );
+  const selectedChapter = chapters[selectedChapterIdx] ?? null;
+  const selectedLevel = useMemo(() => {
+    if (!selectedChapter || selectedLevelIdx == null) return null;
+    return selectedChapter.levels[selectedLevelIdx] ?? null;
+  }, [selectedChapter, selectedLevelIdx]);
   const selectedEnemy = selectedEnemyId ? enemies[selectedEnemyId] : null;
 
-  // ── Level ops ──────────────────────────────────────────────────────
+  // ── Chapter ops ─────────────────────────────────────────────────────
+  const createChapter = () => {
+    const nextIdx = chapters.length;
+    const id = `chapter_${nextIdx + 1}_${uid().slice(-4)}`;
+    const newChapter: CampaignChapter = {
+      id,
+      name: `Chapter ${chapters.length + 1}`,
+      subtitle: '',
+      theme: { id: 'crimson', name: 'Crimson', background: 'var(--bg)', accent: '#ef4444', cardTint: 'var(--bg-2)' },
+      story: { intro: '', outro: '' },
+      levels: [],
+    };
+    setChapters(prev => [...prev, newChapter]);
+    setSelectedChapterIdx(nextIdx);
+    setSelectedLevelIdx(null);
+  };
+  const updateChapter = (patch: Partial<CampaignChapter>) => {
+    if (!selectedChapter) return;
+    setChapters(prev => prev.map((c, i) => i === selectedChapterIdx ? { ...c, ...patch } : c));
+  };
+  const deleteChapter = () => {
+    if (!selectedChapter) return;
+    if (chapters.length <= 1) return;
+    setChapters(prev => prev.filter((_, i) => i !== selectedChapterIdx));
+    setSelectedChapterIdx(Math.max(0, selectedChapterIdx - 1));
+    setSelectedLevelIdx(null);
+  };
+
+  // ── Level ops (within selected chapter) ─────────────────────────────
   const createLevel = () => {
-    const nextId = (levels.levels.reduce((m, l) => Math.max(m, l.level_id), 0) || 0) + 1;
+    if (!selectedChapter) return;
+    const nextId = (selectedChapter.levels.reduce((m, l) => Math.max(m, l.level_id), 0) || 0) + 1;
     const newLevel: CampaignLevel = { level_id: nextId, name: `Level ${nextId}`, is_boss: false, enemies: [] };
-    setLevels(prev => ({ levels: [...prev.levels, newLevel] }));
-    setSelectedLevelId(nextId);
+    setChapters(prev => prev.map((c, i) => i === selectedChapterIdx
+      ? { ...c, levels: [...c.levels, newLevel] }
+      : c));
+    setSelectedLevelIdx(selectedChapter.levels.length);
   };
   const updateLevel = (patch: Partial<CampaignLevel>) => {
-    if (selectedLevelId == null) return;
-    setLevels(prev => ({
-      levels: prev.levels.map(l => l.level_id === selectedLevelId ? { ...l, ...patch } : l),
+    if (selectedLevelIdx == null || !selectedChapter) return;
+    setChapters(prev => prev.map((c, i) => {
+      if (i !== selectedChapterIdx) return c;
+      return { ...c, levels: c.levels.map((l, j) => j === selectedLevelIdx ? { ...l, ...patch } : l) };
     }));
   };
   const deleteLevel = () => {
-    if (selectedLevelId == null) return;
-    setLevels(prev => ({ levels: prev.levels.filter(l => l.level_id !== selectedLevelId) }));
-    setSelectedLevelId(levels.levels.find(l => l.level_id !== selectedLevelId)?.level_id ?? null);
+    if (selectedLevelIdx == null || !selectedChapter) return;
+    setChapters(prev => prev.map((c, i) => {
+      if (i !== selectedChapterIdx) return c;
+      return { ...c, levels: c.levels.filter((_, j) => j !== selectedLevelIdx) };
+    }));
+    setSelectedLevelIdx(selectedLevelIdx > 0 ? selectedLevelIdx - 1 : (selectedChapter.levels.length > 1 ? 0 : null));
   };
   const addEnemyToLevel = (enemyId: string) => {
     if (!selectedLevel) return;
@@ -70,10 +107,10 @@ export function CampaignEditor({ onBack }: { onBack: () => void }) {
       delete next[id];
       return next;
     });
-    // Also remove from any levels that referenced it.
-    setLevels(prev => ({
-      levels: prev.levels.map(l => ({ ...l, enemies: l.enemies.filter(e => e !== id) })),
-    }));
+    setChapters(prev => prev.map(ch => ({
+      ...ch,
+      levels: ch.levels.map(l => ({ ...l, enemies: l.enemies.filter(e => e !== id) })),
+    })));
     if (selectedEnemyId === id) setSelectedEnemyId(Object.keys(enemies)[0] ?? null);
   };
   const addShield = () => {
@@ -92,7 +129,7 @@ export function CampaignEditor({ onBack }: { onBack: () => void }) {
 
   const generateJson = () => {
     const out = {
-      campaign_levels: levels,
+      campaign_chapters: chapters,
       enemy_database: enemies,
     };
     setJsonOut(JSON.stringify(out, null, 2));
@@ -103,35 +140,93 @@ export function CampaignEditor({ onBack }: { onBack: () => void }) {
       <div className="row between" style={{ marginBottom: 12 }}>
         <button className="btn ghost sm" onClick={onBack}>← Back to Settings</button>
         <h2 style={{ margin: 0 }}>Campaign Level Editor</h2>
-        <span className="muted small">v1</span>
+        <span className="muted small">v2</span>
       </div>
 
-      {/* ── Level management ─────────────────────────────────────────── */}
+      {/* ── Chapter + Level management ────────────────────────────────── */}
       <div className="card">
-        <div className="row between" style={{ marginBottom: 10 }}>
-          <h3 style={{ margin: 0 }}>Levels</h3>
-          <div className="row" style={{ gap: 6 }}>
+        <div className="row between" style={{ marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
+          <h3 style={{ margin: 0 }}>Chapters &amp; Levels</h3>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
             <select
-              style={{ width: 'auto', minWidth: 160 }}
-              value={selectedLevelId ?? ''}
-              onChange={e => setSelectedLevelId(e.target.value ? Number(e.target.value) : null)}
+              style={{ width: 'auto', minWidth: 200 }}
+              value={selectedChapterIdx}
+              onChange={e => { setSelectedChapterIdx(Number(e.target.value)); setSelectedLevelIdx(null); }}
             >
-              {levels.levels.map(l => (
-                <option key={l.level_id} value={l.level_id}>#{l.level_id} · {l.name}{l.is_boss ? ' ☠' : ''}</option>
+              {chapters.map((ch, i) => (
+                <option key={ch.id} value={i}>{ch.name || `Chapter ${i + 1}`}</option>
               ))}
             </select>
-            <button className="btn primary sm" onClick={createLevel}>+ New</button>
-            <button className="btn danger sm" onClick={deleteLevel} disabled={selectedLevelId == null}>✕</button>
+            <button className="btn primary sm" onClick={createChapter}>+ Chapter</button>
+            <button className="btn danger sm" onClick={deleteChapter} disabled={chapters.length <= 1}>✕ Chapter</button>
           </div>
         </div>
+
+        {/* Chapter metadata */}
+        {selectedChapter && (
+          <div style={{ marginBottom: 14, padding: 10, borderRadius: 10, background: 'var(--bg-3)' }}>
+            <div className="grid grid-2" style={{ gap: 8 }}>
+              <label className="field"><span>Chapter name</span>
+                <input value={selectedChapter.name} onChange={e => updateChapter({ name: e.target.value })} maxLength={60} />
+              </label>
+              <label className="field"><span>Subtitle</span>
+                <input value={selectedChapter.subtitle} onChange={e => updateChapter({ subtitle: e.target.value })} maxLength={80} />
+              </label>
+              <label className="field"><span>Chapter id</span>
+                <input value={selectedChapter.id} onChange={e => updateChapter({ id: e.target.value })} maxLength={40} />
+              </label>
+              <label className="field"><span>Theme accent (hex)</span>
+                <input value={selectedChapter.theme.accent} onChange={e => updateChapter({ theme: { ...selectedChapter.theme, accent: e.target.value } })} maxLength={30} />
+              </label>
+            </div>
+            <label className="field" style={{ marginTop: 8 }}>
+              <span>Intro story</span>
+              <textarea value={selectedChapter.story.intro} onChange={e => updateChapter({ story: { ...selectedChapter.story, intro: e.target.value } })} rows={2} style={{ width: '100%' }} />
+            </label>
+            <label className="field" style={{ marginTop: 8 }}>
+              <span>Outro story</span>
+              <textarea value={selectedChapter.story.outro} onChange={e => updateChapter({ story: { ...selectedChapter.story, outro: e.target.value } })} rows={2} style={{ width: '100%' }} />
+            </label>
+          </div>
+        )}
+
+        {/* Level dropdown — scoped to the selected chapter */}
+        {selectedChapter && (
+          <div className="row between" style={{ marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
+            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+              <select
+                style={{ width: 'auto', minWidth: 200 }}
+                value={selectedLevelIdx ?? ''}
+                onChange={e => setSelectedLevelIdx(e.target.value === '' ? null : Number(e.target.value))}
+              >
+                <option value="">— Select a level —</option>
+                {selectedChapter.levels.map((l, i) => (
+                  <option key={`${selectedChapter.id}_${l.level_id}`} value={i}>
+                    #{l.level_id} · {l.name}{l.is_boss ? ' ☠' : ''}
+                  </option>
+                ))}
+              </select>
+              <button className="btn primary sm" onClick={createLevel}>+ New Level</button>
+              <button className="btn danger sm" onClick={deleteLevel} disabled={selectedLevelIdx == null}>✕ Level</button>
+            </div>
+            <span className="muted small">{selectedChapter.levels.length} level(s) in this chapter</span>
+          </div>
+        )}
+
         {selectedLevel ? (
           <>
             <div className="grid grid-2">
-              <label className="field"><span>Level ID</span>
+              <label className="field"><span>Level ID (within chapter)</span>
                 <input type="number" value={selectedLevel.level_id} onChange={e => updateLevel({ level_id: +e.target.value })} />
               </label>
               <label className="field"><span>Level name</span>
                 <input value={selectedLevel.name} onChange={e => updateLevel({ name: e.target.value })} maxLength={40} />
+              </label>
+              <label className="field"><span>Reward power-up id</span>
+                <input value={selectedLevel.reward_power_up || ''} onChange={e => updateLevel({ reward_power_up: e.target.value || undefined })} maxLength={40} />
+              </label>
+              <label className="field"><span>Story beat (after clear)</span>
+                <input value={selectedLevel.story_bit || ''} onChange={e => updateLevel({ story_bit: e.target.value })} maxLength={140} />
               </label>
             </div>
             <label className="row between" style={{ marginBottom: 10 }}>
@@ -158,14 +253,14 @@ export function CampaignEditor({ onBack }: { onBack: () => void }) {
             </div>
           </>
         ) : (
-          <div className="muted small">No level selected. Click "+ New" to create one.</div>
+          <div className="muted small">No level selected. Pick one from the dropdown or click "+ New Level".</div>
         )}
       </div>
 
       {/* ── Enemy profiles ──────────────────────────────────────────── */}
       <div className="card">
         <div className="row between" style={{ marginBottom: 10 }}>
-          <h3 style={{ margin: 0 }}>Enemy Profiles & Balancing</h3>
+          <h3 style={{ margin: 0 }}>Enemy Profiles &amp; Balancing</h3>
           <div className="row" style={{ gap: 6 }}>
             <select
               style={{ width: 'auto', minWidth: 180 }}
@@ -247,7 +342,7 @@ export function CampaignEditor({ onBack }: { onBack: () => void }) {
               onFocus={e => e.target.select()}
             />
             <button className="btn ghost sm block" style={{ marginTop: 8 }} onClick={() => { navigator.clipboard?.writeText(jsonOut); }}>Copy to clipboard</button>
-            <div className="muted small" style={{ marginTop: 6 }}>Paste this into <code>campaign_levels.ts</code> and <code>enemyDatabase.ts</code> to ship new content.</div>
+            <div className="muted small" style={{ marginTop: 6 }}>Paste this into <code>campaignLevels.ts</code> (chapters) and <code>enemyDatabase.ts</code> to ship new content.</div>
           </>
         ) : (
           <div className="muted small">Click "Generate JSON Out" to dump the current configuration as a raw JSON block.</div>
