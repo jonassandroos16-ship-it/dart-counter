@@ -347,4 +347,35 @@ describe('campaign engine', () => {
     expect(state.players[0].maxHp).toBe(400);
     expect(state.passiveBonus?.health).toBe(300);
   });
+
+  it('passive bonus: priest starter grants party +60 HP exactly once (not per player)', () => {
+    const lvl = getLevel(1)!;
+    // Two players: one priest with the +60 HP starter passive, one with no class.
+    const players = makePlayers(2).map((p, i) => i === 0
+      ? { ...p,
+          coopProgress: { classId: 'priest' as CoopClassId, xp: 0, unlockedPassives: ['pri_hp_1'] as CoopPassiveId[], equippedPassives: ['pri_hp_1'] as CoopPassiveId[] } }
+      : p);
+    const state = startBattle(lvl, players, settings);
+    // Each player has 300 base health. The +60 team bonus is split across
+    // the 2 players (+30 each), so the party total is 600 + 60 = 660 — NOT
+    // 600 + 120 (which was the bug: bonus added to every player).
+    expect(state.passiveBonus?.health).toBe(60);
+    expect(state.partyMaxHp).toBe(660);
+    expect(state.partyHp).toBe(660);
+  });
+
+  it('passive bonus: warrior starter grants party +3 power exactly once (not per player)', () => {
+    const lvl = getLevel(1)!;
+    const players = makePlayers(2).map((p, i) => i === 0
+      ? { ...p,
+          coopProgress: { classId: 'warrior' as CoopClassId, xp: 0, unlockedPassives: ['war_power_1'] as CoopPassiveId[], equippedPassives: ['war_power_1'] as CoopPassiveId[] } }
+      : p);
+    const state = startBattle(lvl, players, settings);
+    // Each player has 10 base power. The +3 team bonus is split across the
+    // 2 players (+1.5 each), so the party total power is 20 + 3 = 23 — NOT
+    // 20 + 6.
+    expect(state.passiveBonus?.power).toBe(3);
+    const totalPower = state.players.reduce((a, p) => a + p.power, 0);
+    expect(totalPower).toBe(23);
+  });
 });

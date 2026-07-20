@@ -351,17 +351,25 @@ export function startBattle(
     return toCoopPlayer(p, settings, Math.max(0, Math.min(chargeCap, startCharge)));
   });
   // Apply team-wide passive bonuses (from each player's equipped passives)
-  // to the party's stats. Health bonus raises maxHp AND current hp; power
-  // and armor bonuses raise the per-player stats.
+  // to the party's stats. Each passive grants a TEAM-WIDE bonus that is
+  // distributed evenly across all party members, so the bonus applies to
+  // the party exactly ONCE regardless of how many players are present
+  // (previously the bonus was added to every player, multiplying the
+  // effect by the player count — e.g. a priest's +60 HP became +120 with
+  // two players).
   const passiveBonus = computePartyPassiveBonus(players);
   const healthMax = Number.isFinite(cfg?.healthMax) ? (cfg?.healthMax as number) : Number.MAX_SAFE_INTEGER;
   const armorMax = Number.isFinite(cfg?.armorMax) ? (cfg?.armorMax as number) : Number.MAX_SAFE_INTEGER;
   const powerMax = Number.isFinite(cfg?.powerMax) ? (cfg?.powerMax as number) : Number.MAX_SAFE_INTEGER;
+  const partySize = Math.max(1, party.length);
+  const healthPerPlayer = passiveBonus.health / partySize;
+  const powerPerPlayer = passiveBonus.power / partySize;
+  const armorPerPlayer = passiveBonus.armor / partySize;
   for (const cp of party) {
-    cp.maxHp = Math.min(healthMax, cp.maxHp + passiveBonus.health);
+    cp.maxHp = Math.min(healthMax, cp.maxHp + healthPerPlayer);
     cp.hp = cp.maxHp;
-    cp.power = Math.min(powerMax, cp.power + passiveBonus.power);
-    cp.armor = Math.min(armorMax, cp.armor + passiveBonus.armor);
+    cp.power = Math.min(powerMax, cp.power + powerPerPlayer);
+    cp.armor = Math.min(armorMax, cp.armor + armorPerPlayer);
   }
   const partyMaxHp = party.reduce((acc, p) => acc + p.maxHp, 0);
   // Legacy shared charge kept for backwards-compat with old saves/tests.
