@@ -49,14 +49,19 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
     const cur0 = game.players[game.turn] as any;
     const surgeActive = !!cur0._surgeNext && !cur0._surgeArmed;
     const crippleActive = !!cur0._crippledNext;
-    const doubleTroubleActive = !!cur0._doubleTrouble;
-    const overchargeActive = !!cur0._overchargeNext;
-    const cursedActive = typeof cur0._cursedNext === 'number' && cur0._cursedNext > 0;
-    const rawScored = game.darts.reduce((a, d) => a + (doubleTroubleActive && !d.isDouble ? 0 : d.value), 0);
+    const bullseyeFrenzyActive = !!cur0._bullseyeFrenzy;
+    const hotStreakActive = !!cur0._hotStreak;
+    const rawScored = game.darts.reduce((a, d) => {
+      const isBull = d.value === 50 || d.value === 25;
+      const v = bullseyeFrenzyActive && isBull ? d.value * 2 : d.value;
+      return a + v;
+    }, 0);
     const surgeScored = surgeActive ? rawScored * 2 : rawScored;
     const crippleScored = crippleActive ? Math.round(surgeScored * 0.5) : surgeScored;
-    const cursedScored = cursedActive ? Math.round(crippleScored * 0.5) : crippleScored;
-    const scored = overchargeActive ? Math.round(cursedScored * 1.25) : cursedScored;
+    const hotStreakBonus = hotStreakActive
+      ? game.darts.reduce((a, _d, i) => a + i * 5, 0)
+      : 0;
+    const scored = crippleScored + hotStreakBonus;
     const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
     const cur = newPlayers[game.turn] as any;
     if (cur._surgeArmed) delete cur._surgeArmed;
@@ -64,12 +69,8 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
     if (cur._crippledNext) delete cur._crippledNext;
     if (cur._fourthDart) delete cur._fourthDart;
     if (cur._oneDartNext) delete cur._oneDartNext;
-    if (cur._doubleTrouble) delete cur._doubleTrouble;
-    if (cur._overchargeNext) delete cur._overchargeNext;
-    if (typeof cur._cursedNext === 'number' && cur._cursedNext > 0) {
-      cur._cursedNext = cur._cursedNext - 1;
-      if (cur._cursedNext <= 0) delete cur._cursedNext;
-    }
+    if (cur._bullseyeFrenzy) delete cur._bullseyeFrenzy;
+    if (cur._hotStreak) delete cur._hotStreak;
 
     let target = targetId;
     const aliveTargets = newPlayers.filter((pl: any) => pl.id !== cur.id && !pl.defeated);
@@ -87,13 +88,12 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
     let totalDamage = 0;
     let hp = victim.hp || 0;
     for (const d of darts) {
-      // Double Trouble: non-doubles deal 0 damage in battle too.
-      const dartBaseValue = doubleTroubleActive && !d.isDouble ? 0 : d.value;
+      // Bullseye Frenzy: bull hits deal double damage in battle too.
+      const isBull = d.value === 50 || d.value === 25;
+      const dartBaseValue = bullseyeFrenzyActive && isBull ? d.value * 2 : d.value;
       const dartValue = surgeActive ? dartBaseValue * 2 : dartBaseValue;
       const rawDmg = computeBattleDartDamage(dartValue, power, armor, settings);
       let dmg = crippleActive ? Math.round(rawDmg * 0.5) : rawDmg;
-      dmg = cursedActive ? Math.round(dmg * 0.5) : dmg;
-      dmg = overchargeActive ? Math.round(dmg * 1.25) : dmg;
       totalDamage += dmg;
       hp = Math.max(0, hp - dmg);
     }
@@ -192,19 +192,14 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
             ⚡ Surge active! This visit scores double.
           </div>
         )}
-        {game.powerUpsEnabled && (p as any)._doubleTrouble && (
+        {game.powerUpsEnabled && (p as any)._bullseyeFrenzy && (
           <div className="pu-banner" style={{ background: 'color-mix(in srgb,#a855f7 18%,var(--bg-3))', border: '1px solid #a855f7', color: '#c084fc' }}>
-            ✌️ Double Trouble! Only doubles and bulls deal damage this visit.
+            🐂 Bullseye Frenzy! Bulls deal double damage this visit.
           </div>
         )}
-        {game.powerUpsEnabled && (p as any)._overchargeNext && (
-          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#22d3ee 18%,var(--bg-3))', border: '1px solid #22d3ee', color: '#67e8f9' }}>
-            🔋 Overcharge! This visit deals +25% damage.
-          </div>
-        )}
-        {game.powerUpsEnabled && typeof (p as any)._cursedNext === 'number' && (p as any)._cursedNext > 0 && (
-          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#7c3aed 18%,var(--bg-3))', border: '1px solid #7c3aed', color: '#a78bfa' }}>
-            💀 Cursed! You deal 50% damage this visit ({(p as any)._cursedNext} visit{(p as any)._cursedNext === 1 ? '' : 's'} left).
+        {game.powerUpsEnabled && (p as any)._hotStreak && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#f97316 18%,var(--bg-3))', border: '1px solid #f97316', color: '#fb923c' }}>
+            🔥 Hot Streak! Each dart this visit earns +5 bonus per dart before it.
           </div>
         )}
         <div className="pc-slots">

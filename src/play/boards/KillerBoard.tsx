@@ -34,12 +34,8 @@ export function KillerBoard({ game, setGame, settings, players, games, toast, mu
     if (cur._crippledNext) delete cur._crippledNext;
     if (cur._fourthDart) delete cur._fourthDart;
     if (cur._oneDartNext) delete cur._oneDartNext;
-    if (cur._doubleTrouble) delete cur._doubleTrouble;
-    if (cur._overchargeNext) delete cur._overchargeNext;
-    if (typeof cur._cursedNext === 'number' && cur._cursedNext > 0) {
-      cur._cursedNext = cur._cursedNext - 1;
-      if (cur._cursedNext <= 0) delete cur._cursedNext;
-    }
+    if (cur._bullseyeFrenzy) delete cur._bullseyeFrenzy;
+    if (cur._hotStreak) delete cur._hotStreak;
     const isKiller = (cur.killerHits || 0) >= 5;
     let killedThisVisit: { killer: string; victim: string } | null = null;
 
@@ -132,19 +128,14 @@ export function KillerBoard({ game, setGame, settings, players, games, toast, mu
             ⚡ Surge active! This visit scores double.
           </div>
         )}
-        {game.powerUpsEnabled && (p as any)._doubleTrouble && (
+        {game.powerUpsEnabled && (p as any)._bullseyeFrenzy && (
           <div className="pu-banner" style={{ background: 'color-mix(in srgb,#a855f7 18%,var(--bg-3))', border: '1px solid #a855f7', color: '#c084fc' }}>
-            ✌️ Double Trouble! Only doubles and bulls count this visit.
+            🐂 Bullseye Frenzy! Bulls score double this visit.
           </div>
         )}
-        {game.powerUpsEnabled && (p as any)._overchargeNext && (
-          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#22d3ee 18%,var(--bg-3))', border: '1px solid #22d3ee', color: '#67e8f9' }}>
-            🔋 Overcharge! This visit scores +25%.
-          </div>
-        )}
-        {game.powerUpsEnabled && typeof (p as any)._cursedNext === 'number' && (p as any)._cursedNext > 0 && (
-          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#7c3aed 18%,var(--bg-3))', border: '1px solid #7c3aed', color: '#a78bfa' }}>
-            💀 Cursed! You score 50% this visit ({(p as any)._cursedNext} visit{(p as any)._cursedNext === 1 ? '' : 's'} left).
+        {game.powerUpsEnabled && (p as any)._hotStreak && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#f97316 18%,var(--bg-3))', border: '1px solid #f97316', color: '#fb923c' }}>
+            🔥 Hot Streak! Each dart this visit earns +5 bonus per dart before it.
           </div>
         )}
         <div className="pc-slots">
