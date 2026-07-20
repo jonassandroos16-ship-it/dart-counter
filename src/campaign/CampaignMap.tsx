@@ -113,7 +113,7 @@ export function CampaignMap({
                     {lvl.enemies.map(id => ENEMY_DATABASE[id]?.name || id).join(' · ')}
                   </div>
                   {reward && (
-                    <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4, minHeight: 38 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span className="pill" style={{
                           fontSize: 10, padding: '2px 8px', borderColor: 'transparent',
@@ -123,11 +123,13 @@ export function CampaignMap({
                           {rewardUnlocked ? `${reward.icon} ${reward.name} (unlocked)` : `🎁 Reward: ${reward.icon} ${reward.name}`}
                         </span>
                       </div>
-                      {!rewardUnlocked && missingClear.length > 0 && (
-                        <div className="muted small" style={{ fontSize: 11, fontStyle: 'italic', lineHeight: 1.4 }}>
-                          Not unlocked for everyone — {missingClear.join(', ')} still need{missingClear.length === 1 ? 's' : ''} to clear this level.
-                        </div>
-                      )}
+                      <div className="muted small" style={{ fontSize: 11, fontStyle: 'italic', lineHeight: 1.4, minHeight: 15 }}>
+                        {!rewardUnlocked && missingClear.length > 0
+                          ? `Not unlocked for everyone — ${missingClear.join(', ')} still need${missingClear.length === 1 ? 's' : ''} to clear this level.`
+                          : rewardUnlocked
+                            ? 'Reward unlocked for the whole party.'
+                            : 'Clear this level with the whole party to unlock the reward.'}
+                      </div>
                     </div>
                   )}
                 </div>
