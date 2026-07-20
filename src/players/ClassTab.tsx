@@ -43,7 +43,7 @@ export function ClassTab({ player, setPlayers, toast }: {
   return (
     <>
       <div className="muted small" style={{ marginBottom: 10 }}>
-        Pick a Coop class to grant your party a team-wide passive bonus during Coop battles. Each class has three tiers of passives with three options per tier — one starter passive is auto-equipped, and you can swap to any unlocked passive anytime.
+        Pick a Coop class to grant your party a team-wide passive bonus during Coop battles. Each class has five tiers of passives with three options per tier — one starter passive is auto-equipped, and you can swap to any unlocked passive anytime.
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, marginBottom: 14 }}>

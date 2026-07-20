@@ -298,12 +298,18 @@ export const BUILTIN_TITLES: TitleDef[] = [
   { id: 'coop_3_clears', name: 'Campaigner', desc: 'Clear 3 Co-op Campaign levels', icon: '🗺️',
     check: (_v, _gv, _g, ctx) => (ctx?.campaignProgress?.highest_level_beaten || 0) >= 3,
     progress: (ctx) => ({ current: Math.min(ctx?.campaignProgress?.highest_level_beaten || 0, 3), target: 3 }) },
-  { id: 'coop_boss_slayer', name: 'Boss Slayer', desc: 'Defeat the final boss of the Co-op Campaign', icon: '☠️',
+  { id: 'coop_boss_slayer', name: 'Boss Slayer', desc: 'Defeat the final boss of Chapter I', icon: '☠️',
     check: (_v, _gv, _g, ctx) => (ctx?.campaignProgress?.highest_level_beaten || 0) >= 5,
     progress: (ctx) => ({ current: Math.min(ctx?.campaignProgress?.highest_level_beaten || 0, 5), target: 5 }) },
-  { id: 'coop_full_clear', name: 'Campaign Conqueror', desc: 'Clear every Co-op Campaign level', icon: '👑',
+  { id: 'coop_ch2_clear', name: 'Thronebreaker', desc: 'Clear all of Chapter II · The Frozen Throne', icon: '❄️',
     check: (_v, _gv, _g, ctx) => (ctx?.campaignProgress?.highest_level_beaten || 0) >= 10,
     progress: (ctx) => ({ current: Math.min(ctx?.campaignProgress?.highest_level_beaten || 0, 10), target: 10 }) },
+  { id: 'coop_ch3_clear', name: 'Mawtamer', desc: 'Clear all of Chapter III · The Verdant Maw', icon: '🌿',
+    check: (_v, _gv, _g, ctx) => (ctx?.campaignProgress?.highest_level_beaten || 0) >= 15,
+    progress: (ctx) => ({ current: Math.min(ctx?.campaignProgress?.highest_level_beaten || 0, 15), target: 15 }) },
+  { id: 'coop_full_clear', name: 'Campaign Conqueror', desc: 'Clear every Co-op Campaign level across all three chapters', icon: '👑',
+    check: (_v, _gv, _g, ctx) => (ctx?.campaignProgress?.highest_level_beaten || 0) >= 15,
+    progress: (ctx) => ({ current: Math.min(ctx?.campaignProgress?.highest_level_beaten || 0, 15), target: 15 }) },
 ];
 
 
