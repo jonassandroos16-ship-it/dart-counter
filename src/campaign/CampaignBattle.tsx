@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { CampaignBattleState, CampaignProgress, CoopPowerUpDef, CoopPowerUpId, EnemyAttackStep } from './types';
+import type { CampaignBattleState, CampaignProgress, CoopPowerUpId } from './types';
 import {
   addDart, undoDart, resolvePlayerVisit,
   prepareEnemyTurn, applyNextEnemyAttack, setTarget, startBattle, getLevel,
@@ -11,7 +11,9 @@ import type { Player, Settings } from '../types';
 import { Sound } from '../sound';
 import { initials } from '../store';
 import { bumpCoopStat } from './coopStats';
-import { Modal } from '../Popups';
+import { CoopPowerUpOrb } from './CoopPowerUpOrb';
+import { DartOverlay } from './DartOverlay';
+import { FrozenOverlay } from './FrozenOverlay';
 
 interface Props {
   levelId: number;
@@ -32,15 +34,11 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
   );
   const [mult, setMult] = useState(1);
 
-  // Victory / defeat handling.
   useEffect(() => {
     if (state.outcome === 'victory') {
       Sound.play('win', {}, settings);
       bumpCoopStat('levelsCleared');
       const newHighest = Math.max(progress.highest_level_beaten, levelId);
-      // Determine if this level grants a power-up reward the player hasn't
-      // already unlocked. The first time a level is beaten, the reward is
-      // unlocked; replaying a level does not re-grant it.
       const rewardId = levelRewardPowerUp(levelId, chapterId);
       const alreadyUnlocked = !!rewardId && (progress.unlockedPowerUps || []).includes(rewardId);
       const grantId = rewardId && !alreadyUnlocked ? rewardId : null;
@@ -52,11 +50,6 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.outcome]);
 
-  // When entering the enemy phase, prepare the enemy attack steps. The UI
-  // then animates through them one at a time, requiring the player to tap
-  // "Continue" to advance — so the player can see what each dart did.
-  // Frozen enemies produce no attack steps; the frozen popup is shown
-  // instead (see `frozenEnemiesThisRound`).
   useEffect(() => {
     if (state.phase !== 'enemy') return;
     if (state.outcome !== 'ongoing') return;
@@ -95,9 +88,6 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
       Sound.play('impact', {}, settings);
       return;
     }
-    // No pending attacks — either the enemy phase is done, or all enemies
-    // were frozen this round. Advancing finishes the enemy turn and returns
-    // to the player phase.
     if (state.phase === 'enemy' && state.frozenEnemiesThisRound.length) {
       setState(prev => applyNextEnemyAttack(prev));
     }
@@ -117,11 +107,6 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
   };
 
   const partyHpPct = Math.max(0, Math.min(100, (state.partyHp / state.partyMaxHp) * 100));
-  // Show the player summary overlay once the player has thrown all 3 darts
-  // (or fewer, if every enemy is already defeated). The enemy overlay shows
-  // whenever there are pending enemy attacks to animate. The frozen overlay
-  // shows when the enemy phase has produced no attacks because every alive
-  // enemy is frozen — the player taps Continue to advance to their turn.
   const playerVisitDone = state.phase === 'player'
     && state.darts.length >= 3
     && state.outcome === 'ongoing';
@@ -169,7 +154,6 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
           <div style={{ height: '100%', width: `${partyHpPct}%`, background: '#ef4444', transition: 'width .4s' }} />
         </div>
 
-        {/* Party roster — shows all players, who's throwing now, and active buffs. */}
         <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
           {state.players.map((p, i) => {
             const isThrower = state.phase === 'player' && i === state.playerTurnIdx;
@@ -192,7 +176,6 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
                     {classDef.icon}
                   </span>
                 )}
-                {/* Per-player charge pip — shows each player's own orb progress. */}
                 <span title={`${p.name}'s power-up charge`} style={{
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   minWidth: 22, padding: '1px 5px', borderRadius: 8, fontSize: 9, fontWeight: 800,
@@ -218,8 +201,6 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
           })}
         </div>
 
-        {/* Passive bonus summary — shows the team-wide stat bonuses
-            contributed by each player's equipped class passives. */}
         {state.passiveBonus && (state.passiveBonus.power > 0 || state.passiveBonus.health > 0 || state.passiveBonus.armor > 0) && (
           <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {state.passiveBonus.power > 0 && (
@@ -332,23 +313,9 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
         })}
       </div>
 
-      {/* Coop power-up activation is handled via the orb in the player card header. */}
-
       {state.phantomDarts > 0 && state.phase === 'player' && (
         <div className="pill" style={{ marginTop: 6, background: 'color-mix(in srgb,#22d3ee 22%,var(--bg-3))', color: '#cffafe', borderColor: 'transparent' }}>
           👻 Phantom Darts active — next {state.phantomDarts} dart{state.phantomDarts === 1 ? '' : 's'} auto-bullseye
-        </div>
-      )}
-
-      {state.surgeDarts > 0 && state.phase === 'player' && (
-        <div className="pill" style={{ marginTop: 6, background: 'color-mix(in srgb,#fbbf24 22%,var(--bg-3))', color: '#fde68a', borderColor: 'transparent' }}>
-          ⚡ Surge active — next {state.surgeDarts} dart{state.surgeDarts === 1 ? '' : 's'} deal +50% damage
-        </div>
-      )}
-
-      {state.regenTurns > 0 && (
-        <div className="pill" style={{ marginTop: 6, background: 'color-mix(in srgb,#22c55e 22%,var(--bg-3))', color: '#bbf7d0', borderColor: 'transparent' }}>
-          🌿 Regen active — party heals 30 HP/turn for {state.regenTurns} more turn{state.regenTurns === 1 ? '' : 's'}
         </div>
       )}
 
@@ -389,273 +356,6 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
           onEndVisit={onEnter}
         />
       )}
-    </div>
-  );
-}
-
-// ── Coop power-up orb ─────────────────────────────────────────────────
-//
-// Mirrors the competitive PowerUpOrb: a circular button with a charge ring
-// and percentage badge. Opens a modal with the power-up description and an
-// activate button. Sits inside the player card header so it's always
-// visible during the player's turn — same placement pattern as the
-// competitive boards.
-function CoopPowerUpOrb({ charge, pu, canActivate, onActivate }: {
-  charge: number;
-  pu: CoopPowerUpDef | null;
-  canActivate: boolean;
-  onActivate: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const cap = 100;
-  const clamped = Math.max(0, Math.min(cap, charge));
-  const pct = Math.round((clamped / cap) * 100);
-  const ready = canActivate && !!pu;
-  const chargedButWaiting = !!pu && clamped >= (pu.cost || cap) && !canActivate;
-  const R = 22;
-  const C = 2 * Math.PI * R;
-  const dash = C * (pct / 100);
-  return (
-    <>
-      <button
-        onClick={() => setOpen(true)}
-        title={pu ? `${pu.name} (${pct}% charged)` : 'No coop power-up equipped'}
-        className={chargedButWaiting ? 'pu-orb-charged-waiting' : undefined}
-        style={{
-          position: 'relative', width: 52, height: 52, borderRadius: '50%',
-          background: ready || chargedButWaiting ? 'color-mix(in srgb,var(--accent) 18%,var(--bg-3))' : 'var(--bg-3)',
-          border: `2px solid ${ready || chargedButWaiting ? 'var(--accent)' : 'var(--border)'}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', padding: 0, color: 'inherit', flex: '0 0 auto',
-          boxShadow: ready || chargedButWaiting ? '0 0 12px color-mix(in srgb,var(--accent) 50%,transparent)' : 'none',
-          transition: 'box-shadow .2s, border-color .2s',
-        }}
-      >
-        <svg width="52" height="52" viewBox="0 0 52 52" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
-          <circle cx="26" cy="26" r={R} fill="none" stroke="var(--border)" strokeWidth="3" />
-          <circle cx="26" cy="26" r={R} fill="none"
-            stroke={ready ? 'var(--accent)' : 'color-mix(in srgb,var(--accent) 60%,var(--bg-3))'}
-            strokeWidth="3" strokeDasharray={`${dash} ${C}`} strokeLinecap="round"
-            style={{ transition: 'stroke-dasharray .4s ease' }} />
-        </svg>
-        <span style={{ fontSize: 20, zIndex: 1 }}>{pu ? pu.icon : '🔒'}</span>
-        <span style={{ position: 'absolute', bottom: -3, right: -3, fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 8, background: ready ? 'var(--accent)' : 'var(--bg-2)', color: ready ? '#04150a' : 'var(--muted)', border: '1px solid var(--border)' }}>{pct}%</span>
-      </button>
-      {open && pu ? (
-        <Modal onClose={() => setOpen(false)}>
-          <div style={{ textAlign: 'center', padding: 8 }}>
-            <div style={{ fontSize: 40, marginBottom: 8 }}>{pu.icon}</div>
-            <h3 style={{ margin: '0 0 6px' }}>{pu.name}</h3>
-            <div className="muted" style={{ fontSize: 13, lineHeight: 1.4, marginBottom: 12, maxWidth: 280 }}>{pu.desc}</div>
-            <div className="muted small" style={{ marginBottom: 12 }}>
-              {ready ? `Fully charged — ready to activate! (Costs ${pu.cost} charge.)` : `${pct}% charged — need ${pu.cost} to activate. Land doubles, triples and bulls to charge.`}
-            </div>
-            <div className="row" style={{ gap: 8, justifyContent: 'center' }}>
-              <button className="btn ghost" onClick={() => setOpen(false)}>Close</button>
-              <button className="btn primary" disabled={!ready} onClick={() => { setOpen(false); onActivate(); }}>Use Power-Up</button>
-            </div>
-          </div>
-        </Modal>
-      ) : null}
-    </>
-  );
-}
-
-// ── Post-visit / enemy-turn overlay ───────────────────────────────────
-//
-// For the player phase: shows a summary of every dart the thrower just
-// threw this visit — each dart's target, the damage dealt (or shield-break
-// / miss), and the resulting HP of each enemy hit. Defeated enemies are
-// called out. The player taps "Continue" to advance to the next player
-// or the enemy phase.
-//
-// For the enemy phase: shows every enemy dart thrown so far cumulatively
-// (dart 1, 2, 3…) with the running party HP, plus the current dart
-// highlighted. The player taps "Continue" to advance to the next dart.
-
-function DartOverlay({ state, onContinue, onEndVisit }: {
-  state: CampaignBattleState;
-  onContinue: () => void;
-  onEndVisit: () => void;
-}) {
-  const isPlayer = state.phase === 'player' && state.darts.length >= 3;
-  const [shakeKey, setShakeKey] = useState(0);
-  const currentEnemyStep = state.pendingEnemyAttacks[0];
-  useEffect(() => {
-    if (!isPlayer) setShakeKey(k => k + 1);
-  }, [currentEnemyStep, isPlayer]);
-
-  if (isPlayer) {
-    const thrower = state.players[state.playerTurnIdx];
-    const steps = state.resolvedDarts;
-    // Group consecutive darts by the enemy they hit for the HP display.
-    const totalDamage = steps.reduce((a, s) => a + s.damage, 0);
-    // Unique enemies hit this visit, preserving order.
-    const enemiesHit = steps.reduce((acc: { id: string; name: string; maxHp: number; finalHp: number; defeated: boolean }[], s) => {
-      const existing = acc.find(e => e.id === s.enemyId);
-      if (existing) {
-        existing.finalHp = s.hpAfter;
-        if (s.kind === 'defeated') existing.defeated = true;
-      } else {
-        const enemy = state.enemies.find(e => e.id === s.enemyId);
-        acc.push({
-          id: s.enemyId,
-          name: s.enemyName,
-          maxHp: enemy?.maxHp || 1,
-          finalHp: s.hpAfter,
-          defeated: s.kind === 'defeated',
-        });
-      }
-      return acc;
-    }, []);
-    return (
-      <div className="battle-overlay-bg">
-        <div className="battle-overlay" onClick={(e) => e.stopPropagation()}>
-          <div className="bo-header">
-            <span className="bo-attacker">
-              <span className="avatar" style={{ width: 28, height: 28, fontSize: 12, background: thrower?.color }}>{thrower ? initials(thrower.name) : '?'}</span>
-              <span className="bo-name">{thrower?.name || 'Player'}</span>
-            </span>
-            <span className="bo-vs">·</span>
-            <span className="bo-target">
-              <span className="bo-name">Visit summary</span>
-            </span>
-          </div>
-
-          {/* Per-dart list — all darts thrown this visit with their target. */}
-          <div className="bo-steps" style={{ marginTop: 4 }}>
-            {steps.map((s, i) => (
-              <div key={i} className={`bo-step current${s.damage <= 0 ? ' miss' : ''}`}>
-                <span className="bo-step-dart">{s.dart.label}</span>
-                <span className="bo-step-formula">
-                  → {s.enemyName} ·{' '}
-                  {s.kind === 'shield_break' ? `Broke ${s.shieldTarget} — 0 dmg`
-                    : s.kind === 'miss' ? 'Absorbed by shield — 0 dmg'
-                    : s.dart.value <= 0 ? 'Miss · 0 dmg'
-                    : `${s.dart.value} dmg`}
-                  {s.kind === 'defeated' ? ' · DEFEATED' : ''}
-                </span>
-                <span className="bo-step-dmg">{s.damage > 0 ? `-${s.damage}` : '0'}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Per-enemy HP summary — final HP after this visit's darts. */}
-          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {enemiesHit.map(e => {
-              const hpPct = Math.max(0, Math.min(100, (e.finalHp / e.maxHp) * 100));
-              return (
-                <div key={e.id} style={{ padding: '6px 8px', borderRadius: 8, background: 'var(--bg-3)', border: '1px solid var(--border)' }}>
-                  <div className="row between" style={{ marginBottom: 4 }}>
-                    <span className="bo-name" style={{ fontSize: 13 }}>{e.name}</span>
-                    <span className="muted small">
-                      {e.defeated ? <span style={{ color: '#ef4444', fontWeight: 800 }}>DEFEATED</span> : `${e.finalHp} / ${e.maxHp} HP`}
-                    </span>
-                  </div>
-                  <div className="bo-hp-tracks">
-                    <div className="bo-hp-fill" style={{ width: `${hpPct}%`, background: e.defeated ? 'var(--muted)' : '#ef4444' }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="bo-footer" style={{ marginTop: 10 }}>
-            <span className="muted small">Total this visit</span>
-            <span className="bo-total">-{totalDamage} HP</span>
-          </div>
-
-          <button className="btn primary block" style={{ marginTop: 12 }} onClick={onEndVisit}>
-            Continue
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Enemy phase overlay — show all darts thrown so far cumulatively.
-  const allSteps = [...state.appliedEnemyAttacks, ...(currentEnemyStep ? [currentEnemyStep] : [])];
-  const a = currentEnemyStep as EnemyAttackStep | undefined;
-  const maxHp = state.partyMaxHp || 1;
-  const hpPct = a ? Math.max(0, Math.min(100, (a.partyHpAfter / maxHp) * 100)) : 0;
-  const intensity = !a || a.damage <= 0 ? 0 : a.damage < 20 ? 1 : a.damage < 50 ? 2 : 3;
-  const shakeClass = intensity === 0 ? '' : intensity === 1 ? 'battle-shake-light' : intensity === 2 ? 'battle-shake-medium' : 'battle-shake-heavy';
-  return (
-    <div className="battle-overlay-bg">
-      <div className="battle-overlay" onClick={(e) => e.stopPropagation()}>
-        <div className="bo-header">
-          <span className="bo-attacker">
-            <span className="avatar" style={{ width: 28, height: 28, fontSize: 12, background: '#ef4444' }}>👹</span>
-            <span className="bo-name">{a?.enemyName || 'Enemy'}</span>
-          </span>
-          <span className="bo-vs">→</span>
-          <span className="bo-target">
-            <span className="bo-name">Party</span>
-          </span>
-        </div>
-        <div className={`bo-target-card ${shakeClass}`} key={shakeKey}>
-          <div className="bo-hp-row">
-            <span className="bo-hp-label">Party HP</span>
-            <span className="bo-hp-value">{a?.partyHpAfter ?? state.partyHp}</span>
-          </div>
-          <div className="bo-hp-track">
-            <div className="bo-hp-fill" style={{ width: `${hpPct}%`, background: '#ef4444', color: '#ef4444' }} />
-          </div>
-          {a && a.partyHpAfter <= 0 && <div className="bo-defeated">DEFEATED</div>}
-        </div>
-        <div className="bo-steps">
-          {allSteps.map((s, i) => {
-            const isCurrent = i === allSteps.length - 1 && !!currentEnemyStep;
-            return (
-              <div key={i} className={`bo-step ${isCurrent ? 'current' : 'past'}${s.damage <= 0 ? ' miss' : ''}`}>
-                <span className="bo-step-dart">{s.dart.label}</span>
-                <span className="bo-step-formula">
-                  {s.enemyName} · {s.dart.value <= 0 ? 'Miss · 0 dmg' : `${s.dart.value} dmg`}
-                </span>
-                <span className="bo-step-dmg">{s.damage > 0 ? `-${s.damage}` : '0'}</span>
-              </div>
-            );
-          })}
-        </div>
-        <button className="btn primary block" style={{ marginTop: 12 }} onClick={onContinue} disabled={!currentEnemyStep}>
-          {currentEnemyStep ? 'Continue' : 'Done'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ── Frozen overlay ───────────────────────────────────────────────────
-//
-// Shown when the enemy phase starts but every alive enemy is frozen. The
-// popup lists each frozen enemy and their remaining frozen turns, then the
-// player taps Continue to advance to their turn. The overlay uses an
-// ice-blue palette to reinforce the freeze context.
-function FrozenOverlay({ state, onContinue }: {
-  state: CampaignBattleState;
-  onContinue: () => void;
-}) {
-  const frozen = state.frozenEnemiesThisRound;
-  return (
-    <div className="battle-overlay-bg">
-      <div className="battle-overlay frozen-overlay" onClick={(e) => e.stopPropagation()}>
-        <div className="frozen-icon">❄️</div>
-        <div className="frozen-title">Enemies Frozen</div>
-        <div className="frozen-subtitle">
-          The cold holds them still — their turn is skipped.
-        </div>
-        <div>
-          {frozen.map(e => (
-            <div key={e.id} className="frozen-enemy-row">
-              <span>👹 {e.name}</span>
-              <span className="frozen-badge">❄ {e.frozenTurns} turn{e.frozenTurns === 1 ? '' : 's'} left</span>
-            </div>
-          ))}
-        </div>
-        <button className="btn primary block" style={{ marginTop: 12 }} onClick={onContinue}>
-          Continue
-        </button>
-      </div>
     </div>
   );
 }
