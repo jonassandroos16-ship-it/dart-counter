@@ -165,5 +165,64 @@ function applyCoopPowerUp(state: CampaignBattleState, id: CoopPowerUpId, thrower
     });
     return { ...state, enemies, partyHp: state.partyMaxHp, powerUpCharge: charge };
   }
+  // ── Chapter 3 advanced power-ups ────────────────────────────────────
+  if (id === 'coop_vine_grasp') {
+    // 50 dmg to every alive enemy + freeze 1 turn.
+    const enemies = state.enemies.map(e => {
+      if (e.defeated) return e;
+      const hp = Math.max(0, e.hp - 50);
+      return { ...e, hp, defeated: hp <= 0, frozenTurns: Math.max(e.frozenTurns, 1) };
+    });
+    return { ...state, enemies, powerUpCharge: charge };
+  }
+  if (id === 'coop_spore_burst') {
+    // 60 dmg + distract (-30% acc/precision) for 3 turns on every alive enemy.
+    const enemies = state.enemies.map(e => e.defeated ? e : {
+      ...e,
+      hp: Math.max(0, e.hp - 60),
+      defeated: e.hp - 60 <= 0,
+      distractedTurns: FOCUS_BUFF_TURNS,
+      distractAmount: Math.max(e.distractAmount, 0.3),
+    });
+    return { ...state, enemies, powerUpCharge: charge };
+  }
+  if (id === 'coop_thorn_lance') {
+    // 160 dmg to the targeted enemy, ignoring shields.
+    let targetIdx = state.targetIdx;
+    let target = state.enemies[targetIdx];
+    if (!target || target.defeated) {
+      const firstAlive = state.enemies.findIndex(e => !e.defeated);
+      if (firstAlive < 0) return { ...state, powerUpCharge: charge };
+      targetIdx = firstAlive;
+      target = state.enemies[targetIdx];
+    }
+    const enemies = state.enemies.map((e, i) => {
+      if (i !== targetIdx || e.defeated) return e;
+      const hp = Math.max(0, e.hp - 160);
+      return { ...e, hp, defeated: hp <= 0 };
+    });
+    return { ...state, enemies, targetIdx, powerUpCharge: charge };
+  }
+  if (id === 'coop_verdant_bloom') {
+    // Heal 100 + clear enemy shields + party +5 power for 3 turns.
+    const healed = Math.min(state.partyMaxHp, state.partyHp + 100);
+    const enemies = state.enemies.map(e => ({ ...e, shields: [] }));
+    const kind: PlayerBuff['kind'] = 'power';
+    const buffId = `${kind}_${Date.now()}`;
+    const players = state.players.map(p => ({
+      ...p,
+      buffs: [...p.buffs, { id: buffId, kind, amount: 5, turnsLeft: 3, source: thrower.id }],
+    }));
+    return { ...state, partyHp: healed, enemies, players, powerUpCharge: charge };
+  }
+  if (id === 'coop_heart_of_maw') {
+    // Boss reward: 220 dmg to every alive enemy + freeze 3 turns + clear shields + full heal.
+    const enemies = state.enemies.map(e => {
+      if (e.defeated) return e;
+      const hp = Math.max(0, e.hp - 220);
+      return { ...e, hp, defeated: hp <= 0, frozenTurns: 3, shields: [] };
+    });
+    return { ...state, enemies, partyHp: state.partyMaxHp, powerUpCharge: charge };
+  }
   return state;
 }
