@@ -114,12 +114,158 @@ export function lifetimeDartsThrown(playerId: string, games: any[]): number {
   return aggregate(playerId, games, (_g, visits) => dartsOf(visits).length, true);
 }
 
+// Lifetime total bull hits (25 or 50).
+export function lifetimeBulls(playerId: string, games: any[]): number {
+  return aggregate(playerId, games, (_g, visits) => dartsOf(visits).filter(isBull).length, true);
+}
+
+// Lifetime total hits on the 20 segment.
+export function lifetime20s(playerId: string, games: any[]): number {
+  return aggregate(playerId, games, (_g, visits) => dartsOf(visits).filter((d: any) => d.base === 20).length, true);
+}
+
+// Lifetime total "Classic 26" visits (20+1+5 = 26).
+export function lifetimeClassic26(playerId: string, games: any[]): number {
+  return aggregate(playerId, games, (_g, visits) => visits.filter((v: any) => {
+    if (v.bust || v.atc) return false;
+    const darts = v.darts || [];
+    if (darts.length !== 3) return false;
+    const bases = darts.map((d: any) => d.base).sort((a: number, b: number) => a - b);
+    return bases[0] === 1 && bases[1] === 5 && bases[2] === 20 && v.scored === 26;
+  }).length, true);
+}
+
+// Lifetime total "Ton" visits (100+).
+export function lifetimeTons(playerId: string, games: any[]): number {
+  return aggregate(playerId, games, (_g, visits) =>
+    visits.filter((v: any) => !v.bust && !v.atc && v.scored >= 100 && v.scored < 140).length, true);
+}
+
+// Lifetime total "Big Ton" visits (140+).
+export function lifetimeBigTons(playerId: string, games: any[]): number {
+  return aggregate(playerId, games, (_g, visits) =>
+    visits.filter((v: any) => !v.bust && !v.atc && v.scored >= 140 && v.scored < 180).length, true);
+}
+
+// Lifetime total hat tricks (3 bulls in one visit).
+export function lifetimeHatTricks(playerId: string, games: any[]): number {
+  return aggregate(playerId, games, (_g, visits) =>
+    visits.filter((v: any) => (v.darts || []).filter(isBull).length >= 3).length, true);
+}
+
+// Lifetime total "Triple Triple" visits (3 triples in one visit).
+export function lifetimeTripleTriples(playerId: string, games: any[]): number {
+  return aggregate(playerId, games, (_g, visits) =>
+    visits.filter((v: any) => (v.darts || []).filter((d: any) => d.mult === 3).length >= 3).length, true);
+}
+
+// Lifetime total "Double Dip" visits (3 doubles in one visit).
+export function lifetimeDoubleDips(playerId: string, games: any[]): number {
+  return aggregate(playerId, games, (_g, visits) =>
+    visits.filter((v: any) => (v.darts || []).filter((d: any) => d.mult === 2).length >= 3).length, true);
+}
+
+// Lifetime total "First Blood" awards (first to check out a leg in a multi-leg match).
+export function lifetimeFirstBloods(playerId: string, games: any[]): number {
+  let acc = 0;
+  for (const g of games || []) {
+    if (!g || !g.players || g.practice || g.atc) continue;
+    if (!g.legsBestOf || g.legsBestOf <= 1) continue;
+    if (!(g.players as any[]).some((p) => p.id === playerId)) continue;
+    let earliest: { pid: string; date: number } | null = null;
+    for (const pl of g.players || []) {
+      for (const visit of pl.visits || []) {
+        if (visit.remaining === 0 && !visit.bust) {
+          const t = new Date(visit.date || 0).getTime();
+          if (!earliest || t < earliest.date) earliest = { pid: pl.id, date: t };
+        }
+      }
+    }
+    if (earliest && earliest.pid === playerId) acc++;
+  }
+  return acc;
+}
+
+// Lifetime total "Comeback Kid" awards.
+export function lifetimeComebacks(playerId: string, games: any[]): number {
+  let acc = 0;
+  for (const g of games || []) {
+    if (!g || !g.players || g.practice || g.atc) continue;
+    if (!g.winner || g.winner !== playerId) continue;
+    const winner = (g.players as any[]).find((p) => p.id === g.winner);
+    if (!winner) continue;
+    const hadBigVisit = (winner.visits || []).some((v: any) => !v.bust && !v.atc && v.scored >= 150);
+    const players = g.players || [];
+    let trailedBy50 = false;
+    const totals: Record<string, number> = {};
+    players.forEach((p: any) => (totals[p.id] = 0));
+    const timeline: { pid: string; date: number; scored: number; bust: boolean; atc: boolean }[] = [];
+    players.forEach((p: any) => (p.visits || []).forEach(function (v: any) {
+      timeline.push({ pid: p.id, date: new Date(v.date || 0).getTime(), scored: v.scored || 0, bust: !!v.bust, atc: !!v.atc });
+    }));
+    timeline.sort((a, b) => a.date - b.date);
+    let winnerScored = 0;
+    for (const ev of timeline) {
+      if (ev.bust || ev.atc) continue;
+      const leaderScored = Math.max(...players.map((p: any) => totals[p.id] || 0));
+      if (ev.pid === winner.id && winnerScored + 50 <= leaderScored) trailedBy50 = true;
+      totals[ev.pid] = (totals[ev.pid] || 0) + ev.scored;
+      if (ev.pid === winner.id) winnerScored += ev.scored;
+    }
+    if (hadBigVisit || trailedBy50) acc++;
+  }
+  return acc;
+}
+
+// Lifetime total "Fully Charged" awards (power-up matches where orb reached full).
+export function lifetimeFullyCharged(playerId: string, games: any[]): number {
+  return aggregate(playerId, games, (_g, _visits) => {
+    const pl = (_g.players as any[])?.find((p) => p.id === playerId);
+    if (!pl) return 0;
+    return (pl.powerUpCharge || 0) >= 100 || (pl.powerUpUses || 0) > 0 ? 1 : 0;
+  }, true);
+}
+
+// Lifetime total "Unleashed" awards (power-up matches where power-up was activated).
+export function lifetimeUnleashed(playerId: string, games: any[]): number {
+  return aggregate(playerId, games, (_g, _visits) => {
+    const pl = (_g.players as any[])?.find((p) => p.id === playerId);
+    if (!pl) return 0;
+    return pl.powerUpUsed || (pl.powerUpUses || 0) > 0 ? 1 : 0;
+  }, true);
+}
+
+// Lifetime count of power-up matches won after activating a given power-up.
+function lifetimePowerUpWins(playerId: string, games: any[], puId: string): number {
+  let acc = 0;
+  for (const g of games || []) {
+    if (!g || !g.powerUpsEnabled || !g.winner || g.winner !== playerId) continue;
+    const w = (g.players || []).find((p: any) => p.id === playerId);
+    if (!w) continue;
+    const flagMap: Record<string, string> = {
+      pu_blocker: '_usedBlocker',
+      pu_surge: '_usedSurge',
+      pu_steal: '_usedSteal',
+      pu_freeze: '_usedFreeze',
+      pu_reroll: '_usedReroll',
+      pu_lucky_miss: '_usedLuckyMiss',
+      pu_fourth_dart: '_usedFourthDart',
+      pu_rethrow: '_usedRethrow',
+      pu_cripple: '_usedCripple',
+    };
+    if ((w as any).usedPowerUp === puId || (w as any)[flagMap[puId]] === true) acc++;
+  }
+  return acc;
+}
+
 export const BADGES: BadgeDef[] = [
   // ============ In-game (per player) ============
   { id: 'b_hit_bull', name: 'Hit Bull', desc: 'Hit any bull (25 or 50) during the game', icon: '🎯', kind: 'in-game',
-    check: (v) => dartsOf(v).some(isBull) },
+    check: (v) => dartsOf(v).some(isBull),
+    context: lifetimeBulls, contextLabel: 'bulls' },
   { id: 'b_hit_20', name: 'Hit 20', desc: 'Hit a 20 segment during the game', icon: '💥', kind: 'in-game',
-    check: (v) => dartsOf(v).some((d: any) => d.base === 20) },
+    check: (v) => dartsOf(v).some((d: any) => d.base === 20),
+    context: lifetime20s, contextLabel: '20s' },
   { id: 'b_classic_26', name: 'Classic 26', desc: 'Score a 26 with 20, 1, 5 in a single visit', icon: '🃏', kind: 'in-game',
     check: (v) => v.some((visit: any) => {
       if (visit.bust || visit.atc) return false;
@@ -127,20 +273,26 @@ export const BADGES: BadgeDef[] = [
       if (darts.length !== 3) return false;
       const bases = darts.map((d: any) => d.base).sort((a: number, b: number) => a - b);
       return bases[0] === 1 && bases[1] === 5 && bases[2] === 20 && visit.scored === 26;
-    }) },
+    }),
+    context: lifetimeClassic26, contextLabel: '26s' },
   { id: 'b_ton', name: 'Ton', desc: 'Score 100+ in a single visit', icon: '💯', kind: 'in-game',
-    check: (v) => v.some((visit: any) => !visit.bust && !visit.atc && visit.scored >= 100) },
+    check: (v) => v.some((visit: any) => !visit.bust && !visit.atc && visit.scored >= 100),
+    context: lifetimeTons, contextLabel: 'tons' },
   { id: 'b_ton40', name: 'Big Ton', desc: 'Score 140+ in a single visit', icon: '🔥', kind: 'in-game',
-    check: (v) => v.some((visit: any) => !visit.bust && !visit.atc && visit.scored >= 140) },
+    check: (v) => v.some((visit: any) => !visit.bust && !visit.atc && visit.scored >= 140),
+    context: lifetimeBigTons, contextLabel: 'big tons' },
   { id: 'b_ton80', name: 'Maximum', desc: 'Score a 180', icon: '💥', kind: 'in-game',
     check: (v) => v.some((visit: any) => !visit.bust && !visit.atc && visit.scored === 180),
     context: lifetime180s, contextLabel: '180s' },
   { id: 'b_hat_trick', name: 'Hat Trick', desc: 'Hit 3 bulls in one visit', icon: '🎩', kind: 'in-game',
-    check: (v) => v.some((visit: any) => (visit.darts || []).filter(isBull).length >= 3) },
+    check: (v) => v.some((visit: any) => (visit.darts || []).filter(isBull).length >= 3),
+    context: lifetimeHatTricks, contextLabel: 'hat tricks' },
   { id: 'b_triple_triple', name: 'Triple Triple', desc: 'Land 3 triples in one visit', icon: '🥞', kind: 'in-game',
-    check: (v) => v.some((visit: any) => (visit.darts || []).filter((d: any) => d.mult === 3).length >= 3) },
+    check: (v) => v.some((visit: any) => (visit.darts || []).filter((d: any) => d.mult === 3).length >= 3),
+    context: lifetimeTripleTriples, contextLabel: 'triple-triples' },
   { id: 'b_double_dip', name: 'Double Dip', desc: 'Land 3 doubles in one visit', icon: '💠', kind: 'in-game',
-    check: (v) => v.some((visit: any) => (visit.darts || []).filter((d: any) => d.mult === 2).length >= 3) },
+    check: (v) => v.some((visit: any) => (visit.darts || []).filter((d: any) => d.mult === 2).length >= 3),
+    context: lifetimeDoubleDips, contextLabel: 'double dips' },
   { id: 'b_buster', name: 'Buster', desc: 'Bust at least once', icon: '😵', kind: 'in-game',
     check: (v) => v.some((visit: any) => visit.bust),
     context: lifetimeBusts, contextLabel: 'busts' },
@@ -166,7 +318,8 @@ export const BADGES: BadgeDef[] = [
       // Award only the player who actually checked out first.
       return v.some((visit: any) => visit.remaining === 0 && !visit.bust &&
         new Date(visit.date || 0).getTime() === earliest!.date);
-    } },
+    },
+    context: lifetimeFirstBloods, contextLabel: 'first bloods' },
 
   // ============ Post-game (comparative — one winner per badge) ============
   { id: 'b_most_misses', name: 'Wild Throw', desc: 'Missed the most darts in the game', icon: '🌪️', kind: 'post-game',
@@ -202,7 +355,8 @@ export const BADGES: BadgeDef[] = [
       }
       if (hadBigVisit || trailedBy50) return winner.id;
       return null;
-    } },
+    },
+    context: lifetimeComebacks, contextLabel: 'comebacks' },
   { id: 'b_clutch', name: 'Clutch', desc: 'Checked out the winning leg from 100+ remaining', icon: '🏆', kind: 'post-game',
     pick: (game) => {
       if (!game || game.practice || game.atc) return null;
@@ -236,32 +390,43 @@ export const BADGES: BadgeDef[] = [
       const charged = (game.players || []).filter((p: any) => (p.powerUpCharge || 0) >= 100 || (p.powerUpUses || 0) > 0).map((p: any) => p.id);
       if (!charged.length) return null;
       return charged.length === 1 ? charged[0] : charged;
-    } },
+    },
+    context: lifetimeFullyCharged, contextLabel: 'charges' },
   { id: 'b_power_used', name: 'Unleashed', desc: 'Activate your equipped power-up during a power-up match', icon: '⚡', kind: 'post-game', powerUpOnly: true,
     pick: (game) => {
       if (!game || !game.powerUpsEnabled) return null;
       const used = (game.players || []).filter((p: any) => p.powerUpUsed || (p.powerUpUses || 0) > 0).map((p: any) => p.id);
       if (!used.length) return null;
       return used.length === 1 ? used[0] : used;
-    } },
+    },
+    context: lifetimeUnleashed, contextLabel: 'activations' },
   { id: 'b_power_blocker', name: 'Wall Builder', desc: 'Win a power-up match after activating Blocker', icon: '🛡️', kind: 'post-game', powerUpOnly: true,
-    pick: (game) => pickPowerUpWinner(game, 'pu_blocker') },
+    pick: (game) => pickPowerUpWinner(game, 'pu_blocker'),
+    context: (pid, games) => lifetimePowerUpWins(pid, games, 'pu_blocker'), contextLabel: 'wins' },
   { id: 'b_power_surge', name: 'Surge Rider', desc: 'Win a power-up match after activating Surge', icon: '⚡', kind: 'post-game', powerUpOnly: true,
-    pick: (game) => pickPowerUpWinner(game, 'pu_surge') },
+    pick: (game) => pickPowerUpWinner(game, 'pu_surge'),
+    context: (pid, games) => lifetimePowerUpWins(pid, games, 'pu_surge'), contextLabel: 'wins' },
   { id: 'b_power_steal', name: 'Thief', desc: 'Win a power-up match after activating Steal', icon: '🥷', kind: 'post-game', powerUpOnly: true,
-    pick: (game) => pickPowerUpWinner(game, 'pu_steal') },
+    pick: (game) => pickPowerUpWinner(game, 'pu_steal'),
+    context: (pid, games) => lifetimePowerUpWins(pid, games, 'pu_steal'), contextLabel: 'wins' },
   { id: 'b_power_freeze', name: 'Cold Snap', desc: 'Win a power-up match after activating Freeze', icon: '❄️', kind: 'post-game', powerUpOnly: true,
-    pick: (game) => pickPowerUpWinner(game, 'pu_freeze') },
+    pick: (game) => pickPowerUpWinner(game, 'pu_freeze'),
+    context: (pid, games) => lifetimePowerUpWins(pid, games, 'pu_freeze'), contextLabel: 'wins' },
   { id: 'b_power_reroll', name: 'Lucky Hand', desc: 'Win a power-up match after activating Reroll', icon: '🎲', kind: 'post-game', powerUpOnly: true,
-    pick: (game) => pickPowerUpWinner(game, 'pu_reroll') },
+    pick: (game) => pickPowerUpWinner(game, 'pu_reroll'),
+    context: (pid, games) => lifetimePowerUpWins(pid, games, 'pu_reroll'), contextLabel: 'wins' },
   { id: 'b_power_lucky', name: 'Saved', desc: 'Win a power-up match after activating Lucky Miss', icon: '🍀', kind: 'post-game', powerUpOnly: true,
-    pick: (game) => pickPowerUpWinner(game, 'pu_lucky_miss') },
+    pick: (game) => pickPowerUpWinner(game, 'pu_lucky_miss'),
+    context: (pid, games) => lifetimePowerUpWins(pid, games, 'pu_lucky_miss'), contextLabel: 'wins' },
   { id: 'b_power_fourth', name: 'Quad Squad', desc: 'Win a power-up match after activating Fourth Dart', icon: '🎯', kind: 'post-game', powerUpOnly: true,
-    pick: (game) => pickPowerUpWinner(game, 'pu_fourth_dart') },
+    pick: (game) => pickPowerUpWinner(game, 'pu_fourth_dart'),
+    context: (pid, games) => lifetimePowerUpWins(pid, games, 'pu_fourth_dart'), contextLabel: 'wins' },
   { id: 'b_power_rethrow', name: 'Second Chance', desc: 'Win a power-up match after activating Re-Throw', icon: '🔁', kind: 'post-game', powerUpOnly: true,
-    pick: (game) => pickPowerUpWinner(game, 'pu_rethrow') },
+    pick: (game) => pickPowerUpWinner(game, 'pu_rethrow'),
+    context: (pid, games) => lifetimePowerUpWins(pid, games, 'pu_rethrow'), contextLabel: 'wins' },
   { id: 'b_power_cripple', name: 'Saboteur', desc: 'Win a power-up match after activating Cripple', icon: '🦾', kind: 'post-game', powerUpOnly: true,
-    pick: (game) => pickPowerUpWinner(game, 'pu_cripple') },
+    pick: (game) => pickPowerUpWinner(game, 'pu_cripple'),
+    context: (pid, games) => lifetimePowerUpWins(pid, games, 'pu_cripple'), contextLabel: 'wins' },
 
   // ============ Co-op Campaign ============
   // Coop badges are awarded based on the campaign progress stored under

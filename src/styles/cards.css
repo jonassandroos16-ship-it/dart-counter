@@ -30,6 +30,19 @@
 .stat-cmp-val.worse { background: color-mix(in srgb, var(--danger) 30%, transparent); color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 55%, transparent); }
 .stat-cmp-val.neutral { background: var(--bg-2); color: var(--muted); border: 1px solid var(--border); }
 
+.stat-vs-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; }
+.stat-vs-header .stat-vs-name { font-size: 14px; }
+.stat-vs-header .stat-vs-vs { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; padding: 2px 8px; border-radius: 999px; background: var(--bg-3); }
+
+.stat-vs { padding: 10px 6px; }
+.stat-vs .stat-vs-row { display: flex; align-items: center; justify-content: center; gap: 4px; }
+.stat-vs .stat-vs-cell { flex: 1 1 0; min-width: 0; text-align: center; }
+.stat-vs .stat-vs-val { font-size: 16px; font-weight: 800; line-height: 1.1; overflow-wrap: anywhere; }
+.stat-vs .stat-vs-val.is-better { color: var(--accent); }
+.stat-vs .stat-vs-val.is-worse { color: var(--danger); }
+.stat-vs .stat-vs-sep { color: var(--muted); font-weight: 700; font-size: 14px; }
+.stat-vs .l { font-size: 10px; margin-top: 4px; }
+
 .list-item { display:flex; align-items:center; gap:12px; padding: 10px; border-radius: 12px; background: var(--bg-3); margin-bottom:8px; }
 .tabbar { display:flex; flex-wrap:wrap; gap:6px; background: var(--bg-3); padding:5px; border-radius: 12px; margin-bottom: 12px; }
 .tabbar button { flex:1 1 auto; min-width: 84px; padding:8px 10px; border-radius:9px; font-weight:700; font-size:13px; color: var(--muted); display:flex; align-items:center; justify-content:center; gap:6px; white-space:nowrap; }

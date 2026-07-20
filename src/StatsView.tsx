@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import type { Player, Settings } from './types';
-import { getTitleInfo, MODES, MODE_KEYS } from './constants';
+import { MODES, MODE_KEYS } from './constants';
 import { playerStats, levelFromXP, getPlayerXP, bucketAverages, allVisitsFor, filterGamesByDate } from './logic';
 import { LineChart, BarChart, DartboardHeatmap } from './Charts';
 import { CalendarPicker, filterForPeriod, describeFilter, type Period } from './CalendarPicker';
-import { BADGES, computeLifetimeBadgeCounts } from './badges';
+import { BADGES, computeLifetimeBadgeCounts, getBadgeContext, buildCoopBadgeCtx } from './badges';
 
 // For each stat: which direction is "better"? higher = bigger is better, lower = smaller is better.
 // null = neutral (no comparison). Used to color the comparison value red/green.
@@ -86,7 +86,6 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
   const s = playerStats(p.id, puFiltered);
   const xp = getPlayerXP(p);
   const li = levelFromXP(xp.xp, settings);
-  const ti = getTitleInfo(xp.selectedTitle, settings.customTitles);
   const visits = allVisitsFor(p.id, puFiltered);
   const cmpS = cmpPlayer ? playerStats(cmpPlayer.id, puFiltered) : null;
   const cmpXp = cmpPlayer ? getPlayerXP(cmpPlayer) : null;
@@ -144,44 +143,39 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
         <button className={`btn sm ${powerUpFilter === 'standard' ? 'primary' : 'ghost'}`} onClick={() => setPowerUpFilter('standard')}>Standard only</button>
         <button className={`btn sm ${powerUpFilter === 'powerups' ? 'primary' : 'ghost'}`} onClick={() => setPowerUpFilter('powerups')}>Power-up games</button>
       </div>
-      <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
-        <div style={{ position: 'relative', width: 80, height: 80, flexShrink: 0 }}>
-          <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
-            <circle cx="40" cy="40" r="34" fill="none" stroke="var(--border)" strokeWidth="6" />
-            <circle cx="40" cy="40" r="34" fill="none" stroke="var(--accent)" strokeWidth="6"
-              strokeDasharray={2 * Math.PI * 34} strokeDashoffset={2 * Math.PI * 34 * (1 - s.winRate / 100)}
-              strokeLinecap="round" style={{ transition: 'stroke-dashoffset .6s ease' }} />
-          </svg>
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800 }}>{s.winRate.toFixed(0)}%</div>
+      <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 24, marginBottom: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+          <div style={{ position: 'relative', width: 80, height: 80 }}>
+            <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+              <circle cx="40" cy="40" r="34" fill="none" stroke="var(--border)" strokeWidth="6" />
+              <circle cx="40" cy="40" r="34" fill="none" stroke="var(--accent)" strokeWidth="6"
+                strokeDasharray={2 * Math.PI * 34} strokeDashoffset={2 * Math.PI * 34 * (1 - s.winRate / 100)}
+                strokeLinecap="round" style={{ transition: 'stroke-dashoffset .6s ease' }} />
+            </svg>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800 }}>{s.winRate.toFixed(0)}%</div>
+          </div>
+          <div className="muted small" style={{ fontWeight: 700 }}>Win Rate</div>
         </div>
-        <div style={{ flex: 1 }}>
-          <h3 style={{ margin: '0 0 4px' }}>Win Rate</h3>
-          <div className="muted small">{s.gamesWon} won out of {s.competitiveGames} competitive games</div>
-          <div className="muted small" style={{ marginTop: 2 }}>{s.legsWon} legs won · {s.games} total games played</div>
-        </div>
-        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div className="xp-pill" style={{ marginBottom: 4 }}>Level {li.level}</div>
-          {ti ? <div className="title-badge" style={{ marginBottom: 4 }}>{ti.icon || ''} {ti.name}</div> : null}
-          <div className="muted small">{xp.xp || 0} total XP</div>
-          <div className="xp-bar" style={{ width: 80, marginTop: 4 }}><div style={{ width: `${Math.round(li.xpIntoLevel / li.xpNeeded * 100)}%` }} /></div>
-          <div className="muted small" style={{ marginTop: 2 }}>{li.xpIntoLevel}/{li.xpNeeded}</div>
-        </div>
-      </div>
-      <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
-        <div style={{ position: 'relative', width: 80, height: 80, flexShrink: 0 }}>
-          <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
-            <circle cx="40" cy="40" r="34" fill="none" stroke="var(--border)" strokeWidth="6" />
-            <circle cx="40" cy="40" r="34" fill="none" stroke="var(--muted)" strokeWidth="6"
-              strokeDasharray={2 * Math.PI * 34} strokeDashoffset={2 * Math.PI * 34 * (1 - s.tieRate / 100)}
-              strokeLinecap="round" style={{ transition: 'stroke-dashoffset .6s ease' }} />
-          </svg>
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800 }}>{s.tieRate.toFixed(0)}%</div>
-        </div>
-        <div style={{ flex: 1 }}>
-          <h3 style={{ margin: '0 0 4px' }}>Tie Rate</h3>
-          <div className="muted small">{s.gamesTied} tied out of {s.competitiveGames} competitive games</div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+          <div style={{ position: 'relative', width: 80, height: 80 }}>
+            <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+              <circle cx="40" cy="40" r="34" fill="none" stroke="var(--border)" strokeWidth="6" />
+              <circle cx="40" cy="40" r="34" fill="none" stroke="var(--muted)" strokeWidth="6"
+                strokeDasharray={2 * Math.PI * 34} strokeDashoffset={2 * Math.PI * 34 * (1 - s.tieRate / 100)}
+                strokeLinecap="round" style={{ transition: 'stroke-dashoffset .6s ease' }} />
+            </svg>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800 }}>{s.tieRate.toFixed(0)}%</div>
+          </div>
+          <div className="muted small" style={{ fontWeight: 700 }}>Tie Rate</div>
         </div>
       </div>
+      {cmpPlayer ? (
+        <div className="card stat-vs-header" style={{ marginBottom: 12 }}>
+          <div className="stat-vs-name" style={{ flex: 1, textAlign: 'center', fontWeight: 800 }}>{p.name}</div>
+          <div className="stat-vs-vs">vs</div>
+          <div className="stat-vs-name" style={{ flex: 1, textAlign: 'center', fontWeight: 800 }}>{cmpPlayer.name}</div>
+        </div>
+      ) : null}
       <div className="grid grid-3" style={{ marginBottom: 12 }}>
         {STAT_META.map(meta => {
           const val = statValue(meta, s, li, xp);
@@ -189,8 +183,9 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
           const display = hasVal ? meta.format(val) : (meta.empty || '—');
           let cmpDisplay: string | null = null;
           let cmpClass: 'better' | 'worse' | 'neutral' = 'neutral';
+          let cmpVal = 0;
           if (cmpPlayer && cmpS && cmpXp && cmpLi) {
-            const cmpVal = statValue(meta, cmpS, cmpLi, cmpXp);
+            cmpVal = statValue(meta, cmpS, cmpLi, cmpXp);
             const cmpHasVal = meta.empty ? (cmpVal > 0) : true;
             if (cmpHasVal) {
               cmpDisplay = meta.format(cmpVal);
@@ -198,15 +193,25 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
               else if (meta.better === 'lower') cmpClass = cmpVal < val ? 'worse' : cmpVal > val ? 'better' : 'neutral';
             }
           }
-          return (
-            <div key={meta.key} className={`stat${cmpPlayer && cmpDisplay ? ' stat-cmp' : ''}`}>
-              <div className="v">{display}</div>
-              {cmpPlayer && cmpDisplay ? (
-                <div className={`stat-cmp-val ${cmpClass}`} title={`vs ${cmpPlayer.name}`}>
-                  <span className="stat-cmp-arrow">{cmpClass === 'better' ? '▲' : cmpClass === 'worse' ? '▼' : '='}</span>
-                  {cmpDisplay}
+          if (cmpPlayer && cmpDisplay) {
+            return (
+              <div key={meta.key} className="stat stat-vs">
+                <div className="stat-vs-row">
+                  <div className="stat-vs-cell">
+                    <div className={`stat-vs-val ${cmpClass === 'better' ? 'is-better' : cmpClass === 'worse' ? 'is-worse' : ''}`}>{display}</div>
+                  </div>
+                  <div className="stat-vs-sep">·</div>
+                  <div className="stat-vs-cell">
+                    <div className={`stat-vs-val ${cmpClass === 'better' ? 'is-worse' : cmpClass === 'worse' ? 'is-better' : ''}`}>{cmpDisplay}</div>
+                  </div>
                 </div>
-              ) : null}
+                <div className="l">{meta.label}</div>
+              </div>
+            );
+          }
+          return (
+            <div key={meta.key} className="stat">
+              <div className="v">{display}</div>
               <div className="l">{meta.label}</div>
             </div>
           );
@@ -250,6 +255,7 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
           const b = BADGES.find(x => x.id === selectedBadge);
           if (!b) return null;
           const unlocked = (xp.unlockedBadges || []).includes(b.id);
+          const ctxInfo = getBadgeContext(b.id, p.id, puFiltered as any, buildCoopBadgeCtx());
           return (
             <div style={{ marginTop: 12, padding: 12, borderRadius: 12, background: 'var(--bg-3)', border: '1px solid var(--border)' }}>
               <div className="row" style={{ gap: 10, alignItems: 'center' }}>
@@ -260,6 +266,11 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
                   <div className="muted small" style={{ marginTop: 4 }}>
                     {unlocked ? `Earned ${badgeCounts[b.id] || 0}× — equip it from the Players screen to show it as your icon.` : 'Locked — earn it in a future game to unlock.'}
                   </div>
+                  {ctxInfo ? (
+                    <div className="muted small" style={{ marginTop: 4 }}>
+                      Lifetime {ctxInfo.label}: <strong style={{ color: 'var(--text)' }}>{ctxInfo.value}</strong>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
