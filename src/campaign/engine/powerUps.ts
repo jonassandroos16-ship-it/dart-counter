@@ -20,6 +20,12 @@ export const COOP_POWER_UPS: CoopPowerUpDef[] = [
   { id: 'coop_ice_lance', name: 'Ice Lance', icon: '🔱', desc: 'A single perfect shard — 120 damage to the targeted enemy, ignoring shields.', cost: 90, tier: 'advanced' },
   { id: 'coop_winter_veil', name: "Winter's Veil", icon: '🌫️', desc: 'Wrap the party in mist — restore 60 HP and shield against the next 2 turns of damage.', cost: 120, tier: 'advanced' },
   { id: 'coop_glacial_doom', name: 'Glacial Doom', icon: '🧊', desc: 'BOSS REWARD: 180 damage to every enemy, freeze them for 3 turns, and fully heal the party.', cost: 160, tier: 'advanced' },
+  // ── Advanced tier — Chapter 3 (Verdant Maw) ───────────────────────────
+  { id: 'coop_vine_grasp', name: 'Vine Grasp', icon: '🌿', desc: 'Root every enemy — 50 damage and freeze them for 1 turn.', cost: 100, tier: 'advanced' },
+  { id: 'coop_spore_burst', name: 'Spore Burst', icon: '🍄', desc: 'A choking cloud — 60 damage and -30% accuracy to every enemy for 3 turns.', cost: 110, tier: 'advanced' },
+  { id: 'coop_thorn_lance', name: 'Thorn Lance', icon: '🌵', desc: 'A single perfect thorn — 160 damage to the targeted enemy, ignoring shields.', cost: 100, tier: 'advanced' },
+  { id: 'coop_verdant_bloom', name: 'Verdant Bloom', icon: '🌸', desc: 'Restore 100 party HP, clear all enemy shields, and grant the party +5 power for 3 turns.', cost: 140, tier: 'advanced' },
+  { id: 'coop_heart_of_maw', name: 'Heart of the Maw', icon: '🫀', desc: 'BOSS REWARD: 220 damage to every enemy, freeze them for 3 turns, clear their shields, and fully heal the party.', cost: 180, tier: 'advanced' },
 ];
 
 export function getCoopPowerUp(id: CoopPowerUpId): CoopPowerUpDef | undefined {
