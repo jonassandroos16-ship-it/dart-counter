@@ -1,0 +1,195 @@
+import type {
+  CoopClassDef,
+  CoopClassId,
+  CoopPassiveDef,
+  CoopPassiveId,
+  PlayerCoopProgress,
+} from '../types';
+import type { Player } from '../../types';
+import { COOP_POWER_UPS } from './powerUps';
+
+// ── Coop classes & passives ────────────────────────────────────────────
+//
+// Three classes, each with three tiers of passives. Every tier offers three
+// distinct passives to choose from (9 per class total). Each tier is strictly
+// stronger than the one before. Passives grant team-wide stat bonuses while
+// the player is in the party. A player equips one passive at a time per class.
+
+export const COOP_CLASSES: CoopClassDef[] = [
+  { id: 'warrior', name: 'Warrior', icon: '⚔️', desc: 'A frontline striker. Grants the party flat POWER bonuses, making every dart hit harder.', starterPassive: 'war_power_1' },
+  { id: 'priest', name: 'Priest', icon: '✨', desc: 'A guardian healer. Grants the party flat MAX HP bonuses, so the party can soak more damage.', starterPassive: 'pri_hp_1' },
+  { id: 'rogue', name: 'Rogue', icon: '🗡️', desc: 'A nimble defender. Grants the party flat ARMOR bonuses, reducing every enemy dart.', starterPassive: 'rog_armor_1' },
+];
+
+export const COOP_PASSIVES: CoopPassiveDef[] = [
+  // Warrior — tier 1 (starter)
+  { id: 'war_power_1', classId: 'warrior', tier: 1, name: 'Battle Cry', icon: '⚔️', desc: 'Party +3 power (flat per dart).', bonus: { power: 3 }, xpRequired: 0 },
+  { id: 'war_crit_1', classId: 'warrior', tier: 1, name: 'Keen Edge', icon: '🎯', desc: 'Party +2 power and +1 armor (flat).', bonus: { power: 2, armor: 1 }, xpRequired: 0 },
+  { id: 'war_fury_1', classId: 'warrior', tier: 1, name: 'Iron Will', icon: '💪', desc: 'Party +2 power and +30 max HP.', bonus: { power: 2, health: 30 }, xpRequired: 0 },
+  // Warrior — tier 2
+  { id: 'war_power_2', classId: 'warrior', tier: 2, name: 'War Banner', icon: '🚩', desc: 'Party +8 power (flat per dart).', bonus: { power: 8 }, xpRequired: 50 },
+  { id: 'war_crit_2', classId: 'warrior', tier: 2, name: 'Bloodlust', icon: '🩸', desc: 'Party +6 power and +2 armor (flat).', bonus: { power: 6, armor: 2 }, xpRequired: 50 },
+  { id: 'war_fury_2', classId: 'warrior', tier: 2, name: 'Raging Roar', icon: '🦁', desc: 'Party +6 power and +80 max HP.', bonus: { power: 6, health: 80 }, xpRequired: 50 },
+  // Warrior — tier 3
+  { id: 'war_power_3', classId: 'warrior', tier: 3, name: 'Berserker Aura', icon: '🔥', desc: 'Party +15 power (flat per dart).', bonus: { power: 15 }, xpRequired: 150 },
+  { id: 'war_crit_3', classId: 'warrior', tier: 3, name: 'Executioner', icon: '🪓', desc: 'Party +12 power and +4 armor (flat).', bonus: { power: 12, armor: 4 }, xpRequired: 150 },
+  { id: 'war_fury_3', classId: 'warrior', tier: 3, name: 'Unbreakable', icon: '🛡️', desc: 'Party +12 power and +180 max HP.', bonus: { power: 12, health: 180 }, xpRequired: 150 },
+  // Priest — tier 1 (starter)
+  { id: 'pri_hp_1', classId: 'priest', tier: 1, name: 'Blessing', icon: '✨', desc: 'Party +60 max HP.', bonus: { health: 60 }, xpRequired: 0 },
+  { id: 'pri_regen_1', classId: 'priest', tier: 1, name: 'Mending', icon: '💧', desc: 'Party +40 max HP and +1 armor (flat).', bonus: { health: 40, armor: 1 }, xpRequired: 0 },
+  { id: 'pri_shield_1', classId: 'priest', tier: 1, name: 'Ward', icon: '🧿', desc: 'Party +40 max HP and +2 power (flat).', bonus: { health: 40, power: 2 }, xpRequired: 0 },
+  // Priest — tier 2
+  { id: 'pri_hp_2', classId: 'priest', tier: 2, name: 'Sanctuary', icon: '🙏', desc: 'Party +150 max HP.', bonus: { health: 150 }, xpRequired: 50 },
+  { id: 'pri_regen_2', classId: 'priest', tier: 2, name: 'Holy Renewal', icon: '🌿', desc: 'Party +110 max HP and +3 armor (flat).', bonus: { health: 110, armor: 3 }, xpRequired: 50 },
+  { id: 'pri_shield_2', classId: 'priest', tier: 2, name: 'Sacred Barrier', icon: '🔰', desc: 'Party +110 max HP and +5 power (flat).', bonus: { health: 110, power: 5 }, xpRequired: 50 },
+  // Priest — tier 3
+  { id: 'pri_hp_3', classId: 'priest', tier: 3, name: 'Divine Aegis', icon: '😇', desc: 'Party +300 max HP.', bonus: { health: 300 }, xpRequired: 150 },
+  { id: 'pri_regen_3', classId: 'priest', tier: 3, name: 'Eternal Spring', icon: '⛲', desc: 'Party +240 max HP and +6 armor (flat).', bonus: { health: 240, armor: 6 }, xpRequired: 150 },
+  { id: 'pri_shield_3', classId: 'priest', tier: 3, name: 'Celestial Bulwark', icon: '🌟', desc: 'Party +240 max HP and +10 power (flat).', bonus: { health: 240, power: 10 }, xpRequired: 150 },
+  // Rogue — tier 1 (starter)
+  { id: 'rog_armor_1', classId: 'rogue', tier: 1, name: 'Light Steps', icon: '🗡️', desc: 'Party +2 armor (flat per enemy dart).', bonus: { armor: 2 }, xpRequired: 0 },
+  { id: 'rog_dodge_1', classId: 'rogue', tier: 1, name: 'Nimble', icon: '💨', desc: 'Party +1 armor and +30 max HP.', bonus: { armor: 1, health: 30 }, xpRequired: 0 },
+  { id: 'rog_thorns_1', classId: 'rogue', tier: 1, name: 'Bristling', icon: '🌵', desc: 'Party +1 armor and +2 power (flat).', bonus: { armor: 1, power: 2 }, xpRequired: 0 },
+  // Rogue — tier 2
+  { id: 'rog_armor_2', classId: 'rogue', tier: 2, name: 'Shadow Veil', icon: '🌫️', desc: 'Party +5 armor (flat per enemy dart).', bonus: { armor: 5 }, xpRequired: 50 },
+  { id: 'rog_dodge_2', classId: 'rogue', tier: 2, name: 'Flicker', icon: '⚡', desc: 'Party +3 armor and +80 max HP.', bonus: { armor: 3, health: 80 }, xpRequired: 50 },
+  { id: 'rog_thorns_2', classId: 'rogue', tier: 2, name: 'Razor Edge', icon: '🔪', desc: 'Party +3 armor and +6 power (flat).', bonus: { armor: 3, power: 6 }, xpRequired: 50 },
+  // Rogue — tier 3
+  { id: 'rog_armor_3', classId: 'rogue', tier: 3, name: 'Phantom Guard', icon: '👻', desc: 'Party +10 armor (flat per enemy dart).', bonus: { armor: 10 }, xpRequired: 150 },
+  { id: 'rog_dodge_3', classId: 'rogue', tier: 3, name: 'Afterimage', icon: '🌀', desc: 'Party +7 armor and +180 max HP.', bonus: { armor: 7, health: 180 }, xpRequired: 150 },
+  { id: 'rog_thorns_3', classId: 'rogue', tier: 3, name: 'Spike Mail', icon: '🦔', desc: 'Party +7 armor and +12 power (flat).', bonus: { armor: 7, power: 12 }, xpRequired: 150 },
+];
+
+export function getCoopClass(id: CoopClassId | null | undefined): CoopClassDef | undefined {
+  if (!id) return undefined;
+  return COOP_CLASSES.find(c => c.id === id);
+}
+
+export function getCoopPassive(id: CoopPassiveId | null | undefined): CoopPassiveDef | undefined {
+  if (!id) return undefined;
+  return COOP_PASSIVES.find(p => p.id === id);
+}
+
+export function passivesForClass(classId: CoopClassId): CoopPassiveDef[] {
+  return COOP_PASSIVES.filter(p => p.classId === classId).sort((a, b) => a.tier - b.tier);
+}
+
+// Compute the team-wide passive bonus from a set of players' equipped
+// passives. Each player's equipped passive contributes its bonus to the
+// party independently — multiple players running the same passive (e.g.
+// two priests both equipping `pri_hp_1`) stack, granting +120 HP rather
+// than +60. Distinct passives (e.g. `pri_hp_1` and `pri_hp_2`) each
+// contribute independently as well, so a party with priests running
+// different tiers still benefits from every equipped passive.
+export interface PartyPassiveBonus {
+  power: number;
+  health: number;
+  armor: number;
+  sources: { playerId: string; playerName: string; passiveName: string; icon: string; bonus: CoopPassiveDef['bonus'] }[];
+}
+
+export function computePartyPassiveBonus(players: Player[]): PartyPassiveBonus {
+  const bonus: PartyPassiveBonus = { power: 0, health: 0, armor: 0, sources: [] };
+  for (const p of players) {
+    const prog = p.coopProgress;
+    if (!prog || !prog.classId) continue;
+    const equipped = prog.equippedPassives || [];
+    if (!equipped.length) continue;
+    for (const pid of equipped) {
+      const def = getCoopPassive(pid);
+      if (!def) continue;
+      bonus.power += def.bonus.power || 0;
+      bonus.health += def.bonus.health || 0;
+      bonus.armor += def.bonus.armor || 0;
+      bonus.sources.push({
+        playerId: p.id,
+        playerName: p.name,
+        passiveName: def.name,
+        icon: def.icon,
+        bonus: def.bonus,
+      });
+    }
+  }
+  return bonus;
+}
+
+// XP granted per Coop battle. Scaled by outcome (win = more) and darts thrown.
+export function coopXpForBattle(stats: { dartsThrown: number; enemiesDefeated: number }, won: boolean): number {
+  const base = won ? 20 : 5;
+  const dartBonus = Math.min(20, Math.floor(stats.dartsThrown / 3));
+  const defeatBonus = Math.min(15, stats.enemiesDefeated * 3);
+  return base + dartBonus + defeatBonus;
+}
+
+// Returns the list of passives a player can unlock/equip given their Coop XP.
+export function unlockedPassivesForPlayer(prog: PlayerCoopProgress | undefined | null): CoopPassiveId[] {
+  if (!prog || !prog.classId) return [];
+  const classPassives = passivesForClass(prog.classId);
+  return classPassives.filter(p => (prog.xp || 0) >= p.xpRequired).map(p => p.id);
+}
+
+// Default coop progress for a brand-new player: no class, 0 XP, no passives.
+export function defaultCoopProgress(): PlayerCoopProgress {
+  return { classId: null, xp: 0, unlockedPassives: [], equippedPassives: [] };
+}
+
+// When a player picks a class, auto-equip the class's starter passive
+// (the first tier-1 passive for that class). All tier-1 passives are
+// unlocked by default so the player can switch between them freely.
+export function selectClassForPlayer(prog: PlayerCoopProgress, classId: CoopClassId): PlayerCoopProgress {
+  const cls = getCoopClass(classId);
+  const starterId = cls?.starterPassive;
+  const tier1Ids = COOP_PASSIVES.filter(p => p.classId === classId && p.tier === 1).map(p => p.id);
+  return {
+    ...prog,
+    classId,
+    unlockedPassives: Array.from(new Set<CoopPassiveId>([...(prog.unlockedPassives || []), ...tier1Ids])),
+    equippedPassives: starterId ? [starterId] : [],
+  };
+}
+
+// Equip a passive for the player. Replaces any currently-equipped passive of
+// the same class (only one per class at a time).
+export function equipPassiveForPlayer(prog: PlayerCoopProgress, passiveId: CoopPassiveId): PlayerCoopProgress {
+  const def = getCoopPassive(passiveId);
+  if (!def || !prog.classId || def.classId !== prog.classId) return prog;
+  const unlocked = unlockedPassivesForPlayer(prog);
+  if (!unlocked.includes(passiveId)) return prog;
+  // Remove any currently-equipped passives of the same class, then add this one.
+  const other = (prog.equippedPassives || []).filter(id => {
+    const d = getCoopPassive(id);
+    return d && d.classId !== def.classId;
+  });
+  return { ...prog, equippedPassives: [...other, passiveId] };
+}
+
+// Add Coop XP to a player's progress, auto-unlocking any passives whose
+// XP threshold they now meet. Returns the updated progress and the list of
+// newly unlocked passive ids (for UI toast).
+export function addCoopXpForPlayer(prog: PlayerCoopProgress | undefined | null, xp: number): { progress: PlayerCoopProgress; newlyUnlocked: CoopPassiveId[] } {
+  const cur = prog || defaultCoopProgress();
+  if (!cur.classId) return { progress: cur, newlyUnlocked: [] };
+  const newXp = Math.max(0, (cur.xp || 0) + Math.max(0, xp));
+  const classPassives = passivesForClass(cur.classId);
+  const newlyUnlocked: CoopPassiveId[] = [];
+  const unlockedSet = new Set(cur.unlockedPassives || []);
+  for (const p of classPassives) {
+    if (newXp >= p.xpRequired && !unlockedSet.has(p.id)) {
+      newlyUnlocked.push(p.id);
+      unlockedSet.add(p.id);
+    }
+  }
+  return {
+    progress: { ...cur, xp: newXp, unlockedPassives: Array.from(unlockedSet) },
+    newlyUnlocked,
+  };
+}
+
+// Starter power-ups are always available. Advanced power-ups unlock as level
+// rewards. This helper returns the full list of ids a player can equip given
+// their campaign progress.
+export function unlockedCoopPowerUps(progress: { unlockedPowerUps?: string[] } | undefined | null): string[] {
+  const starter = COOP_POWER_UPS.filter(p => p.tier === 'starter').map(p => p.id);
+  const advanced = (progress?.unlockedPowerUps || []) as string[];
+  return [...starter, ...advanced];
+}
