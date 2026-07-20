@@ -420,6 +420,23 @@ export function playerStats(playerId: string, games: GameRecord[]) {
   return { games: playerGames.length, competitiveGames: competitiveGames.length, gamesWon, gamesTied, legsWon, winRate, tieRate, avg: totalDarts ? totalScore / totalDarts * 3 : 0, first9, highScore, highCheckout, n180, n140, tons, visits, dartsThrown, finishMin, finishMax, finishAvg, legsFinished: finishDartsList.length, kills, defeatedCount, battleGames: battleGames.length };
 }
 
+// Head-to-head win/tie rates: only games where both `playerId` and `opponentId`
+// played each other. Lets the stats screen compare player 1 specifically against
+// player 2 (and 3) instead of blending in games against everyone else.
+export function headToHeadStats(playerId: string, opponentId: string, games: GameRecord[]) {
+  const shared = games.filter(g =>
+    g.players.length >= 2 &&
+    g.players.some(p => p.id === playerId) &&
+    g.players.some(p => p.id === opponentId)
+  );
+  const gamesWon = shared.filter(g => g.winner === playerId).length;
+  const gamesTied = shared.filter(g => g.tied && g.tiedPlayers && g.tiedPlayers.includes(playerId)).length;
+  const total = shared.length;
+  const winRate = total ? gamesWon / total * 100 : 0;
+  const tieRate = total ? gamesTied / total * 100 : 0;
+  return { games: total, gamesWon, gamesTied, winRate, tieRate };
+}
+
 export function bucketAverages(visits: any[], period: string) {
   if (!visits.length) return { labels: [], values: [] };
   const key = (d: string) => {

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Player, Settings } from './types';
 import { MODES, MODE_KEYS } from './constants';
-import { playerStats, levelFromXP, getPlayerXP, bucketAverages, allVisitsFor, filterGamesByDate } from './logic';
+import { playerStats, levelFromXP, getPlayerXP, bucketAverages, allVisitsFor, filterGamesByDate, headToHeadStats } from './logic';
 import { LineChart, BarChart, DartboardHeatmap } from './Charts';
 import { CalendarPicker, filterForPeriod, describeFilter, type Period } from './CalendarPicker';
 import { BADGES, computeLifetimeBadgeCounts, getBadgeContext, buildCoopBadgeCtx } from './badges';
@@ -90,6 +90,12 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
   const cmpS = cmpPlayer ? playerStats(cmpPlayer.id, puFiltered) : null;
   const cmpXp = cmpPlayer ? getPlayerXP(cmpPlayer) : null;
   const cmpLi = cmpXp ? levelFromXP(cmpXp.xp, settings) : null;
+  // When comparing, ring rates are head-to-head vs the selected opponent only.
+  const h2h = cmpPlayer ? headToHeadStats(p.id, cmpPlayer.id, puFiltered as any) : null;
+  const cmpH2h = cmpPlayer ? headToHeadStats(cmpPlayer.id, p.id, puFiltered as any) : null;
+  const ringWinRate = h2h ? h2h.winRate : s.winRate;
+  const ringTieRate = h2h ? h2h.tieRate : s.tieRate;
+  const cmpRingWinRate = cmpH2h ? cmpH2h.winRate : (cmpS ? cmpS.winRate : 0);
   const badgeCounts = useMemo(() => {
     const stored = xp.badgeCounts || {};
     const fromHistory = computeLifetimeBadgeCounts(p.id, puFiltered as any);
@@ -149,25 +155,39 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
             <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
               <circle cx="40" cy="40" r="34" fill="none" stroke="var(--border)" strokeWidth="6" />
               <circle cx="40" cy="40" r="34" fill="none" stroke="var(--accent)" strokeWidth="6"
-                strokeDasharray={2 * Math.PI * 34} strokeDashoffset={2 * Math.PI * 34 * (1 - s.winRate / 100)}
+                strokeDasharray={2 * Math.PI * 34} strokeDashoffset={2 * Math.PI * 34 * (1 - ringWinRate / 100)}
                 strokeLinecap="round" style={{ transition: 'stroke-dashoffset .6s ease' }} />
             </svg>
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800 }}>{s.winRate.toFixed(0)}%</div>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800 }}>{ringWinRate.toFixed(0)}%</div>
           </div>
-          <div className="muted small" style={{ fontWeight: 700 }}>Win Rate</div>
+          <div className="muted small" style={{ fontWeight: 700 }}>Win Rate{cmpPlayer ? ` vs ${cmpPlayer.name}` : ''}</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
           <div style={{ position: 'relative', width: 80, height: 80 }}>
             <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
               <circle cx="40" cy="40" r="34" fill="none" stroke="var(--border)" strokeWidth="6" />
               <circle cx="40" cy="40" r="34" fill="none" stroke="var(--muted)" strokeWidth="6"
-                strokeDasharray={2 * Math.PI * 34} strokeDashoffset={2 * Math.PI * 34 * (1 - s.tieRate / 100)}
+                strokeDasharray={2 * Math.PI * 34} strokeDashoffset={2 * Math.PI * 34 * (1 - ringTieRate / 100)}
                 strokeLinecap="round" style={{ transition: 'stroke-dashoffset .6s ease' }} />
             </svg>
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800 }}>{s.tieRate.toFixed(0)}%</div>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800 }}>{ringTieRate.toFixed(0)}%</div>
           </div>
-          <div className="muted small" style={{ fontWeight: 700 }}>Tie Rate</div>
+          <div className="muted small" style={{ fontWeight: 700 }}>Tie Rate{cmpPlayer ? ` vs ${cmpPlayer.name}` : ''}</div>
         </div>
+        {cmpPlayer ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+            <div style={{ position: 'relative', width: 80, height: 80 }}>
+              <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                <circle cx="40" cy="40" r="34" fill="none" stroke="var(--border)" strokeWidth="6" />
+                <circle cx="40" cy="40" r="34" fill="none" stroke="var(--accent)" strokeWidth="6"
+                  strokeDasharray={2 * Math.PI * 34} strokeDashoffset={2 * Math.PI * 34 * (1 - cmpRingWinRate / 100)}
+                  strokeLinecap="round" style={{ transition: 'stroke-dashoffset .6s ease' }} />
+              </svg>
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800 }}>{cmpRingWinRate.toFixed(0)}%</div>
+            </div>
+            <div className="muted small" style={{ fontWeight: 700 }}>Win Rate vs {p.name}</div>
+          </div>
+        ) : null}
       </div>
       {cmpPlayer ? (
         <div className="card stat-vs-header" style={{ marginBottom: 12 }}>
