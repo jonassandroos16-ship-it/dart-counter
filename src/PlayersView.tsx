@@ -107,15 +107,19 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
           </div>
         );
       })}
-      {editing && <EditPlayerModal player={editing} players={players} isNew={isNew} games={games} settings={settings} onClose={() => {
-        if (isNew && !editing.name) setPlayers((prev: Player[]) => prev.filter(p => p.id !== editing.id));
+      {editing && <EditPlayerModal player={editing} players={players} isNew={isNew} games={games} settings={settings} onClose={(saved) => {
+        // `saved` is true when the user clicked Save in the modal — in that
+        // case the player is already committed with a name and must NOT be
+        // discarded. Without this flag, the stale `editing.name` snapshot
+        // (still '') would delete the player we just saved.
+        if (isNew && !saved) setPlayers((prev: Player[]) => prev.filter(p => p.id !== editing.id));
         setEditing(null);
       }} setPlayers={setPlayers} toast={toast} />}
     </div>
   );
 }
 
-function EditPlayerModal({ player, players, isNew, games, settings, onClose, setPlayers, toast }: { player: Player; players: Player[]; isNew: boolean; games: any[]; settings: Settings; onClose: () => void; setPlayers: (updater: any) => void; toast: (m: string) => void }) {
+function EditPlayerModal({ player, players, isNew, games, settings, onClose, setPlayers, toast }: { player: Player; players: Player[]; isNew: boolean; games: any[]; settings: Settings; onClose: (saved: boolean) => void; setPlayers: (updater: any) => void; toast: (m: string) => void }) {
   const [tab, setTab] = useState<'basic' | 'titles' | 'badges' | 'sound' | 'attributes' | 'powerups' | 'class'>('basic');
   const [name, setName] = useState(player.name);
   const [color, setColor] = useState(player.color || COLORS[0]);
@@ -153,11 +157,11 @@ function EditPlayerModal({ player, players, isNew, games, settings, onClose, set
     if (!name.trim()) { toast('Enter a name first'); return; }
     patchPlayer({ name: name.trim(), color, sound, showdownBg });
     toast('Player added');
-    onClose();
+    onClose(true);
   };
 
   return (
-    <Modal onClose={onClose}>
+    <Modal onClose={() => onClose(false)}>
       <h3 style={{ marginBottom: 8 }}>{isNew ? 'Add' : 'Edit'} Player — {name || livePlayer.name}</h3>
       <div className="tabbar" style={{ marginBottom: 14 }}>
         <button className={tab === 'basic' ? 'on' : ''} onClick={() => setTab('basic')}>Basic</button>
@@ -295,7 +299,7 @@ function EditPlayerModal({ player, players, isNew, games, settings, onClose, set
       )}
 
       <div className="row" style={{ gap: 10, marginTop: 16 }}>
-        <button className="btn block ghost" onClick={onClose}>Cancel</button>
+        <button className="btn block ghost" onClick={() => onClose(false)}>Cancel</button>
         {isNew && <button className="btn block primary" onClick={saveNew}>Save</button>}
       </div>
     </Modal>
