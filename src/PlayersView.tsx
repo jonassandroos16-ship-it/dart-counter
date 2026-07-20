@@ -734,7 +734,7 @@ function ClassTab({ player, setPlayers, toast }: { player: Player; setPlayers: (
   return (
     <>
       <div className="muted small" style={{ marginBottom: 10 }}>
-        Pick a Coop class to grant your party a team-wide passive bonus during Coop battles. Each class has a starter passive (always active) plus stronger passives you unlock with Coop XP earned by playing Coop.
+        Pick a Coop class to grant your party a team-wide passive bonus during Coop battles. Each class has three tiers of passives with three options per tier — one starter passive is auto-equipped, and you can swap to any unlocked passive anytime.
       </div>
 
       {/* Class selection */}
@@ -778,13 +778,13 @@ function ClassTab({ player, setPlayers, toast }: { player: Player; setPlayers: (
             <div className="muted small" style={{ marginTop: 4 }}>Earn Coop XP by playing Coop battles — wins give more than losses.</div>
           </div>
 
-          {/* Passives for the selected class — 3 tiers, each stronger than the last. */}
+          {/* Passives for the selected class — 3 tiers, 3 passives per tier. */}
           <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Passives</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {classPassives.map(p => {
               const isUnlocked = unlockedIds.includes(p.id);
               const isEquipped = (prog.equippedPassives || []).includes(p.id);
-              const xpPct = Math.min(100, Math.round(((prog.xp || 0) / p.xpRequired) * 100));
+              const xpPct = p.xpRequired > 0 ? Math.min(100, Math.round(((prog.xp || 0) / p.xpRequired) * 100)) : 100;
               return (
                 <div key={p.id} style={{
                   position: 'relative',

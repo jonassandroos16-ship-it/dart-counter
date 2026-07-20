@@ -314,10 +314,10 @@ export interface CampaignBattleState {
 // ── Coop classes & passives ───────────────────────────────────────────
 //
 // Each player can pick one of three classes for Coop mode: Warrior, Priest,
-// or Rogue. Each class has a starter passive that's always active, plus a
-// progression of three stronger passives that unlock with Coop XP earned by
-// playing Coop battles. Passives grant team-wide stat bonuses while the
-// player is in the party.
+// or Rogue. Each class has three tiers of passives (starter, tier 2, tier 3),
+// with three distinct passives per tier to choose from — nine passives per
+// class total. Passives grant team-wide stat bonuses while the player is in
+// the party. A player equips one passive at a time per class.
 
 export type CoopClassId = 'warrior' | 'priest' | 'rogue';
 
@@ -331,23 +331,23 @@ export interface CoopClassDef {
 }
 
 export type CoopPassiveId =
-  // Warrior — party power bonuses
-  | 'war_power_1'
-  | 'war_power_2'
-  | 'war_power_3'
-  // Priest — party HP bonuses
-  | 'pri_hp_1'
-  | 'pri_hp_2'
-  | 'pri_hp_3'
-  // Rogue — party armor bonuses
-  | 'rog_armor_1'
-  | 'rog_armor_2'
-  | 'rog_armor_3';
+  // Warrior — party power bonuses (3 per tier: power, crit, lifesteal-style)
+  | 'war_power_1' | 'war_crit_1' | 'war_fury_1'
+  | 'war_power_2' | 'war_crit_2' | 'war_fury_2'
+  | 'war_power_3' | 'war_crit_3' | 'war_fury_3'
+  // Priest — party sustain/HP bonuses (3 per tier: hp, regen, shield)
+  | 'pri_hp_1' | 'pri_regen_1' | 'pri_shield_1'
+  | 'pri_hp_2' | 'pri_regen_2' | 'pri_shield_2'
+  | 'pri_hp_3' | 'pri_regen_3' | 'pri_shield_3'
+  // Rogue — party defense bonuses (3 per tier: armor, dodge, thorns)
+  | 'rog_armor_1' | 'rog_dodge_1' | 'rog_thorns_1'
+  | 'rog_armor_2' | 'rog_dodge_2' | 'rog_thorns_2'
+  | 'rog_armor_3' | 'rog_dodge_3' | 'rog_thorns_3';
 
 export interface CoopPassiveDef {
   id: CoopPassiveId;
   classId: CoopClassId;
-  tier: 1 | 2 | 3; // 1 = starter, 2/3 = progression
+  tier: 1 | 2 | 3; // 1 = starter, 2/3 = progression. 3 passives per tier per class.
   name: string;
   icon: string;
   desc: string;
