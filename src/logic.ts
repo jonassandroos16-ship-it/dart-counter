@@ -203,7 +203,7 @@ export function totalPowerUpPointsForLevel(level: number, settings: Settings): n
 
 export function reconcilePlayerPoints(player: Player, settings: Settings): Player {
   // Derive level from XP so the reconciler never relies on a stale cached
-  // `player.level` (e.g. older saves or imported players where level wasn't
+  // `player.level` field (e.g. older saves or imported players where level wasn't
   // persisted). `levelFromXP` is the source of truth for level progression.
   const level = levelFromXP(player.xp ?? 0, settings).level;
   const cfg = settings.powerUpScaling;
@@ -308,17 +308,22 @@ export function reconcileAllPlayersPoints(players: Player[], settings: Settings)
 // successful hit always deals at least `battleMinDamage` (default 1) so armor
 // can never fully neutralize a turn.
 //
-//   damage(dart) = max(0, dartValue + power) − armor   →   clamp to [minDamage, ∞) on hit, 0 on miss
+// Armor is a percentage (0..armorMax, where armorMax defaults to 25 meaning
+// "25%"). It reduces the post-power damage multiplicatively:
+//
+//   damage(dart) = round((dartValue + power) * (1 − armor/100))
+//                  → clamp to [minDamage, ∞) on hit, 0 on miss
 export function computeBattleDartDamage(dartValue: number, attackerPower: number, targetArmor: number, settings: Settings): number {
   const cfg = settings.powerUpScaling;
   const powerMax = Number.isFinite(cfg.powerMax) ? cfg.powerMax : Number.MAX_SAFE_INTEGER;
-  const armorMax = Number.isFinite(cfg.armorMax) ? cfg.armorMax : Number.MAX_SAFE_INTEGER;
+  const armorMax = Number.isFinite(cfg.armorMax) ? cfg.armorMax : 100;
   const minDamage = Number.isFinite(cfg.battleMinDamage) && cfg.battleMinDamage > 0 ? cfg.battleMinDamage : 1;
   const power = Math.min(powerMax, Math.max(0, attackerPower));
-  const armor = Math.min(armorMax, Math.max(0, targetArmor));
+  const armorPct = Math.min(armorMax, Math.max(0, targetArmor));
   if (dartValue <= 0) return 0; // miss — power only applies on successful hits
-  const raw = Math.max(0, dartValue + power) - armor;
-  return Math.max(minDamage, raw);
+  const base = Math.max(0, dartValue + power);
+  const mitigated = base * (1 - armorPct / 100);
+  return Math.max(minDamage, Math.round(mitigated));
 }
 
 // Convenience: total damage across a visit's darts.

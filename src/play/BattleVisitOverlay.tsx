@@ -22,8 +22,8 @@ export interface BattleVisitOverlayProps {
 // Animated overlay that walks through each dart of a battle visit one at a
 // time, showing the per-dart damage formula, draining the target's HP bar in
 // step, and shaking the target card with intensity proportional to the
-// damage dealt by that dart. The overlay auto-advances and closes itself
-// after the final dart.
+// damage dealt by that dart. The overlay auto-advances through the darts but
+// stays open after the final dart until the player closes it.
 export function BattleVisitOverlay({ attacker, target, darts, settings, surgeActive, onDone }: BattleVisitOverlayProps) {
   const cfg = settings.powerUpScaling;
   const power = Math.min(cfg.powerMax, Math.max(0, attacker.powerPct || 0));
@@ -38,8 +38,8 @@ export function BattleVisitOverlay({ attacker, target, darts, settings, surgeAct
       const formula = dartValue <= 0
         ? `Miss · 0 dmg`
         : surgeActive
-          ? `Surge ×2 → ${dartValue} · (${dartValue} + ${power}) − ${armor} = ${damage} dmg`
-          : `(${dartValue} + ${power}) − ${armor} = ${damage} dmg`;
+          ? `Surge ×2 → ${dartValue} · (${dartValue} + ${power}) × (1 − ${armor}%) = ${damage} dmg`
+          : `(${dartValue} + ${power}) × (1 − ${armor}%) = ${damage} dmg`;
       return { dart, damage, hpAfter: hp, formula };
     });
   }, [darts, power, armor, settings, cfg.battleMinDamage, target.hp, target.maxHp, surgeActive]);
@@ -56,13 +56,11 @@ export function BattleVisitOverlay({ attacker, target, darts, settings, surgeAct
   const defeated = finalHp <= 0;
 
   // Advance through each dart with a small delay so the user can read the
-  // formula and see the HP bar animate. After the last dart, wait a touch
-  // longer then dismiss.
+  // formula and see the HP bar animate. After the last dart, the overlay
+  // stays open until the player presses the Close button (or clicks the
+  // backdrop) — it no longer auto-dismisses.
   useEffect(() => {
-    if (stepIdx >= steps.length) {
-      const t = setTimeout(onDone, defeated ? 1400 : 900);
-      return () => clearTimeout(t);
-    }
+    if (stepIdx >= steps.length) return;
     const step = steps[stepIdx];
     const t = setTimeout(() => {
       setDisplayedHp(step.hpAfter);
@@ -74,7 +72,7 @@ export function BattleVisitOverlay({ attacker, target, darts, settings, surgeAct
       setStepIdx((i) => i + 1);
     }, 650);
     return () => clearTimeout(t);
-  }, [stepIdx, steps, onDone, defeated]);
+  }, [stepIdx, steps, defeated]);
 
   const maxHp = target.maxHp || 1;
   const hpPct = Math.max(0, Math.min(100, (displayedHp / maxHp) * 100));
