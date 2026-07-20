@@ -1104,11 +1104,25 @@ export class MusicEngine {
     this.track = trackId;
     const master = this.buildOutput(ctx);
     const musicVol = settings.musicVolume ?? 0.8;
-    const now = ctx.currentTime;
-    master.gain.setValueAtTime(0.0001, now);
-    const target = masterTarget(def.context) * musicVol;
-    master.gain.linearRampToValueAtTime(target, now + 1.0);
-    this.playTrack(def, ctx);
+    const begin = () => {
+      if (this.track !== trackId) return;
+      const now = ctx.currentTime;
+      master.gain.setValueAtTime(0.0001, now);
+      const target = masterTarget(def.context) * musicVol;
+      master.gain.linearRampToValueAtTime(target, now + 1.0);
+      this.playTrack(def, ctx);
+    };
+    if (ctx.state === 'running') {
+      begin();
+    } else {
+      const tryBegin = (attempt: number) => {
+        if (this.track !== trackId) return;
+        if (ctx.state === 'running') { begin(); return; }
+        if (attempt >= 20) { begin(); return; }
+        this.timers.push(setTimeout(() => tryBegin(attempt + 1), 100));
+      };
+      tryBegin(0);
+    }
   }
 
   // Preview a track from settings (does not require the global music toggle).
