@@ -135,7 +135,11 @@ export type CoopPowerUpId =
   | 'coop_frostbite'    // C2 L2: Enemies take -accuracy for 3 turns and 40 dmg
   | 'coop_ice_lance'    // C2 L3: 120 damage to a single targeted enemy, ignoring shields
   | 'coop_winter_veil'  // C2 L4: Party takes half damage for 3 turns (shield + heal)
-  | 'coop_glacial_doom'; // C2 L5 (boss): 180 dmg to all + freeze 3 turns + full heal
+  | 'coop_glacial_doom' // C2 L5 (boss): 180 dmg to all + freeze 3 turns + full heal
+  // Starter — added expansion (always available)
+  | 'coop_surge'        // Party: next 3 darts deal +50% damage
+  | 'coop_regen'        // Party regen: heal 30 HP per turn for 3 turns
+  | 'coop_sunder';      // Strip all enemy shields + vulnerable for 2 turns
 
 export interface CoopPowerUpDef {
   id: CoopPowerUpId;
@@ -295,6 +299,12 @@ export interface CampaignBattleState {
   // Phantom Darts power-up: when > 0, the next darts thrown by the current
   // player are auto-converted to bullseyes (50 each).
   phantomDarts: number;
+  // Surge power-up: when > 0, the next darts thrown by the current player
+  // deal +50% damage. Decremented per dart thrown.
+  surgeDarts: number;
+  // Regen power-up: when > 0, the party heals 30 HP at the end of each
+  // enemy phase. Decremented each round.
+  regenTurns: number;
   // Enemies that were frozen (skipped) during the current enemy phase. The
   // UI shows a "frozen" popup listing these enemies and their remaining
   // frozen turns, then advances to the player phase on Continue. Cleared

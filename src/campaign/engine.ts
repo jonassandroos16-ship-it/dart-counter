@@ -53,6 +53,10 @@ export const COOP_POWER_UPS: CoopPowerUpDef[] = [
   { id: 'coop_ice_lance', name: 'Ice Lance', icon: '🔱', desc: 'A single perfect shard — 120 damage to the targeted enemy, ignoring shields.', cost: 90, tier: 'advanced' },
   { id: 'coop_winter_veil', name: "Winter's Veil", icon: '🌫️', desc: 'Wrap the party in mist — restore 60 HP and shield against the next 2 turns of damage.', cost: 120, tier: 'advanced' },
   { id: 'coop_glacial_doom', name: 'Glacial Doom', icon: '🧊', desc: 'BOSS REWARD: 180 damage to every enemy, freeze them for 3 turns, and fully heal the party.', cost: 160, tier: 'advanced' },
+  // ── Starter tier — expansion (always available) ───────────────────
+  { id: 'coop_surge', name: 'Surge', icon: '⚡', desc: 'Your next 3 darts deal +50% damage to the targeted enemy.', cost: 85, tier: 'starter' },
+  { id: 'coop_regen', name: 'Regen', icon: '🌿', desc: 'Party regenerates 30 HP at the end of each enemy phase for 3 turns.', cost: 75, tier: 'starter' },
+  { id: 'coop_sunder', name: 'Sunder', icon: '💥', desc: 'Strip every enemy shield and make all enemies take +50% damage for 2 turns.', cost: 105, tier: 'starter' },
 ];
 
 export function getCoopPowerUp(id: CoopPowerUpId): CoopPowerUpDef | undefined {
@@ -281,26 +285,22 @@ export function totalLevels(): number {
 
 // ── Party attribute aggregation ──────────────────────────────────────
 //
-// Party HP, armor and power are all averaged (sum / playerCount) so adding
-// more players can't push any stat above the configured caps — they share
-// the load. Each player still attacks with their own per-dart power (so
-// high power players hit harder), but the shared party HP is what absorbs
-// incoming enemy damage. Averaging HP (instead of summing) keeps the
-// difficulty roughly constant regardless of party size: a 4-player party
-// has the same HP pool as a solo player, so more players means more damage
-// output but not more survivability.
+// Party HP for a level = sum of each selected player's `health` attribute
+// (NOT capped — the per-player `healthMax` cap applies to individuals, not
+// to the party total). Armor and power are averaged (sum / playerCount) so
+// adding more players can't push armor/power above the configured caps —
+// they share the load. Each player still attacks with their own per-dart
+// power (so high power players hit harder), but the shared armor is what
+// mitigates incoming enemy damage.
 
 export function partyMaxHpFor(players: Player[], settings: Settings): number {
   const cfg = settings.powerUpScaling;
-  if (!players.length) return 1;
-  const healthMax = Number.isFinite(cfg.healthMax) ? cfg.healthMax : Number.MAX_SAFE_INTEGER;
   const startHealth = Number.isFinite(cfg.attributeStartHealth) ? cfg.attributeStartHealth : 0;
   const sum = players.reduce((acc, p) => {
     const h = p.attributes?.health;
     return acc + (typeof h === 'number' && Number.isFinite(h) ? Math.max(1, h) : startHealth);
   }, 0);
-  const avg = sum / players.length;
-  return Math.max(1, Math.min(healthMax, Math.round(avg)));
+  return Math.max(1, sum);
 }
 
 export function partyArmorFor(players: Player[], settings: Settings): number {
@@ -389,13 +389,7 @@ export function startBattle(
     cp.power = Math.min(powerMax, cp.power + passiveBonus.power);
     cp.armor = Math.min(armorMax, cp.armor + passiveBonus.armor);
   }
-  // Party HP is the average of per-player maxHp (including passive bonuses),
-  // not the sum — so adding more players doesn't inflate the party's HP
-  // pool. This keeps coop difficulty roughly constant across party sizes:
-  // more players means more damage output, but not more survivability.
-  const partyMaxHp = party.length
-    ? Math.max(1, Math.round(party.reduce((acc, p) => acc + p.maxHp, 0) / party.length))
-    : 1;
+  const partyMaxHp = party.reduce((acc, p) => acc + p.maxHp, 0);
   // Legacy shared charge kept for backwards-compat with old saves/tests.
   // Initialized to the first player's charge (mirrors old behavior).
   const powerUpCharge = party.length ? party[0].powerUpCharge : 0;
@@ -450,6 +444,8 @@ export function startBattle(
     appliedEnemyAttacks: [],
     awaitContinue: false,
     phantomDarts: 0,
+    surgeDarts: 0,
+    regenTurns: 0,
     frozenEnemiesThisRound: [],
     passiveBonus,
   };
@@ -573,6 +569,7 @@ export function addDart(
     isBull: !!isBull || base === 25,
   };
   let phantomDarts = state.phantomDarts;
+  let surgeDarts = state.surgeDarts;
   // Phantom Darts power-up: convert thrown darts into bullseyes. Each
   // consumed dart decrements the counter. Misses (base 0) are not converted
   // so the player can still intentionally miss if they want.
@@ -580,6 +577,10 @@ export function addDart(
     dart = { value: 50, label: '👻 Bull', base: 50, mult: 2, isDouble: true, isBull: true };
     phantomDarts = phantomDarts - 1;
   }
+  // Surge power-up: the next few darts deal +50% damage. Decrement after
+  // the dart is thrown (so the buff applies to this dart).
+  const surgeActive = surgeDarts > 0 && base !== 0;
+  if (surgeActive) surgeDarts = surgeDarts - 1;
 
   // Power-up charge: every dart thrown contributes to the CURRENT THROWER's
   // coop power-up orb. This is per-player — other players' orbs are not
@@ -602,7 +603,7 @@ export function addDart(
   // Resolve this dart immediately against the targeted enemy.
   const thrower = players[throwerIdx];
   if (!thrower) {
-    return { ...state, players, darts: [...state.darts, dart], phantomDarts, visitEnemiesSnapshot, powerUpCharge };
+    return { ...state, players, darts: [...state.darts, dart], phantomDarts, surgeDarts, visitEnemiesSnapshot, powerUpCharge };
   }
   const power = effectivePower(thrower);
 
@@ -618,6 +619,7 @@ export function addDart(
         players,
         darts: [...state.darts, dart],
         phantomDarts,
+        surgeDarts,
         visitEnemiesSnapshot,
         powerUpCharge,
       };
@@ -640,14 +642,14 @@ export function addDart(
         enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
       };
     } else {
-      step = {
-        dart, damage: 0, kind: 'miss',
+      step = {\n        dart, damage: 0, kind: 'miss',
         enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
       };
     }
   } else {
     const dmg = computePlayerDartDamage(dart, power, t.armor);
-    const finalDmg = t.vulnerableTurns > 0 ? Math.round(dmg * 1.5) : dmg;
+    let finalDmg = t.vulnerableTurns > 0 ? Math.round(dmg * 1.5) : dmg;
+    if (surgeActive) finalDmg = Math.round(finalDmg * 1.5);
     t.hp = Math.max(0, t.hp - finalDmg);
     const defeated = t.hp <= 0;
     if (defeated) t.defeated = true;
@@ -668,6 +670,7 @@ export function addDart(
     resolvedDarts: [...state.resolvedDarts, step],
     targetIdx,
     phantomDarts,
+    surgeDarts,
     visitEnemiesSnapshot,
     outcome,
     powerUpCharge,
@@ -702,6 +705,10 @@ export function undoDart(state: CampaignBattleState, settings?: Settings): Campa
     ? { ...p, powerUpCharge: Math.max(0, p.powerUpCharge - revert) }
     : p);
   const powerUpCharge = Math.max(0, state.powerUpCharge - revert);
+  // If the undone dart had consumed a Surge charge, restore it (capped at 3).
+  const surgeDarts = undoneDart && undoneDart.value > 0
+    ? Math.min(3, state.surgeDarts + 1)
+    : state.surgeDarts;
   return {
     ...state,
     players,
@@ -711,6 +718,7 @@ export function undoDart(state: CampaignBattleState, settings?: Settings): Campa
     visitEnemiesSnapshot,
     outcome,
     powerUpCharge,
+    surgeDarts,
   };
 }
 
@@ -930,10 +938,17 @@ function finishEnemyTurn(state: CampaignBattleState): CampaignBattleState {
     distractedTurns: Math.max(0, e.distractedTurns - 1),
     distractAmount: e.distractedTurns - 1 > 0 ? e.distractAmount : 0,
   }));
+  // Regen power-up: heal the party 30 HP at the end of each enemy phase
+  // while regenTurns > 0. Decrement the counter after applying.
+  const regenTurns = Math.max(0, state.regenTurns - 1);
+  const regenHeal = state.regenTurns > 0 ? 30 : 0;
+  const partyHp = regenHeal > 0 ? Math.min(state.partyMaxHp, state.partyHp + regenHeal) : state.partyHp;
   return {
     ...state,
     players,
     enemies,
+    partyHp,
+    regenTurns,
     phase: 'player',
     playerTurnIdx: 0,
     darts: [],
@@ -1101,6 +1116,25 @@ function applyCoopPowerUp(state: CampaignBattleState, id: CoopPowerUpId, thrower
       return { ...e, hp, defeated: hp <= 0, frozenTurns: 3, shields: [] };
     });
     return { ...state, enemies, partyHp: state.partyMaxHp, powerUpCharge: charge };
+  }
+  // ── Expansion starter power-ups ────────────────────────────────────
+  if (id === 'coop_surge') {
+    // The next 3 darts thrown by the current player deal +50% damage.
+    return { ...state, surgeDarts: 3, powerUpCharge: charge };
+  }
+  if (id === 'coop_regen') {
+    // Party regenerates 30 HP at the end of each enemy phase for 3 turns.
+    return { ...state, regenTurns: 3, powerUpCharge: charge };
+  }
+  if (id === 'coop_sunder') {
+    // Strip every enemy shield and make all alive enemies vulnerable
+    // (+50% damage taken) for 2 turns.
+    const enemies = state.enemies.map(e => e.defeated ? e : {
+      ...e,
+      shields: [],
+      vulnerableTurns: Math.max(e.vulnerableTurns, 2),
+    });
+    return { ...state, enemies, powerUpCharge: charge };
   }
   return state;
 }
