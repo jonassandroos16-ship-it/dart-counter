@@ -6,7 +6,7 @@ import { Sound } from '../../sound';
 import type { MusicEngine } from '../../music';
 import type { PopupControls } from '../../Popups';
 import { PowerUpOrb, BadgeAvatar } from '../common';
-import { addDartToGame, undoDart, KeypadPad } from '../dart';
+import { addDartToGame, undoDart, KeypadPad, clearVisitPowerUpFlags } from '../dart';
 import { activatePowerUp } from '../powerups';
 import { finishSimpleGame } from '../finish';
 import { GameOver } from '../GameOver';
@@ -58,6 +58,7 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
     else if (cur._surgeNext) delete cur._surgeNext;
     if (cur._crippledNext) delete cur._crippledNext;
     if (cur._fourthDart) delete cur._fourthDart;
+    if (cur._oneDartNext) delete cur._oneDartNext;
 
     let target = targetId;
     const aliveTargets = newPlayers.filter((pl: any) => pl.id !== cur.id && !pl.defeated);
@@ -128,8 +129,9 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
       while (guards < newPlayers.length) {
         const np = newPlayers[nextTurn] as any;
         if (np._frozenNext) {
-          delete np._frozenNext;
-          np.visits.push({ darts: [], scored: 0, remaining: np.hp, leg: 1, mode: 'battle', date: new Date().toISOString(), frozen: true });
+          const cleared = clearVisitPowerUpFlags(np);
+          cleared.visits = [...np.visits, { darts: [], scored: 0, remaining: np.hp, leg: 1, mode: 'battle', date: new Date().toISOString(), frozen: true }];
+          newPlayers[nextTurn] = cleared;
           popups.setFrozen({ name: np.name });
           toast(`${np.name} is frozen — visit skipped.`);
           nextTurn = (nextTurn + 1) % newPlayers.length;

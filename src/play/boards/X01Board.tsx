@@ -6,7 +6,7 @@ import { Sound } from '../../sound';
 import type { MusicEngine } from '../../music';
 import type { PopupControls } from '../../Popups';
 import { PowerUpOrb, AttributeStrip, BadgeAvatar } from '../common';
-import { addDartToGame, undoDart, KeypadPad } from '../dart';
+import { addDartToGame, undoDart, KeypadPad, clearVisitPowerUpFlags } from '../dart';
 import { activatePowerUp } from '../powerups';
 import { runMilestones, awardXP, checkTitleUnlocks, awardBadges } from '../rewards';
 import { GameOver } from '../GameOver';
@@ -54,6 +54,7 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
     else if (cur._surgeNext) delete cur._surgeNext; // surge was active, consume
     if (cur._crippledNext) delete cur._crippledNext;
     if (cur._fourthDart) delete cur._fourthDart;
+    if (cur._oneDartNext) delete cur._oneDartNext;
 
     if (game.practice) {
       cur.score += scored;
@@ -171,7 +172,7 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
       while (guards < g.players.length) {
         const np = g.players[turn] as any;
         if (np._frozenNext) {
-          g = { ...g, players: g.players.map((pl, i) => i === turn ? (() => { const c = { ...pl } as any; delete c._frozenNext; return c; })() : pl) };
+          g = { ...g, players: g.players.map((pl, i) => i === turn ? clearVisitPowerUpFlags(pl) : pl) };
           const frozenPl = g.players[turn];
           const visits = [...frozenPl.visits, { darts: [], scored: 0, remaining: frozenPl.score, leg: g.leg, frozen: true, date: new Date().toISOString() }];
           g = { ...g, players: g.players.map((pl, i) => i === turn ? { ...pl, visits } : pl), thrownThisRound: [...(g.thrownThisRound || []), frozenPl.id] };

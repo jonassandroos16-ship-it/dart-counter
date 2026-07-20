@@ -32,6 +32,22 @@ export function undoDart(game: Game): Game {
   return { ...game, darts: game.darts.slice(0, -1) };
 }
 
+// One-visit power-up flags that must be cleared once a player's visit is
+// resolved — whether they actually threw or were skipped (e.g. frozen). If
+// these linger, effects like Blocker (_oneDartNext) permanently stunt the
+// player. Always clear the whole set together so stacked stun-locks
+// (freeze + blocker + cripple) all expire at once.
+const VISIT_POWERUP_FLAGS = ['_oneDartNext', '_crippledNext', '_surgeNext', '_surgeArmed', '_fourthDart', '_frozenNext', '_luckyMiss'] as const;
+
+export function clearVisitPowerUpFlags(pl: any): any {
+  let changed = false;
+  const next: any = { ...pl };
+  for (const f of VISIT_POWERUP_FLAGS) {
+    if (f in next) { delete next[f]; changed = true; }
+  }
+  return changed ? next : pl;
+}
+
 // Shared keypad/multiplier input block. `onAdd` is called with the chosen base
 // and current multiplier; `onUndo` and `onEnter` are wired to the action row.
 export function KeypadPad({ game, setGame, onAdd, onUndo, onEnter, enterLabel = 'Enter visit' }: {
