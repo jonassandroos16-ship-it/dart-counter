@@ -31,10 +31,10 @@ export function CoopSetupView({ players, settings, onStart, onBack }: CoopSetupP
     [picked, players],
   );
 
-  const partyHp = useMemo(() => partyMaxHpFor(selected, settings), [selected, settings]);
+  const passiveBonus = useMemo(() => computePartyPassiveBonus(selected), [selected]);
+  const partyHp = useMemo(() => partyMaxHpFor(selected, settings) + passiveBonus.health, [selected, settings, passiveBonus.health]);
   const partyArmor = useMemo(() => partyArmorFor(selected, settings), [selected, settings]);
   const partyPower = useMemo(() => partyPowerFor(selected, settings), [selected, settings]);
-  const passiveBonus = useMemo(() => computePartyPassiveBonus(selected), [selected]);
 
   // Classes in the selected party, one entry per player (duplicates shown).
   const partyClasses = useMemo(() => {

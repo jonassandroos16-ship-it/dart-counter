@@ -5,6 +5,8 @@ import {
   setTarget, startBattle, totalLevels, undoDart,
   partyMaxHpFor, partyArmorFor, partyPowerFor, COOP_POWER_UPS,
   canActivateCoopPowerUp, activateCoopPowerUp,
+  isLevelUnlockedForParty, playerCampaignProgress, defaultPlayerCampaignProgress,
+  partyAllClearedLevel, partyMissingClearForLevel, recordLevelClearForPlayer,
 } from './engine';
 import { ENEMY_DATABASE } from './enemyDatabase';
 import { CAMPAIGN_LEVELS } from './campaignLevels';
@@ -398,5 +400,116 @@ describe('campaign engine', () => {
     expect(state.passiveBonus?.health).toBe(120);
     expect(state.passiveBonus?.armor).toBe(2);
     expect(state.passiveBonus?.sources).toHaveLength(3);
+  });
+
+  // ── Health averaging + priest buffs ──────────────────────────────────
+  // Regression: the priest passive health bonus was previously added to
+  // each player's maxHp BEFORE averaging, so it was divided by the player
+  // count and capped per-player before the average. A 2-player party with
+  // 400 base HP and +120 priest buffs got 500 instead of 520. The bonus is
+  // now added to the shared party HP AFTER averaging, so the full priest
+  // contribution is always granted (and is not subject to the base
+  // healthMax cap — priest passives are meant to push past it).
+  it('party HP includes the FULL priest bonus on top of the averaged base (not divided by player count)', () => {
+    const lvl = getLevel(1)!;
+    const players = makePlayers(2).map(p => ({
+      ...p,
+      attributes: { health: 400, armor: 0, power: 0, pointsAvailable: 0 },
+      coopProgress: { classId: 'priest' as CoopClassId, xp: 0, unlockedPassives: ['pri_hp_1'] as CoopPassiveId[], equippedPassives: ['pri_hp_1'] as CoopPassiveId[] },
+    }));
+    const state = startBattle(lvl, players, settings);
+    // Base avg = 400. Two priests each grant +60 = +120 bonus. 400 + 120 = 520.
+    expect(state.passiveBonus?.health).toBe(120);
+    expect(state.partyMaxHp).toBe(520);
+    expect(state.partyHp).toBe(520);
+  });
+
+  it('party HP priest bonus is NOT capped by the base healthMax (priest pushes past the cap)', () => {
+    const lvl = getLevel(1)!;
+    const players = makePlayers(2).map(p => ({
+      ...p,
+      attributes: { health: 500, armor: 0, power: 0, pointsAvailable: 0 },
+      coopProgress: { classId: 'priest' as CoopClassId, xp: 200, unlockedPassives: ['pri_hp_3'] as CoopPassiveId[], equippedPassives: ['pri_hp_3'] as CoopPassiveId[] },
+    }));
+    const state = startBattle(lvl, players, settings);
+    // Base avg = 500 (capped). Two priests each grant +300 = +600 bonus.
+    // 500 + 600 = 1100 — past the 500 base cap, which is the point of
+    // the priest class.
+    expect(state.passiveBonus?.health).toBe(600);
+    expect(state.partyMaxHp).toBe(1100);
+  });
+
+  it('solo player still gets the full priest bonus (no averaging divide)', () => {
+    const lvl = getLevel(1)!;
+    const players = makePlayers(1).map(p => ({
+      ...p,
+      attributes: { health: 100, armor: 0, power: 0, pointsAvailable: 0 },
+      coopProgress: { classId: 'priest' as CoopClassId, xp: 200, unlockedPassives: ['pri_hp_3'] as CoopPassiveId[], equippedPassives: ['pri_hp_3'] as CoopPassiveId[] },
+    }));
+    const state = startBattle(lvl, players, settings);
+    // 100 base + 300 bonus = 400.
+    expect(state.partyMaxHp).toBe(400);
+  });
+
+  // ── Per-player coop progress ──────────────────────────────────────────
+  it('defaultPlayerCampaignProgress returns empty progress', () => {
+    const p = defaultPlayerCampaignProgress();
+    expect(p.highest_level_beaten).toBe(0);
+    expect(p.unlockedPowerUps).toEqual([]);
+    expect(p.chapters).toEqual({});
+  });
+
+  it('playerCampaignProgress falls back to defaults for a player with no progress', () => {
+    const p: Player = { ...makePlayers(1)[0] };
+    expect(playerCampaignProgress(p).highest_level_beaten).toBe(0);
+    expect(playerCampaignProgress(null).chapters).toEqual({});
+  });
+
+  it('recordLevelClearForPlayer updates chapters and unlockedPowerUps per player', () => {
+    const p: Player = { ...makePlayers(1)[0] };
+    const after1 = recordLevelClearForPlayer(p, 'crimson_vale', 0, 1, 'coop_meteor');
+    expect(after1.chapters?.crimson_vale).toBe(1);
+    expect(after1.unlockedPowerUps).toContain('coop_meteor');
+    expect(after1.highest_level_beaten).toBe(1);
+    // Clearing again does not double-grant the reward.
+    const after1b = recordLevelClearForPlayer({ ...p, campaignProgress: after1 }, 'crimson_vale', 0, 1, 'coop_meteor');
+    expect(after1b.unlockedPowerUps?.length).toBe(1);
+    // Clearing a later level advances the chapter cleared count.
+    const after2 = recordLevelClearForPlayer({ ...p, campaignProgress: after1 }, 'crimson_vale', 1, 2, 'coop_phantom');
+    expect(after2.chapters?.crimson_vale).toBe(2);
+    expect(after2.unlockedPowerUps).toContain('coop_phantom');
+    expect(after2.highest_level_beaten).toBe(2);
+  });
+
+  it('partyAllClearedLevel is true only when every party member has cleared', () => {
+    const base = makePlayers(2);
+    const p1: Player = { ...base[0], campaignProgress: { highest_level_beaten: 1, unlockedPowerUps: [], chapters: { crimson_vale: 1 } } };
+    const p2: Player = { ...base[1], campaignProgress: { highest_level_beaten: 0, unlockedPowerUps: [], chapters: {} } };
+    expect(partyAllClearedLevel([p1], 'crimson_vale', 0)).toBe(true);
+    expect(partyAllClearedLevel([p1, p2], 'crimson_vale', 0)).toBe(false);
+    const p2Cleared: Player = { ...p2, campaignProgress: { highest_level_beaten: 1, unlockedPowerUps: [], chapters: { crimson_vale: 1 } } };
+    expect(partyAllClearedLevel([p1, p2Cleared], 'crimson_vale', 0)).toBe(true);
+  });
+
+  it('partyMissingClearForLevel lists names of members who have not cleared', () => {
+    const base = makePlayers(2);
+    const p1: Player = { ...base[0], name: 'Alice', campaignProgress: { highest_level_beaten: 1, unlockedPowerUps: [], chapters: { crimson_vale: 1 } } };
+    const p2: Player = { ...base[1], name: 'Bob', campaignProgress: { highest_level_beaten: 0, unlockedPowerUps: [], chapters: {} } };
+    expect(partyMissingClearForLevel([p1, p2], 'crimson_vale', 0)).toEqual(['Bob']);
+    expect(partyMissingClearForLevel([p1], 'crimson_vale', 0)).toEqual([]);
+  });
+
+  it('isLevelUnlockedForParty unlocks if ANY party member has cleared the previous level', () => {
+    const base = makePlayers(2);
+    const p1: Player = { ...base[0], campaignProgress: { highest_level_beaten: 1, unlockedPowerUps: [], chapters: { crimson_vale: 1 } } };
+    const p2: Player = { ...base[1], campaignProgress: { highest_level_beaten: 0, unlockedPowerUps: [], chapters: {} } };
+    // Level 1 is always unlocked.
+    expect(isLevelUnlockedForParty('crimson_vale', 1, [p1, p2])).toBe(true);
+    // Level 2 is unlocked because p1 cleared level 1.
+    expect(isLevelUnlockedForParty('crimson_vale', 2, [p1, p2])).toBe(true);
+    // Level 3 is locked because neither cleared level 2.
+    expect(isLevelUnlockedForParty('crimson_vale', 3, [p1, p2])).toBe(false);
+    // Empty party: nothing unlocked (except level 1).
+    expect(isLevelUnlockedForParty('crimson_vale', 2, [])).toBe(false);
   });
 });

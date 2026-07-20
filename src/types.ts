@@ -1,4 +1,4 @@
-import type { PlayerCoopProgress } from './campaign/types';
+import type { PlayerCoopProgress, PlayerCampaignProgress } from './campaign/types';
 
 export type PlayerSoundId = 'none' | 'hero' | 'villain' | 'cyborg' | 'mystic' | 'beast' | 'champion';
 
@@ -35,6 +35,10 @@ export interface Player {
   developerMode?: boolean;
   showdownBg?: string;
   coopProgress?: PlayerCoopProgress;
+  // Per-player Co-op Campaign progress. Each player tracks their own
+  // cleared levels and unlocked power-up rewards, so a level is only
+  // "beaten for everyone" when every party member has cleared it.
+  campaignProgress?: PlayerCampaignProgress;
 }
 
 export interface Dart {

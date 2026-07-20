@@ -2,7 +2,7 @@ import type { CampaignProgress } from './types';
 import type { Player as AppPlayer } from '../types';
 import { getChapter } from './campaignLevels';
 import { ENEMY_DATABASE } from './enemyDatabase';
-import { isLevelUnlockedInChapter, getCoopPowerUp } from './engine';
+import { isLevelUnlockedForParty, getCoopPowerUp, playerCampaignProgress, partyAllClearedLevel, partyMissingClearForLevel } from './engine';
 import { initials } from '../store';
 
 export function CampaignMap({
@@ -28,8 +28,13 @@ export function CampaignMap({
     );
   }
   const levels = chapter.levels;
-  const unlockedPowerUps = progress.unlockedPowerUps || [];
-  const cleared = progress.chapters?.[chapterId] ?? 0;
+  // Aggregate per-player progress for the chapter header (max cleared
+  // across the party). The shared `progress` is kept for backwards
+  // compat with badges but is no longer the source of truth for unlocks.
+  const cleared = Math.max(
+    progress.chapters?.[chapterId] ?? 0,
+    ...players.map(p => playerCampaignProgress(p).chapters?.[chapterId] ?? 0),
+  );
   const theme = chapter.theme;
   return (
     <div className="view-scroll" style={{ background: theme.background, borderRadius: 14, margin: -2, padding: 14 }}>
@@ -61,11 +66,15 @@ export function CampaignMap({
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {levels.map((lvl, i) => {
-          const unlocked = isLevelUnlockedInChapter(chapterId, lvl.level_id, progress);
-          const beaten = i < cleared;
+          const unlocked = isLevelUnlockedForParty(chapterId, lvl.level_id, players);
+          const beaten = partyAllClearedLevel(players, chapterId, i);
+          const missingClear = partyMissingClearForLevel(players, chapterId, i);
           const isBoss = lvl.is_boss;
           const reward = lvl.reward_power_up ? getCoopPowerUp(lvl.reward_power_up as any) : null;
-          const rewardUnlocked = reward ? unlockedPowerUps.includes(reward.id) : false;
+          // A reward is "unlocked for everyone" only when every party member
+          // has cleared this level. If some members are missing the clear,
+          // the info box calls that out instead of claiming unlocked.
+          const rewardUnlocked = reward ? beaten : false;
           return (
             <div key={lvl.level_id} style={{ position: 'relative' }}>
               {i > 0 && (
@@ -104,14 +113,21 @@ export function CampaignMap({
                     {lvl.enemies.map(id => ENEMY_DATABASE[id]?.name || id).join(' · ')}
                   </div>
                   {reward && (
-                    <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span className="pill" style={{
-                        fontSize: 10, padding: '2px 8px', borderColor: 'transparent',
-                        background: rewardUnlocked ? `color-mix(in srgb, ${theme.accent} 22%, var(--bg-3))` : isBoss ? `color-mix(in srgb, ${theme.accent} 18%, var(--bg-3))` : 'var(--bg-3)',
-                        color: rewardUnlocked ? 'var(--text)' : isBoss ? theme.accent : 'var(--muted)',
-                      }}>
-                        {rewardUnlocked ? `${reward.icon} ${reward.name} (unlocked)` : `🎁 Reward: ${reward.icon} ${reward.name}`}
-                      </span>
+                    <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span className="pill" style={{
+                          fontSize: 10, padding: '2px 8px', borderColor: 'transparent',
+                          background: rewardUnlocked ? `color-mix(in srgb, ${theme.accent} 22%, var(--bg-3))` : isBoss ? `color-mix(in srgb, ${theme.accent} 18%, var(--bg-3))` : 'var(--bg-3)',
+                          color: rewardUnlocked ? 'var(--text)' : isBoss ? theme.accent : 'var(--muted)',
+                        }}>
+                          {rewardUnlocked ? `${reward.icon} ${reward.name} (unlocked)` : `🎁 Reward: ${reward.icon} ${reward.name}`}
+                        </span>
+                      </div>
+                      {!rewardUnlocked && missingClear.length > 0 && (
+                        <div className="muted small" style={{ fontSize: 11, fontStyle: 'italic', lineHeight: 1.4 }}>
+                          Not unlocked for everyone — {missingClear.join(', ')} still need{missingClear.length === 1 ? 's' : ''} to clear this level.
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

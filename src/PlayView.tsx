@@ -17,7 +17,7 @@ import { CampaignMap } from './campaign/CampaignMap';
 import { CampaignBattle } from './campaign/CampaignBattle';
 import { CoopSetupView } from './campaign/CoopSetupView';
 import { useCampaignProgress } from './campaign/progress';
-import { getCoopPowerUp, coopXpForBattle, addCoopXpForPlayer, defaultCoopProgress } from './campaign/engine';
+import { getCoopPowerUp, coopXpForBattle, addCoopXpForPlayer, defaultCoopProgress, recordLevelClearForPlayer } from './campaign/engine';
 import { getChapter, isChapterComplete } from './campaign/campaignLevels';
 import type { CoopPowerUpId, CampaignBattleState, CampaignChapter } from './campaign/types';
 
@@ -91,11 +91,17 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
         // add bonus XP. Unlocked passives auto-grant via addCoopXpForPlayer.
         const xpGained = coopXpForBattle(stats, true);
         const coopPlayerIds = (coopPlayers || []).map(p => p.id);
+        // Record the level clear per-player so each party member tracks
+        // their own progress. A reward power-up is only granted to players
+        // who haven't already unlocked it (the shared `unlockedPowerUpId`
+        // is the first-time grant for the party; per-player we mirror it
+        // so the info box can tell when everyone has it).
         setPlayers((prev: Player[]) => prev.map(p => {
           if (!coopPlayerIds.includes(p.id)) return p;
           const cur = p.coopProgress || defaultCoopProgress();
           const { progress: nextProg } = addCoopXpForPlayer(cur, xpGained);
-          return { ...p, coopProgress: nextProg };
+          const nextCampaign = recordLevelClearForPlayer(p, coopChapterId, clearedIdx, coopLevelId, unlockedPowerUpId);
+          return { ...p, coopProgress: nextProg, campaignProgress: nextCampaign };
         }));
         // Always show the post-game screen — power-up info only if unlocked.
         setPostGame({ chapterId: coopChapterId, levelId: coopLevelId, stats, rewardPowerUpId: unlockedPowerUpId, coopXpGained: xpGained });
