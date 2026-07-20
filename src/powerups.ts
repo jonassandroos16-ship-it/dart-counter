@@ -140,6 +140,45 @@ export const POWER_UPS: PowerUpDef[] = [
       return { game: { ...game, players }, message: 'Lucky Miss armed — your next bust is cancelled.' };
     },
   },
+  {
+    id: 'pu_double_trouble',
+    name: 'Double Trouble',
+    icon: '✌️',
+    desc: 'Your next visit: only doubles and bulls score — singles and triples count as 0. High risk, high reward for accurate shooters.',
+    apply: (game, curIdx) => {
+      const players = (game.players || []).map((pl: any, i: number) => i === curIdx ? { ...pl, _doubleTrouble: true } : pl);
+      return { game: { ...game, players }, message: 'Double Trouble armed — next visit, only doubles and bulls score!' };
+    },
+  },
+  {
+    id: 'pu_overcharge',
+    name: 'Overcharge',
+    icon: '🔋',
+    desc: 'Instantly refill your power-up orb to full AND add +25% to your next visit score. Self-buff for comebacks.',
+    apply: (game, curIdx) => {
+      const players = (game.players || []).map((pl: any, i: number) => i === curIdx ? { ...pl, _overchargeNext: true } : pl);
+      return { game: { ...game, players }, message: 'Overcharge! Orb refilled and next visit scores +25%.' };
+    },
+  },
+  {
+    id: 'pu_curse',
+    name: 'Curse',
+    icon: '💀',
+    desc: 'Curse the lowest opponent: their next TWO visits score only 50%. They are warned when they throw.',
+    apply: (game, curIdx) => {
+      const players = [...(game.players || [])];
+      if (players.length < 2) return { game, message: 'Curse: no opponents to curse.', ok: false };
+      const others = players.map((pl, i) => ({ pl, i })).filter(({ i }) => i !== curIdx);
+      const isHighScore = game.mode === 'highscore';
+      // Curse the WEAKEST opponent: in highscore the lowest score, in x01 the
+      // highest remaining (furthest from checkout).
+      const target = isHighScore
+        ? others.reduce((a, b) => b.pl.score < a.pl.score ? b : a)
+        : others.reduce((a, b) => b.pl.score > a.pl.score ? b : a);
+      const newPlayers = players.map((pl: any, i: number) => i === target.i ? { ...pl, _cursedNext: 2 } : pl);
+      return { game: { ...game, players: newPlayers }, message: `Curse! ${target.pl.name} scores 50% on their next 2 visits.` };
+    },
+  },
 ];
 
 export function getPowerUpInfo(id: string | null | undefined): PowerUpDef | undefined {

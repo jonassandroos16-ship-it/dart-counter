@@ -29,11 +29,24 @@ export function defaultSettings(): Settings {
       battleMinDamage: 1,
       // Surge is an early-game power-up, so it starts partially charged.
       // Other power-ups start at 0 by default.
-      startingCharge: { pu_surge: 40 },
+      startingCharge: { pu_surge: 40, pu_overcharge: 20 },
       // Per-power-up activation threshold. Any id not listed defaults to
-      // `chargeMax` (100). Listed here only to make the field non-empty —
-      // tune from the Settings screen.
-      chargesNeeded: {},
+      // `chargeMax` (100). Balanced by impact: weak/self-buff power-ups cost
+      // less, game-changing power-ups cost more.
+      chargesNeeded: {
+        pu_fourth_dart: 100,   // extra dart — strong
+        pu_blocker: 100,       // opponents get 1 dart — strong
+        pu_reroll: 80,         // replace lowest dart — medium
+        pu_rethrow: 60,        // take back last dart — weak
+        pu_surge: 90,          // next visit double — strong
+        pu_cripple: 90,        // leader 50% — medium-strong
+        pu_steal: 100,         // 30 points — strong
+        pu_freeze: 110,        // leader misses — very strong
+        pu_lucky_miss: 70,     // cancel bust — weak
+        pu_double_trouble: 90, // doubles only — risky/high reward
+        pu_overcharge: 70,     // refill + 25% — self-buff
+        pu_curse: 110,         // 2 visits 50% — very strong
+      },
     },
   };
 }
