@@ -642,7 +642,8 @@ export function addDart(
         enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
       };
     } else {
-      step = {\n        dart, damage: 0, kind: 'miss',
+      step = {
+        dart, damage: 0, kind: 'miss',
         enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
       };
     }
