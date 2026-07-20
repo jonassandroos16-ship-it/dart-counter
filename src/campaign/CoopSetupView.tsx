@@ -91,7 +91,7 @@ export function CoopSetupView({ players, settings, onStart, onBack }: CoopSetupP
             </div>
             <div>
               <div className="muted small">Armor (avg)</div>
-              <div style={{ fontWeight: 900, fontSize: 18 }}>{Math.round(partyArmor)}</div>
+              <div style={{ fontWeight: 900, fontSize: 18 }}>{Math.round(partyArmor)}%</div>
             </div>
             <div>
               <div className="muted small">Power (avg)</div>
@@ -142,7 +142,7 @@ export function CoopSetupView({ players, settings, onStart, onBack }: CoopSetupP
               </div>
               <div>
                 <div className="muted small">Armor</div>
-                <div style={{ fontWeight: 900, fontSize: 16, color: '#93c5fd' }}>+{passiveBonus.armor}</div>
+                <div style={{ fontWeight: 900, fontSize: 16, color: '#93c5fd' }}>+{passiveBonus.armor}%</div>
               </div>
             </div>
             <div className="muted small" style={{ marginTop: 6, fontStyle: 'italic' }}>

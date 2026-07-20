@@ -93,8 +93,10 @@ describe('campaign engine', () => {
     const resolvedOrc = s.enemies.find(e => e.id === orc.id)!;
     expect(resolvedOrc.shields.length).toBe(0);
     // First dart broke the shield (0 dmg). The remaining two darts deal damage.
-    // T20 = 60, power 10 → 70 - 5 armor = 65 each. Two darts → 130.
-    expect(resolvedOrc.hp).toBe(orc.maxHp - 130);
+    // T20 = 60, power 10 → 70 base. Armor 5% → round(70 * 0.95) = 67 each. Two
+    // darts → 134, which defeats the 130-HP orc (hp clamped to 0).
+    expect(resolvedOrc.hp).toBe(0);
+    expect(resolvedOrc.defeated).toBe(true);
   });
 
   it('absorbs non-matching darts into the shield (0 damage)', () => {
@@ -131,8 +133,8 @@ describe('campaign engine', () => {
   });
 
   it('computes player dart damage with armor mitigation and min 1 on hit', () => {
-    expect(computePlayerDartDamage(dart(20, 3), 0, 5)).toBe(55); // 60 - 5
-    expect(computePlayerDartDamage(dart(20, 1), 0, 25)).toBe(1); // clamped to min 1
+    expect(computePlayerDartDamage(dart(20, 3), 0, 5)).toBe(57); // round(60 * 0.95) = 57
+    expect(computePlayerDartDamage(dart(20, 1), 0, 25)).toBe(15); // round(20 * 0.75) = 15
     expect(computePlayerDartDamage(dart(0, 1), 0, 0)).toBe(0); // miss
   });
 

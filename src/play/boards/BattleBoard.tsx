@@ -158,7 +158,7 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
           <span className="muted small">BATTLE · {alive.length} ALIVE</span>
         </div>
         <div className="pc-remaining" style={{ fontSize: 28 }}>{p.hp} HP</div>
-        <div className="checkout-hint center">❤️ {p.hp}/{p.maxHp} · 🛡️ {p.armorPct} armor · ⚡ {p.powerPct} power</div>
+        <div className="checkout-hint center">❤️ {p.hp}/{p.maxHp} · 🛡️ {p.armorPct}% armor · ⚡ {p.powerPct} power</div>
         <div style={{ width: '100%', height: 8, borderRadius: 4, background: 'var(--bg-3)', overflow: 'hidden', margin: '4px 0' }}>
           <div style={{ height: '100%', width: `${hpPct(p)}%`, background: p.color, transition: 'width .3s' }} />
         </div>
@@ -226,7 +226,7 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
               <div style={{ marginTop: 4, height: 6, borderRadius: 3, background: 'var(--bg-3)', overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${hpPct(pl)}%`, background: pl.color, transition: 'width .3s' }} />
               </div>
-              <div className="po-sub">🛡️ {pl.armorPct} · ⚡ {pl.powerPct}{pl.damageDealt ? ` · 💥 ${pl.damageDealt}` : ''}</div>
+              <div className="po-sub">🛡️ {pl.armorPct}% · ⚡ {pl.powerPct}{pl.damageDealt ? ` · 💥 ${pl.damageDealt}` : ''}</div>
             </div>
           );
         })}

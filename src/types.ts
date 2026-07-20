@@ -4,8 +4,8 @@ export type PlayerSoundId = 'none' | 'hero' | 'villain' | 'cyborg' | 'mystic' | 
 
 export interface PlayerAttributes {
   health: number;      // current max health (starts 400)
-  armor: number;       // current armor % (starts 0, capped at 60)
-  power: number;       // current power % — boosts attack damage (starts 0)
+  armor: number;       // current armor % (starts 0, capped at armorMax — percentage damage reduction per dart)
+  power: number;       // current power — flat bonus added to every dart that hits (starts 0)
   pointsAvailable: number; // unspent attribute points
 }
 
@@ -87,7 +87,7 @@ export interface GamePlayer {
   // Battle mode state (only present when game.mode === 'battle').
   hp?: number;              // current health points (decreases when attacked)
   maxHp?: number;           // snapshot of max HP at game start
-  armorPct?: number;        // snapshot of armor (flat reduction per dart) at game start
+  armorPct?: number;        // snapshot of armor (percentage reduction per dart, 0..armorMax) at game start
   powerPct?: number;        // snapshot of power (flat bonus per dart) at game start
   defeated?: boolean;       // true when HP hits 0
   attacks?: { target: string; damage: number; visit: number; date: string }[];
@@ -187,9 +187,9 @@ export interface PowerUpScalingConfig {
   attributeStartArmor: number;
   attributeStartPower: number;
   healthPerPoint: number;   // HP gained per point spent on health
-  armorPerPoint: number;     // armor gained per point spent on armor (flat, per dart)
+  armorPerPoint: number;     // armor % gained per point spent on armor (percentage reduction per dart)
   powerPerPoint: number;     // power gained per point spent on power (flat, per dart)
-  armorMax: number;          // hard cap for armor (flat reduction per dart)
+  armorMax: number;          // hard cap for armor (percentage reduction per dart)
   powerMax: number;          // hard cap for power (flat bonus per dart)
   healthMax: number;          // hard cap for HP at max level progression
   battleMinDamage: number;    // minimum damage on a successful hit (default 1)

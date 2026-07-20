@@ -96,7 +96,7 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
                   {p.developerMode ? <span className="xp-pill" title="Developer mode — bonus points for testing">DEV</span> : null}
                 </div>
                 <div className="muted small">{s.games} games ({s.competitiveGames} competitive) · {s.avg.toFixed(1)} avg · {s.n180} × 180 · {xp.xp} XP · {(xp.unlockedBadges || []).length} badges · {totalBadgeEarns} earned</div>
-                <div className="muted small" style={{ marginTop: 2 }}>❤️ {Number.isFinite(attrs.health) ? attrs.health : 0} HP · 🛡️ {Number.isFinite(attrs.armor) ? attrs.armor : 0} armor · ⚡ {Number.isFinite(attrs.power) ? attrs.power : 0} power · {pwr.unlocked.length} power-ups · {pwr.pointsAvailable} PU pts · {attrs.pointsAvailable} attr pts</div>
+                <div className="muted small" style={{ marginTop: 2 }}>❤️ {Number.isFinite(attrs.health) ? attrs.health : 0} HP · 🛡️ {Number.isFinite(attrs.armor) ? attrs.armor : 0}% armor · ⚡ {Number.isFinite(attrs.power) ? attrs.power : 0} power · {pwr.unlocked.length} power-ups · {pwr.pointsAvailable} PU pts · {attrs.pointsAvailable} attr pts</div>
                 <div className="xp-bar" style={{ width: '100%', maxWidth: 240 }}><div style={{ width: `${Math.round(li.xpIntoLevel / li.xpNeeded * 100)}%` }} /></div>
               </div>
             </div>
@@ -506,7 +506,7 @@ function AttributesTab({ player, settings, setPlayers, toast }: { player: Player
 
   return (
     <>
-      <div className="muted small" style={{ marginBottom: 10 }}>Players start with {cfg.attributeStartHealth} HP, {cfg.attributeStartArmor} armor and {cfg.attributeStartPower} power. Each level grants {cfg.attributePointsPerLevel} attribute points. Health caps at {cfg.healthMax}, armor at {cfg.armorMax} (flat per dart) and power at {cfg.powerMax} (flat per dart).</div>
+      <div className="muted small" style={{ marginBottom: 10 }}>Players start with {cfg.attributeStartHealth} HP, {cfg.attributeStartArmor}% armor and {cfg.attributeStartPower} power. Each level grants {cfg.attributePointsPerLevel} attribute points. Health caps at {cfg.healthMax}, armor at {cfg.armorMax}% (percentage damage reduction per dart) and power at {cfg.powerMax} (flat per dart).</div>
       <div className="card" style={{ padding: 12, marginBottom: 10 }}>
         <div className="row between"><b>Level</b><span className="xp-pill">Lvl {level}</span></div>
         <div className="row between" style={{ marginTop: 6 }}><span className="muted small">Total points earned</span><span className="small"><b>{totalPoints}</b></span></div>
@@ -519,8 +519,8 @@ function AttributesTab({ player, settings, setPlayers, toast }: { player: Player
         <button className="btn primary block" style={{ marginTop: 8 }} disabled={!Number.isFinite(available) || available <= 0 || healthAtCap} onClick={() => spend('health')}>{healthAtCap ? 'Health at cap' : '+ Spend 1 point on Health'}</button>
       </div>
       <div className="card" style={{ padding: 12, marginBottom: 10 }}>
-        <div className="row between"><b>🛡️ Armor</b><span style={{ fontWeight: 800, fontSize: 18 }}>{safeArmor}{armorAtCap ? <span className="muted small" style={{ marginLeft: 6 }}>MAX</span> : null}</span></div>
-        <div className="muted small" style={{ marginTop: 4 }}>Each point adds +{cfg.armorPerPoint} armor (max {cfg.armorMax}). Flat damage reduction applied to EVERY dart in Battle.</div>
+        <div className="row between"><b>🛡️ Armor</b><span style={{ fontWeight: 800, fontSize: 18 }}>{safeArmor}%{armorAtCap ? <span className="muted small" style={{ marginLeft: 6 }}>MAX</span> : null}</span></div>
+        <div className="muted small" style={{ marginTop: 4 }}>Each point adds +{cfg.armorPerPoint}% armor (max {cfg.armorMax}%). Percentage damage reduction applied to EVERY dart in Battle.</div>
         <button className="btn primary block" style={{ marginTop: 8 }} disabled={!Number.isFinite(available) || available <= 0 || armorAtCap} onClick={() => spend('armor')}>{armorAtCap ? 'Armor at cap' : '+ Spend 1 point on Armor'}</button>
       </div>
       <div className="card" style={{ padding: 12, marginBottom: 10 }}>

@@ -234,7 +234,7 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
             )}
             {state.passiveBonus.armor > 0 && (
               <span className="pill" style={{ fontSize: 10, background: 'color-mix(in srgb,#60a5fa 18%,var(--bg-3))', color: '#93c5fd', borderColor: 'transparent' }}>
-                🛡️ +{state.passiveBonus.armor} party armor
+                🛡️ +{state.passiveBonus.armor}% party armor
               </span>
             )}
           </div>
@@ -317,7 +317,7 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
               <div style={{ marginTop: 4, height: 6, borderRadius: 3, background: 'var(--bg-3)', overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${hpPct}%`, background: e.defeated ? 'var(--muted)' : '#ef4444', transition: 'width .4s' }} />
               </div>
-              <div className="po-sub">🛡 {e.armor} armor · 🎯 {Math.round(effAcc * 100)}% acc{distracted ? ' (debuffed)' : ''}{e.shields.length ? ` · 🛡 ${e.shields.length} shield${e.shields.length === 1 ? '' : 's'}` : ''}</div>
+              <div className="po-sub">🛡 {e.armor}% armor · 🎯 {Math.round(effAcc * 100)}% acc{distracted ? ' (debuffed)' : ''}{e.shields.length ? ` · 🛡 ${e.shields.length} shield${e.shields.length === 1 ? '' : 's'}` : ''}</div>
               {e.shields.length > 0 && !e.defeated && (
                 <div style={{ marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: 3 }}>
                   {e.shields.map((s, si) => (

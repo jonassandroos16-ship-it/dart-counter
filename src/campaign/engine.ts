@@ -641,8 +641,7 @@ export function addDart(
     t.hp = Math.max(0, t.hp - finalDmg);
     const defeated = t.hp <= 0;
     if (defeated) t.defeated = true;
-    step = {
-      dart, damage: finalDmg, kind: defeated ? 'defeated' : 'damage',
+    step = {\n      dart, damage: finalDmg, kind: defeated ? 'defeated' : 'damage',
       enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
     };
   }
@@ -716,11 +715,15 @@ function effectivePower(player: CoopPlayer): number {
   return Math.max(0, player.power + buff);
 }
 
-// Per-dart damage = max(0, dartValue + power) − armor, min 1 on a hit. Misses deal 0.
+// Per-dart damage = round((dartValue + power) * (1 − armor/100)), min 1 on a
+// hit. Armor is a percentage (e.g. armor 10 reduces damage by 10%). Misses
+// deal 0.
 export function computePlayerDartDamage(dart: CampaignDart, attackerPower: number, targetArmor: number): number {
   if (dart.value <= 0) return 0;
-  const raw = Math.max(0, dart.value + attackerPower) - Math.max(0, targetArmor);
-  return Math.max(1, raw);
+  const base = Math.max(0, dart.value + attackerPower);
+  const armorPct = Math.max(0, targetArmor);
+  const mitigated = base * (1 - armorPct / 100);
+  return Math.max(1, Math.round(mitigated));
 }
 
 // After a player has thrown all their darts (and the damage has already
