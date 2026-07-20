@@ -1,3 +1,5 @@
+import type { PlayerCoopProgress } from './campaign/types';
+
 export type PlayerSoundId = 'none' | 'hero' | 'villain' | 'cyborg' | 'mystic' | 'beast' | 'champion';
 
 export interface PlayerAttributes {
@@ -32,6 +34,7 @@ export interface Player {
   powerUps?: PlayerPowerUps;
   developerMode?: boolean;
   showdownBg?: string;
+  coopProgress?: PlayerCoopProgress;
 }
 
 export interface Dart {

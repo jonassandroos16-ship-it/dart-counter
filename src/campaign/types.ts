@@ -186,6 +186,12 @@ export interface CoopPlayer {
   power: number;    // per-player power (from their power attribute)
   armor: number;    // per-player armor (from their armor attribute)
   buffs: PlayerBuff[];
+  // Per-player coop power-up charge (0..chargeMax). Each player fills their
+  // own orb from their own darts and spends it on their own power-up.
+  powerUpCharge: number;
+  // Snapshot of the player's equipped class id (e.g. 'warrior') for this
+  // battle. Used by the engine to apply class-based passive bonuses.
+  classId?: CoopClassId | null;
 }
 
 export interface CampaignDart {
@@ -264,6 +270,9 @@ export interface CampaignBattleState {
   // Outcome once the battle ends.
   outcome: 'ongoing' | 'victory' | 'defeat';
   // Party-shared power-up charge (0..100). Fills from doubles/triples/bulls.
+  // DEPRECATED: kept for backwards-compat with old saves. Per-player charge
+  // now lives on `CoopPlayer.powerUpCharge`. New code reads/writes the
+  // per-player field; this is only used as a fallback when migrating.
   powerUpCharge: number;
   // Resolved darts for the current player's visit — each dart is resolved
   // immediately as it is thrown (damage applied to the targeted enemy).
@@ -291,9 +300,77 @@ export interface CampaignBattleState {
   // frozen turns, then advances to the player phase on Continue. Cleared
   // at the start of each enemy phase by `prepareEnemyTurn`.
   frozenEnemiesThisRound: { id: string; name: string; frozenTurns: number }[];
+  // Snapshot of the team-wide passive bonus applied at battle start (from
+  // each player's equipped class passives). Kept so the UI can show which
+  // passives are active and their stat contributions.
+  passiveBonus?: {
+    power: number;
+    health: number;
+    armor: number;
+    sources: { playerId: string; playerName: string; passiveName: string; icon: string; bonus: { power?: number; health?: number; armor?: number } }[];
+  };
 }
 
-// Persisted progress (also stored to localStorage + Supabase).
+// ── Coop classes & passives ───────────────────────────────────────────
+//
+// Each player can pick one of three classes for Coop mode: Warrior, Priest,
+// or Rogue. Each class has a starter passive that's always active, plus a
+// progression of three stronger passives that unlock with Coop XP earned by
+// playing Coop battles. Passives grant team-wide stat bonuses while the
+// player is in the party.
+
+export type CoopClassId = 'warrior' | 'priest' | 'rogue';
+
+export interface CoopClassDef {
+  id: CoopClassId;
+  name: string;
+  icon: string;
+  desc: string;
+  // The starter passive id (always active for this class).
+  starterPassive: CoopPassiveId;
+}
+
+export type CoopPassiveId =
+  // Warrior — party power bonuses
+  | 'war_power_1'
+  | 'war_power_2'
+  | 'war_power_3'
+  // Priest — party HP bonuses
+  | 'pri_hp_1'
+  | 'pri_hp_2'
+  | 'pri_hp_3'
+  // Rogue — party armor bonuses
+  | 'rog_armor_1'
+  | 'rog_armor_2'
+  | 'rog_armor_3';
+
+export interface CoopPassiveDef {
+  id: CoopPassiveId;
+  classId: CoopClassId;
+  tier: 1 | 2 | 3; // 1 = starter, 2/3 = progression
+  name: string;
+  icon: string;
+  desc: string;
+  // Stat bonus applied to the whole party while this passive is active.
+  // Each successive tier is strictly stronger.
+  bonus: {
+    power?: number;  // flat power added to every party member
+    health?: number; // flat max HP added to every party member
+    armor?: number;  // flat armor added to every party member
+  };
+  // XP required (Coop XP) to unlock this passive. Tier 1 is always 0 (starter).
+  xpRequired: number;
+}
+
+// Persisted per-player Coop progression. Stored on the Player object.
+export interface PlayerCoopProgress {
+  classId: CoopClassId | null;          // currently selected class
+  xp: number;                          // cumulative Coop XP
+  unlockedPassives: CoopPassiveId[];   // passives unlocked (incl. starter)
+  equippedPassives: CoopPassiveId[];   // passives currently equipped (active)
+}
+
+
 //
 // `highest_level_beaten` is kept for backwards compatibility with badges
 // and titles that read it (it counts the cumulative number of levels

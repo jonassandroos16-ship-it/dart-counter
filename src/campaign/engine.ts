@@ -7,6 +7,11 @@ import type {
   CoopPlayer,
   CoopPowerUpDef,
   CoopPowerUpId,
+  CoopClassDef,
+  CoopClassId,
+  CoopPassiveDef,
+  CoopPassiveId,
+  PlayerCoopProgress,
   EnemyDef,
   EnemyDatabase,
   ExactTarget,
@@ -52,6 +57,161 @@ export const COOP_POWER_UPS: CoopPowerUpDef[] = [
 
 export function getCoopPowerUp(id: CoopPowerUpId): CoopPowerUpDef | undefined {
   return COOP_POWER_UPS.find(p => p.id === id);
+}
+
+// ── Coop classes & passives ────────────────────────────────────────────
+//
+// Three classes, each with a starter passive plus two stronger progression
+// passives (3 tiers total per class). Each tier is strictly stronger than
+// the one before. Passives grant team-wide stat bonuses while the player is
+// in the party.
+
+export const COOP_CLASSES: CoopClassDef[] = [
+  { id: 'warrior', name: 'Warrior', icon: '⚔️', desc: 'A frontline striker. Grants the party flat POWER bonuses, making every dart hit harder.', starterPassive: 'war_power_1' },
+  { id: 'priest', name: 'Priest', icon: '✨', desc: 'A guardian healer. Grants the party flat MAX HP bonuses, so the party can soak more damage.', starterPassive: 'pri_hp_1' },
+  { id: 'rogue', name: 'Rogue', icon: '🗡️', desc: 'A nimble defender. Grants the party flat ARMOR bonuses, reducing every enemy dart.', starterPassive: 'rog_armor_1' },
+];
+
+export const COOP_PASSIVES: CoopPassiveDef[] = [
+  // Warrior — power
+  { id: 'war_power_1', classId: 'warrior', tier: 1, name: 'Battle Cry', icon: '⚔️', desc: 'Party +3 power (flat per dart).', bonus: { power: 3 }, xpRequired: 0 },
+  { id: 'war_power_2', classId: 'warrior', tier: 2, name: 'War Banner', icon: '🚩', desc: 'Party +8 power (flat per dart).', bonus: { power: 8 }, xpRequired: 50 },
+  { id: 'war_power_3', classId: 'warrior', tier: 3, name: 'Berserker Aura', icon: '🔥', desc: 'Party +15 power (flat per dart).', bonus: { power: 15 }, xpRequired: 150 },
+  // Priest — health
+  { id: 'pri_hp_1', classId: 'priest', tier: 1, name: 'Blessing', icon: '✨', desc: 'Party +60 max HP.', bonus: { health: 60 }, xpRequired: 0 },
+  { id: 'pri_hp_2', classId: 'priest', tier: 2, name: 'Sanctuary', icon: '🙏', desc: 'Party +150 max HP.', bonus: { health: 150 }, xpRequired: 50 },
+  { id: 'pri_hp_3', classId: 'priest', tier: 3, name: 'Divine Aegis', icon: '😇', desc: 'Party +300 max HP.', bonus: { health: 300 }, xpRequired: 150 },
+  // Rogue — armor
+  { id: 'rog_armor_1', classId: 'rogue', tier: 1, name: 'Light Steps', icon: '🗡️', desc: 'Party +2 armor (flat per enemy dart).', bonus: { armor: 2 }, xpRequired: 0 },
+  { id: 'rog_armor_2', classId: 'rogue', tier: 2, name: 'Shadow Veil', icon: '🌫️', desc: 'Party +5 armor (flat per enemy dart).', bonus: { armor: 5 }, xpRequired: 50 },
+  { id: 'rog_armor_3', classId: 'rogue', tier: 3, name: 'Phantom Guard', icon: '👻', desc: 'Party +10 armor (flat per enemy dart).', bonus: { armor: 10 }, xpRequired: 150 },
+];
+
+export function getCoopClass(id: CoopClassId | null | undefined): CoopClassDef | undefined {
+  if (!id) return undefined;
+  return COOP_CLASSES.find(c => c.id === id);
+}
+
+export function getCoopPassive(id: CoopPassiveId | null | undefined): CoopPassiveDef | undefined {
+  if (!id) return undefined;
+  return COOP_PASSIVES.find(p => p.id === id);
+}
+
+export function passivesForClass(classId: CoopClassId): CoopPassiveDef[] {
+  return COOP_PASSIVES.filter(p => p.classId === classId).sort((a, b) => a.tier - b.tier);
+}
+
+// Compute the team-wide passive bonus from a set of players' equipped
+// passives. Each player contributes the bonus of their highest-tier
+// equipped passive for their class (we sum the strongest equipped passive
+// per player — players can have multiple equipped but only the strongest
+// per class applies, to avoid stacking all three tiers at once).
+//
+// Actually, the spec says: every class has 1 starter passive and they gain
+// XP to unlock new passives. The player can equip/unlock passives. We'll
+// sum all equipped passives across all players (a player can only equip
+// passives for their own class, and equipping multiple tiers of the same
+// class would double-count; the UI only allows equipping one tier at a time
+// per class, so this is safe).
+export interface PartyPassiveBonus {
+  power: number;
+  health: number;
+  armor: number;
+  sources: { playerId: string; playerName: string; passiveName: string; icon: string; bonus: CoopPassiveDef['bonus'] }[];
+}
+
+export function computePartyPassiveBonus(players: Player[]): PartyPassiveBonus {
+  const bonus: PartyPassiveBonus = { power: 0, health: 0, armor: 0, sources: [] };
+  for (const p of players) {
+    const prog = p.coopProgress;
+    if (!prog || !prog.classId) continue;
+    const equipped = prog.equippedPassives || [];
+    if (!equipped.length) continue;
+    // Sum the bonus of every equipped passive (UI enforces one per class).
+    for (const pid of equipped) {
+      const def = getCoopPassive(pid);
+      if (!def) continue;
+      bonus.power += def.bonus.power || 0;
+      bonus.health += def.bonus.health || 0;
+      bonus.armor += def.bonus.armor || 0;
+      bonus.sources.push({
+        playerId: p.id,
+        playerName: p.name,
+        passiveName: def.name,
+        icon: def.icon,
+        bonus: def.bonus,
+      });
+    }
+  }
+  return bonus;
+}
+
+// XP granted per Coop battle. Scaled by outcome (win = more) and darts thrown.
+export function coopXpForBattle(stats: CampaignBattleState['stats'], won: boolean): number {
+  const base = won ? 20 : 5;
+  const dartBonus = Math.min(20, Math.floor(stats.dartsThrown / 3));
+  const defeatBonus = Math.min(15, stats.enemiesDefeated * 3);
+  return base + dartBonus + defeatBonus;
+}
+
+// Returns the list of passives a player can unlock/equip given their Coop XP.
+export function unlockedPassivesForPlayer(prog: PlayerCoopProgress | undefined | null): CoopPassiveId[] {
+  if (!prog || !prog.classId) return [];
+  const classPassives = passivesForClass(prog.classId);
+  return classPassives.filter(p => (prog.xp || 0) >= p.xpRequired).map(p => p.id);
+}
+
+// Default coop progress for a brand-new player: no class, 0 XP, no passives.
+export function defaultCoopProgress(): PlayerCoopProgress {
+  return { classId: null, xp: 0, unlockedPassives: [], equippedPassives: [] };
+}
+
+// When a player picks a class, auto-equip the starter passive (tier 1).
+export function selectClassForPlayer(prog: PlayerCoopProgress, classId: CoopClassId): PlayerCoopProgress {
+  const starter = COOP_PASSIVES.find(p => p.classId === classId && p.tier === 1);
+  return {
+    ...prog,
+    classId,
+    unlockedPassives: Array.from(new Set([...(prog.unlockedPassives || []), starter?.id].filter(Boolean) as CoopPassiveId[])),
+    equippedPassives: [starter?.id].filter(Boolean) as CoopPassiveId[],
+  };
+}
+
+// Equip a passive for the player. Replaces any currently-equipped passive of
+// the same class (only one per class at a time).
+export function equipPassiveForPlayer(prog: PlayerCoopProgress, passiveId: CoopPassiveId): PlayerCoopProgress {
+  const def = getCoopPassive(passiveId);
+  if (!def || !prog.classId || def.classId !== prog.classId) return prog;
+  const unlocked = unlockedPassivesForPlayer(prog);
+  if (!unlocked.includes(passiveId)) return prog;
+  // Remove any currently-equipped passives of the same class, then add this one.
+  const other = (prog.equippedPassives || []).filter(id => {
+    const d = getCoopPassive(id);
+    return d && d.classId !== def.classId;
+  });
+  return { ...prog, equippedPassives: [...other, passiveId] };
+}
+
+// Add Coop XP to a player's progress, auto-unlocking any passives whose
+// XP threshold they now meet. Returns the updated progress and the list of
+// newly unlocked passive ids (for UI toast).
+export function addCoopXpForPlayer(prog: PlayerCoopProgress | undefined | null, xp: number): { progress: PlayerCoopProgress; newlyUnlocked: CoopPassiveId[] } {
+  const cur = prog || defaultCoopProgress();
+  if (!cur.classId) return { progress: cur, newlyUnlocked: [] };
+  const newXp = Math.max(0, (cur.xp || 0) + Math.max(0, xp));
+  const classPassives = passivesForClass(cur.classId);
+  const newlyUnlocked: CoopPassiveId[] = [];
+  const unlockedSet = new Set(cur.unlockedPassives || []);
+  for (const p of classPassives) {
+    if (newXp >= p.xpRequired && !unlockedSet.has(p.id)) {
+      newlyUnlocked.push(p.id);
+      unlockedSet.add(p.id);
+    }
+  }
+  return {
+    progress: { ...cur, xp: newXp, unlockedPassives: Array.from(unlockedSet) },
+    newlyUnlocked,
+  };
 }
 
 // Starter power-ups are always available. Advanced power-ups unlock as level
@@ -145,7 +305,7 @@ export function partyPowerFor(players: Player[], settings: Settings): number {
 }
 
 // Per-player snapshot used during a battle.
-function toCoopPlayer(p: Player, settings: Settings): CoopPlayer {
+function toCoopPlayer(p: Player, settings: Settings, startCharge: number): CoopPlayer {
   const cfg = settings.powerUpScaling;
   const healthMax = Number.isFinite(cfg.healthMax) ? cfg.healthMax : Number.MAX_SAFE_INTEGER;
   const armorMax = Number.isFinite(cfg.armorMax) ? cfg.armorMax : Number.MAX_SAFE_INTEGER;
@@ -165,6 +325,8 @@ function toCoopPlayer(p: Player, settings: Settings): CoopPlayer {
     power: Math.max(0, Math.min(powerMax, pw)),
     armor: Math.max(0, Math.min(armorMax, a)),
     buffs: [],
+    powerUpCharge: Math.max(0, startCharge),
+    classId: p.coopProgress?.classId ?? null,
   };
 }
 
@@ -177,16 +339,34 @@ export function startBattle(
   db: EnemyDatabase = ENEMY_DATABASE,
   chapterId: string = 'crimson_vale',
 ): CampaignBattleState {
-  const party = players.map(p => toCoopPlayer(p, settings));
-  const partyMaxHp = partyMaxHpFor(players, settings);
-  // Apply starting charge for the equipped coop power-up. The party shares a
-  // single orb, so we use the first player who has a coop power-up equipped.
   const cfg = settings?.powerUpScaling;
   const chargeCap = Number.isFinite(cfg?.chargeMax) ? (cfg?.chargeMax as number) : 100;
   const startMap = (cfg && cfg.startingCharge) || {};
-  const equippedCoopId = (players.find(p => p.powerUps?.coopActive)?.powerUps?.coopActive) ?? null;
-  const startCharge = equippedCoopId ? (startMap[equippedCoopId] || 0) : 0;
-  const powerUpCharge = Math.max(0, Math.min(chargeCap, startCharge));
+  // Per-player starting charge: each player uses their own equipped coop
+  // power-up's starting charge. This is the core fix for the bug where one
+  // player could charge but another couldn't use their power-up.
+  const party = players.map(p => {
+    const equippedId = p.powerUps?.coopActive ?? null;
+    const startCharge = equippedId ? (startMap[equippedId] || 0) : 0;
+    return toCoopPlayer(p, settings, Math.max(0, Math.min(chargeCap, startCharge)));
+  });
+  // Apply team-wide passive bonuses (from each player's equipped passives)
+  // to the party's stats. Health bonus raises maxHp AND current hp; power
+  // and armor bonuses raise the per-player stats.
+  const passiveBonus = computePartyPassiveBonus(players);
+  const healthMax = Number.isFinite(cfg?.healthMax) ? (cfg?.healthMax as number) : Number.MAX_SAFE_INTEGER;
+  const armorMax = Number.isFinite(cfg?.armorMax) ? (cfg?.armorMax as number) : Number.MAX_SAFE_INTEGER;
+  const powerMax = Number.isFinite(cfg?.powerMax) ? (cfg?.powerMax as number) : Number.MAX_SAFE_INTEGER;
+  for (const cp of party) {
+    cp.maxHp = Math.min(healthMax, cp.maxHp + passiveBonus.health);
+    cp.hp = cp.maxHp;
+    cp.power = Math.min(powerMax, cp.power + passiveBonus.power);
+    cp.armor = Math.min(armorMax, cp.armor + passiveBonus.armor);
+  }
+  const partyMaxHp = party.reduce((acc, p) => acc + p.maxHp, 0);
+  // Legacy shared charge kept for backwards-compat with old saves/tests.
+  // Initialized to the first player's charge (mirrors old behavior).
+  const powerUpCharge = party.length ? party[0].powerUpCharge : 0;
   const enemies: ActiveEnemy[] = level.enemies.map((defId) => {
     const def = db[defId];
     if (!def) throw new Error(`Unknown enemy id: ${defId}`);
@@ -239,6 +419,7 @@ export function startBattle(
     awaitContinue: false,
     phantomDarts: 0,
     frozenEnemiesThisRound: [],
+    passiveBonus,
   };
 }
 
@@ -368,13 +549,18 @@ export function addDart(
     phantomDarts = phantomDarts - 1;
   }
 
-  // Power-up charge: every dart thrown contributes to the party's shared
-  // coop power-up orb. Mirrors the competitive `addDartToGame` flow, which
-  // calls `chargeFromDart` per dart. Without this, the coop orb never
-  // charges (it stayed at 0% forever).
+  // Power-up charge: every dart thrown contributes to the CURRENT THROWER's
+  // coop power-up orb. This is per-player — other players' orbs are not
+  // affected. Mirrors the competitive `addDartToGame` flow.
   const chargeCap = settings?.powerUpScaling?.chargeMax ?? 100;
   const gained = settings ? chargeFromDart(dart, settings) : 0;
-  const powerUpCharge = Math.min(chargeCap, state.powerUpCharge + gained);
+  const throwerIdx = state.playerTurnIdx;
+  const players = state.players.map((p, i) => i === throwerIdx
+    ? { ...p, powerUpCharge: Math.min(chargeCap, p.powerUpCharge + gained) }
+    : p);
+  // Legacy shared charge kept in sync with the current thrower for backwards
+  // compat with old code that reads state.powerUpCharge.
+  const powerUpCharge = players[throwerIdx].powerUpCharge;
 
   // Snapshot enemies at the start of the visit so undo can restore them.
   const visitEnemiesSnapshot = state.darts.length === 0
@@ -382,9 +568,9 @@ export function addDart(
     : state.visitEnemiesSnapshot;
 
   // Resolve this dart immediately against the targeted enemy.
-  const thrower = state.players[state.playerTurnIdx];
+  const thrower = players[throwerIdx];
   if (!thrower) {
-    return { ...state, darts: [...state.darts, dart], phantomDarts, visitEnemiesSnapshot, powerUpCharge };
+    return { ...state, players, darts: [...state.darts, dart], phantomDarts, visitEnemiesSnapshot, powerUpCharge };
   }
   const power = effectivePower(thrower);
 
@@ -397,6 +583,7 @@ export function addDart(
       // No alive enemies — just record the dart.
       return {
         ...state,
+        players,
         darts: [...state.darts, dart],
         phantomDarts,
         visitEnemiesSnapshot,
@@ -432,8 +619,7 @@ export function addDart(
     t.hp = Math.max(0, t.hp - finalDmg);
     const defeated = t.hp <= 0;
     if (defeated) t.defeated = true;
-    step = {
-      dart, damage: finalDmg, kind: defeated ? 'defeated' : 'damage',
+    step = {\n      dart, damage: finalDmg, kind: defeated ? 'defeated' : 'damage',
       enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
     };
   }
@@ -443,6 +629,7 @@ export function addDart(
 
   return {
     ...state,
+    players,
     enemies,
     darts: [...state.darts, dart],
     resolvedDarts: [...state.resolvedDarts, step],
@@ -473,13 +660,18 @@ export function undoDart(state: CampaignBattleState, settings?: Settings): Campa
   // Recompute outcome — undoing a dart could un-defeat an enemy.
   const anyAlive = enemies.some(e => !e.defeated);
   const outcome: CampaignBattleState['outcome'] = !anyAlive ? 'victory' : 'ongoing';
-  // Revert the power-up charge added by the undone dart so the orb reflects
-  // only darts still on the board.
+  // Revert the power-up charge added by the undone dart from the CURRENT
+  // THROWER's per-player orb (not the shared pool).
   const undoneDart = state.darts[state.darts.length - 1];
   const revert = settings ? chargeFromDart(undoneDart, settings) : 0;
+  const throwerIdx = state.playerTurnIdx;
+  const players = state.players.map((p, i) => i === throwerIdx
+    ? { ...p, powerUpCharge: Math.max(0, p.powerUpCharge - revert) }
+    : p);
   const powerUpCharge = Math.max(0, state.powerUpCharge - revert);
   return {
     ...state,
+    players,
     enemies,
     darts,
     resolvedDarts,
@@ -725,15 +917,26 @@ export function canActivateCoopPowerUp(state: CampaignBattleState, id: CoopPower
   if (state.darts.length > 0) return false; // only before throwing
   const def = getCoopPowerUp(id);
   if (!def) return false;
-  return state.powerUpCharge >= def.cost;
+  // Per-player charge: only the current thrower's orb is checked.
+  const thrower = state.players[state.playerTurnIdx];
+  if (!thrower) return false;
+  return thrower.powerUpCharge >= def.cost;
 }
 
 export function activateCoopPowerUp(state: CampaignBattleState, id: CoopPowerUpId): CampaignBattleState {
   if (!canActivateCoopPowerUp(state, id)) return state;
   const def = getCoopPowerUp(id)!;
-  const thrower = state.players[state.playerTurnIdx];
-  const charge = state.powerUpCharge - def.cost;
-  const next = applyCoopPowerUp(state, id, thrower, charge);
+  const throwerIdx = state.playerTurnIdx;
+  const thrower = state.players[throwerIdx];
+  // Deduct from the thrower's per-player orb only. Other players keep their
+  // own charge.
+  const newCharge = thrower.powerUpCharge - def.cost;
+  const players = state.players.map((p, i) => i === throwerIdx
+    ? { ...p, powerUpCharge: newCharge }
+    : p);
+  // Update the legacy shared charge to mirror the thrower for backwards compat.
+  const powerUpCharge = newCharge;
+  const next = applyCoopPowerUp({ ...state, players }, id, thrower, powerUpCharge);
   return { ...next, stats: { ...next.stats, powerUpsUsed: next.stats.powerUpsUsed + 1 } };
 }
 
