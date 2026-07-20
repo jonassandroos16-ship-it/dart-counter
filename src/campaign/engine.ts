@@ -126,12 +126,12 @@ export function passivesForClass(classId: CoopClassId): CoopPassiveDef[] {
 }
 
 // Compute the team-wide passive bonus from a set of players' equipped
-// passives. Each unique passive id contributes its bonus to the party
-// exactly once — multiple players equipping the same passive (e.g. three
-// priests all equipping `pri_hp_1`) do NOT stack; the buff is applied a
-// single time. Different passives (e.g. `pri_hp_1` and `pri_hp_2`) each
-// contribute independently, so a party with priests running different
-// tiers still benefits from every distinct equipped passive.
+// passives. Each player's equipped passive contributes its bonus to the
+// party independently — multiple players running the same passive (e.g.
+// two priests both equipping `pri_hp_1`) stack, granting +120 HP rather
+// than +60. Distinct passives (e.g. `pri_hp_1` and `pri_hp_2`) each
+// contribute independently as well, so a party with priests running
+// different tiers still benefits from every equipped passive.
 export interface PartyPassiveBonus {
   power: number;
   health: number;
@@ -141,19 +141,14 @@ export interface PartyPassiveBonus {
 
 export function computePartyPassiveBonus(players: Player[]): PartyPassiveBonus {
   const bonus: PartyPassiveBonus = { power: 0, health: 0, armor: 0, sources: [] };
-  const seen = new Set<CoopPassiveId>();
   for (const p of players) {
     const prog = p.coopProgress;
     if (!prog || !prog.classId) continue;
     const equipped = prog.equippedPassives || [];
     if (!equipped.length) continue;
     for (const pid of equipped) {
-      // Skip passives already counted from another player — each unique
-      // passive id buffs the party once, not once per priest.
-      if (seen.has(pid)) continue;
       const def = getCoopPassive(pid);
       if (!def) continue;
-      seen.add(pid);
       bonus.power += def.bonus.power || 0;
       bonus.health += def.bonus.health || 0;
       bonus.armor += def.bonus.armor || 0;
