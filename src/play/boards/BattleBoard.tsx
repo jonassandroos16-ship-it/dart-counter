@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Game, GamePlayer, GameRecord, Player, Settings } from '../../types';
+import type { Game, GamePlayer, GameRecord, Player, Settings, Dart } from '../../types';
 import { SCORE_POPUPS } from '../../constants';
 import { computeBattleDartDamage } from '../../logic';
 import { Sound } from '../../sound';
