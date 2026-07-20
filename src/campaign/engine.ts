@@ -102,17 +102,12 @@ export function passivesForClass(classId: CoopClassId): CoopPassiveDef[] {
 }
 
 // Compute the team-wide passive bonus from a set of players' equipped
-// passives. Each player contributes the bonus of their highest-tier
-// equipped passive for their class (we sum the strongest equipped passive
-// per player — players can have multiple equipped but only the strongest
-// per class applies, to avoid stacking all three tiers at once).
-//
-// Actually, the spec says: every class has 1 starter passive and they gain
-// XP to unlock new passives. The player can equip/unlock passives. We'll
-// sum all equipped passives across all players (a player can only equip
-// passives for their own class, and equipping multiple tiers of the same
-// class would double-count; the UI only allows equipping one tier at a time
-// per class, so this is safe).
+// passives. Each unique passive id contributes its bonus to the party
+// exactly once — multiple players equipping the same passive (e.g. three
+// priests all equipping `pri_hp_1`) do NOT stack; the buff is applied a
+// single time. Different passives (e.g. `pri_hp_1` and `pri_hp_2`) each
+// contribute independently, so a party with priests running different
+// tiers still benefits from every distinct equipped passive.
 export interface PartyPassiveBonus {
   power: number;
   health: number;
@@ -122,15 +117,19 @@ export interface PartyPassiveBonus {
 
 export function computePartyPassiveBonus(players: Player[]): PartyPassiveBonus {
   const bonus: PartyPassiveBonus = { power: 0, health: 0, armor: 0, sources: [] };
+  const seen = new Set<CoopPassiveId>();
   for (const p of players) {
     const prog = p.coopProgress;
     if (!prog || !prog.classId) continue;
     const equipped = prog.equippedPassives || [];
     if (!equipped.length) continue;
-    // Sum the bonus of every equipped passive (UI enforces one per class).
     for (const pid of equipped) {
+      // Skip passives already counted from another player — each unique
+      // passive id buffs the party once, not once per priest.
+      if (seen.has(pid)) continue;
       const def = getCoopPassive(pid);
       if (!def) continue;
+      seen.add(pid);
       bonus.power += def.bonus.power || 0;
       bonus.health += def.bonus.health || 0;
       bonus.armor += def.bonus.armor || 0;
@@ -351,25 +350,17 @@ export function startBattle(
     return toCoopPlayer(p, settings, Math.max(0, Math.min(chargeCap, startCharge)));
   });
   // Apply team-wide passive bonuses (from each player's equipped passives)
-  // to the party's stats. Each passive grants a TEAM-WIDE bonus that is
-  // distributed evenly across all party members, so the bonus applies to
-  // the party exactly ONCE regardless of how many players are present
-  // (previously the bonus was added to every player, multiplying the
-  // effect by the player count — e.g. a priest's +60 HP became +120 with
-  // two players).
+  // to the party's stats. Health bonus raises maxHp AND current hp; power
+  // and armor bonuses raise the per-player stats.
   const passiveBonus = computePartyPassiveBonus(players);
   const healthMax = Number.isFinite(cfg?.healthMax) ? (cfg?.healthMax as number) : Number.MAX_SAFE_INTEGER;
   const armorMax = Number.isFinite(cfg?.armorMax) ? (cfg?.armorMax as number) : Number.MAX_SAFE_INTEGER;
   const powerMax = Number.isFinite(cfg?.powerMax) ? (cfg?.powerMax as number) : Number.MAX_SAFE_INTEGER;
-  const partySize = Math.max(1, party.length);
-  const healthPerPlayer = passiveBonus.health / partySize;
-  const powerPerPlayer = passiveBonus.power / partySize;
-  const armorPerPlayer = passiveBonus.armor / partySize;
   for (const cp of party) {
-    cp.maxHp = Math.min(healthMax, cp.maxHp + healthPerPlayer);
+    cp.maxHp = Math.min(healthMax, cp.maxHp + passiveBonus.health);
     cp.hp = cp.maxHp;
-    cp.power = Math.min(powerMax, cp.power + powerPerPlayer);
-    cp.armor = Math.min(armorMax, cp.armor + armorPerPlayer);
+    cp.power = Math.min(powerMax, cp.power + passiveBonus.power);
+    cp.armor = Math.min(armorMax, cp.armor + passiveBonus.armor);
   }
   const partyMaxHp = party.reduce((acc, p) => acc + p.maxHp, 0);
   // Legacy shared charge kept for backwards-compat with old saves/tests.
