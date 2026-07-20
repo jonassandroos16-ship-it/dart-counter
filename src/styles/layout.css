@@ -39,7 +39,7 @@
 .nav button.active { color: var(--accent); }
 
 .nav-toggle {
-  position: fixed; left: 50%; bottom: calc(-40px + env(safe-area-inset-bottom));
+  position: fixed; left: 50%; bottom: calc(6px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   z-index: 31;
   width: 36px; height: 28px; border-radius: 10px 10px 4px 4px;
