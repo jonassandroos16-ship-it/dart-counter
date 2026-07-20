@@ -136,7 +136,75 @@ const CHAPTER_2: CampaignChapter = {
   ],
 };
 
-export const CAMPAIGN_CHAPTERS: CampaignChapter[] = [CHAPTER_1, CHAPTER_2];
+// ── Chapter 3: The Verdant Maw ──────────────────────────────────────
+//
+// Unlocked after Chapter 2's boss is cleared. A jungle-themed region with
+// five new levels and five new advanced power-up rewards. The theme shifts
+// to a wet green palette, the enemies are the toughest in the campaign so
+// far, and the story picks up where Chapter 2 left off — the thawed south
+// has woken something older and hungrier than the Ice Court.
+const CHAPTER_3: CampaignChapter = {
+  id: 'verdant_maw',
+  name: 'Chapter III · The Verdant Maw',
+  subtitle: 'Silence the living jungle',
+  theme: {
+    id: 'jungle',
+    name: 'Jungle',
+    background: 'radial-gradient(circle at 50% 0%, color-mix(in srgb,#14532d 45%, var(--bg)) 0%, var(--bg) 70%)',
+    accent: '#22c55e',
+    cardTint: 'color-mix(in srgb,#22c55e 14%, var(--bg-2))',
+  },
+  story: {
+    intro:
+      'The long winter broke, and the south woke up wet and green and wrong. The jungle that the Ice Court had held frozen for a century is growing back angrier than anyone remembers — vines across the roads, roots through the temple stones, and a low wet roar that rolls up from the canopy at night. The party wraps their cloaks tight against thorns instead of cold now, and pushes south into the green. Something at the heart of the Maw is calling the wild in, and it has to be answered.',
+    outro:
+      'The Heart of the Maw splits like a rotten fruit, and the jungle goes quiet — the kind of quiet that follows a long-held breath. The vines slacken, the roots still, and for the first time in living memory the road south is just a road. The party turns for home, cloaks torn and quivers near empty, but the darts that ride in them now carry the weight of three fallen thrones.',
+  },
+  levels: [
+    {
+      level_id: 1,
+      name: 'Thornwood Edge',
+      is_boss: false,
+      enemies: ['vine_lasher', 'vine_lasher'],
+      reward_power_up: 'coop_vine_grasp',
+      story_bit: 'The vines go slack at the treeline. The Maw has noticed us — and we have noticed it back.',
+    },
+    {
+      level_id: 2,
+      name: 'Spore Hollow',
+      is_boss: false,
+      enemies: ['spore_bloom', 'vine_lasher'],
+      reward_power_up: 'coop_spore_burst',
+      story_bit: 'The hollow is still. The air is thick with something sweet and bad.',
+    },
+    {
+      level_id: 3,
+      name: 'The Hanging Garden',
+      is_boss: false,
+      enemies: ['spore_bloom', 'thorn_spearman', 'vine_lasher'],
+      reward_power_up: 'coop_thorn_lance',
+      story_bit: 'The garden falls. Whatever it was grown to feed is close now.',
+    },
+    {
+      level_id: 4,
+      name: 'Maw Approach',
+      is_boss: false,
+      enemies: ['thorn_spearman', 'bloom_warden'],
+      reward_power_up: 'coop_verdant_bloom',
+      story_bit: 'The canopy parts. The Maw is open ahead, and it is breathing.',
+    },
+    {
+      level_id: 5,
+      name: 'The Heart of the Maw',
+      is_boss: true,
+      enemies: ['bloom_warden', 'the_verdant_maw'],
+      reward_power_up: 'coop_heart_of_maw',
+      story_bit: 'The Heart splits like rotten fruit. The long green grip on the south is broken at last.',
+    },
+  ],
+};
+
+export const CAMPAIGN_CHAPTERS: CampaignChapter[] = [CHAPTER_1, CHAPTER_2, CHAPTER_3];
 
 // Backwards-compat export: the flat list of all levels across all chapters.
 // Used by tests and the engine's flat `getLevel` lookup. Level ids are unique
