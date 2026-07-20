@@ -49,7 +49,6 @@ export function PowerUpOrb({ game, curIdx, settings, onActivate }: { game: Game;
   const pl = game.players[curIdx];
   if (!pl) return null;
   const pu = getPowerUpInfo(pl.powerUpId);
-  const cap = settings.powerUpScaling.chargeMax;
   const needed = chargesNeededFor(pl.powerUpId, settings);
   const charge = Math.min(needed, pl.powerUpCharge || 0);
   const pct = needed > 0 ? Math.round((charge / needed) * 100) : 0;
