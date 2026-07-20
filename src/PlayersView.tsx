@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Player, PlayerSoundId, Settings, CustomTitle } from './types';
 import { COLORS, allTitles, getTitleInfo, conditionLabel, titleProgressInfo, PLAYER_SOUNDS, SHOWDOWN_BGS, type TitleCtx } from './constants';
 import { levelFromXP, getPlayerXP, playerStats, allVisitsFor, defaultAttributes, defaultPowerUps, totalAttributePointsForLevel, totalPowerUpPointsForLevel } from './logic';
-import { initials } from './store';
+import { initials, uid } from './store';
 import { Modal } from './Popups';
 import { BADGES, getBadgeInfo, getBadgeContext, computeLifetimeBadgeCounts, buildCoopBadgeCtx } from './badges';
 import { POWER_UPS, getPowerUpInfo } from './powerups';
@@ -37,7 +37,24 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
     <div>
       <div className="row between" style={{ marginBottom: 12 }}>
         <h2>Players</h2>
-        <button className="btn primary sm" onClick={() => { setEditing({ id: '', name: '', color: COLORS[players.length % COLORS.length] }); setIsNew(true); }}>+ Add Player</button>
+        <button className="btn primary sm" onClick={() => {
+          const newPlayer: Player = {
+            id: uid(),
+            name: '',
+            color: COLORS[players.length % COLORS.length],
+            xp: 0,
+            unlockedTitles: [],
+            selectedTitle: null,
+            unlockedBadges: [],
+            badgeCounts: {},
+            selectedBadge: null,
+            attributes: defaultAttributes(settings),
+            powerUps: defaultPowerUps(settings),
+          };
+          setPlayers((prev: Player[]) => [...prev, newPlayer]);
+          setEditing(newPlayer);
+          setIsNew(true);
+        }}>+ Add Player</button>
       </div>
       {!players.length && <div className="empty">No players yet.<br />Add your first player to get started.</div>}
       {players.map(p => {
@@ -90,7 +107,10 @@ export function PlayersView({ players, games, settings, setPlayers, toast }: {
           </div>
         );
       })}
-      {editing && <EditPlayerModal player={editing} players={players} isNew={isNew} games={games} settings={settings} onClose={() => setEditing(null)} setPlayers={setPlayers} toast={toast} />}
+      {editing && <EditPlayerModal player={editing} players={players} isNew={isNew} games={games} settings={settings} onClose={() => {
+        if (isNew && !editing.name) setPlayers((prev: Player[]) => prev.filter(p => p.id !== editing.id));
+        setEditing(null);
+      }} setPlayers={setPlayers} toast={toast} />}
     </div>
   );
 }
@@ -104,6 +124,37 @@ function EditPlayerModal({ player, players, isNew, games, settings, onClose, set
 
   const [devMode, setDevMode] = useState<boolean>(!!player.developerMode);
   const livePlayer = isNew ? { ...player, developerMode: devMode } : (players.find(p => p.id === player.id) || player);
+
+  // For existing players, basic fields (name/color/sound/showdownBg) auto-save
+  // on change. For new players these stay in local state until the Save button
+  // is pressed, since the player is only committed once the user confirms.
+  const patchPlayer = (patch: Partial<Player>) => {
+    setPlayers((prev: Player[]) => prev.map(p => p.id === player.id ? { ...p, ...patch } : p));
+  };
+
+  const onNameChange = (value: string) => {
+    setName(value);
+    if (!isNew) patchPlayer({ name: value.trim() });
+  };
+  const onColorChange = (c: string) => {
+    setColor(c);
+    if (!isNew) patchPlayer({ color: c });
+  };
+  const onSoundChange = (s: PlayerSoundId) => {
+    setSound(s);
+    if (!isNew) patchPlayer({ sound: s });
+  };
+  const onShowdownBgChange = (bg: string) => {
+    setShowdownBg(bg);
+    if (!isNew) patchPlayer({ showdownBg: bg });
+  };
+
+  const saveNew = () => {
+    if (!name.trim()) { toast('Enter a name first'); return; }
+    patchPlayer({ name: name.trim(), color, sound, showdownBg });
+    toast('Player added');
+    onClose();
+  };
 
   return (
     <Modal onClose={onClose}>
@@ -120,10 +171,10 @@ function EditPlayerModal({ player, players, isNew, games, settings, onClose, set
 
       {tab === 'basic' && (
         <>
-          <label className="field"><span>Name</span><input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Jonas" maxLength={20} /></label>
+          <label className="field"><span>Name</span><input value={name} onChange={e => onNameChange(e.target.value)} placeholder="e.g. Jonas" maxLength={20} /></label>
           <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Color</span>
           <div className="row wrap" style={{ gap: 10, marginBottom: 18 }}>
-            {COLORS.map(c => <button key={c} className={`swatch${c === color ? ' on' : ''}`} style={{ background: c }} onClick={() => setColor(c)} />)}
+            {COLORS.map(c => <button key={c} className={`swatch${c === color ? ' on' : ''}`} style={{ background: c }} onClick={() => onColorChange(c)} />)}
           </div>
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 12, borderRadius: 10, background: 'var(--bg-3)', border: `1px solid ${livePlayer.developerMode ? 'var(--accent)' : 'var(--border)'}`, cursor: 'pointer', marginBottom: 6 }}>
             <input type="checkbox" checked={!!livePlayer.developerMode} onChange={e => {
@@ -186,7 +237,7 @@ function EditPlayerModal({ player, players, isNew, games, settings, onClose, set
           <div className="muted small" style={{ marginBottom: 8 }}>Pick a dramatic backdrop shown during the pre-match showdown intro.</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(84px, 1fr))', gap: 8 }}>
             {SHOWDOWN_BGS.map(bg => (
-              <button key={bg.id} onClick={() => setShowdownBg(bg.id)}
+              <button key={bg.id} onClick={() => onShowdownBgChange(bg.id)}
                 title={bg.label}
                 style={{
                   position: 'relative', height: 56, borderRadius: 10, cursor: 'pointer', padding: 0,
@@ -215,7 +266,7 @@ function EditPlayerModal({ player, players, isNew, games, settings, onClose, set
           <div className="muted small" style={{ marginBottom: 10 }}>Pick an entrance sound — played in showdown card order before a match.</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {PLAYER_SOUNDS.map(s => (
-              <button key={s.id} onClick={() => setSound(s.id)}
+              <button key={s.id} onClick={() => onSoundChange(s.id)}
                 style={{
                   display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: 10, borderRadius: 10,
                   background: sound === s.id ? 'color-mix(in srgb,var(--accent) 22%,var(--bg-3))' : 'var(--bg-3)',
@@ -245,6 +296,7 @@ function EditPlayerModal({ player, players, isNew, games, settings, onClose, set
 
       <div className="row" style={{ gap: 10, marginTop: 16 }}>
         <button className="btn block ghost" onClick={onClose}>Cancel</button>
+        {isNew && <button className="btn block primary" onClick={saveNew}>Save</button>}
       </div>
     </Modal>
   );
