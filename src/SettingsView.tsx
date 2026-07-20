@@ -199,6 +199,27 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
             );
           })}
         </div>
+        <div className="muted small" style={{ margin: '14px 0 8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Charges Needed to Activate</div>
+        <div className="muted small" style={{ marginBottom: 8 }}>Set how full each competitive power-up's orb must be before it can be activated. Lower = easier to use, higher = more impactful. Defaults to the charge cap ({puForm.chargeMax}) when blank.</div>
+        <div className="grid grid-2">
+          {POWER_UPS.map((pu) => {
+            const v = (puForm.chargesNeeded || {})[pu.id];
+            const cn = v == null || !Number.isFinite(v) ? '' : String(v);
+            return (
+              <label key={pu.id} className="field"><span>{pu.icon} {pu.name} needed (%)</span>
+                <input type="number" value={cn} placeholder={String(puForm.chargeMax)} min={0} max={puForm.chargeMax} step={5}
+                  onChange={e => {
+                    const raw = e.target.value;
+                    const num = raw === '' ? NaN : +raw;
+                    const nextMap = { ...(puForm.chargesNeeded || {}) };
+                    if (!Number.isFinite(num)) delete nextMap[pu.id];
+                    else nextMap[pu.id] = Math.max(0, Math.min(puForm.chargeMax, num));
+                    setPuForm({ ...puForm, chargesNeeded: nextMap });
+                  }} />
+              </label>
+            );
+          })}
+        </div>
         <button className="btn primary block" style={{ marginTop: 10 }} onClick={() => { update({ powerUpScaling: puForm }); toast('Power-up & attribute settings saved'); }}>Save Power-Up Settings</button>
       </div>
 
