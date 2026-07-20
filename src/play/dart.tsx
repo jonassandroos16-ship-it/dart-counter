@@ -37,7 +37,7 @@ export function undoDart(game: Game): Game {
 // these linger, effects like Blocker (_oneDartNext) permanently stunt the
 // player. Always clear the whole set together so stacked stun-locks
 // (freeze + blocker + cripple) all expire at once.
-const VISIT_POWERUP_FLAGS = ['_oneDartNext', '_crippledNext', '_surgeNext', '_surgeArmed', '_fourthDart', '_frozenNext', '_luckyMiss', '_doubleTrouble', '_overchargeNext'] as const;
+const VISIT_POWERUP_FLAGS = ['_oneDartNext', '_crippledNext', '_surgeNext', '_surgeArmed', '_fourthDart', '_frozenNext', '_luckyMiss', '_bullseyeFrenzy', '_hotStreak'] as const;
 
 export function clearVisitPowerUpFlags(pl: any): any {
   let changed = false;

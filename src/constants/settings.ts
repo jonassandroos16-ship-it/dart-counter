@@ -29,7 +29,7 @@ export function defaultSettings(): Settings {
       battleMinDamage: 1,
       // Surge is an early-game power-up, so it starts partially charged.
       // Other power-ups start at 0 by default.
-      startingCharge: { pu_surge: 40, pu_overcharge: 20 },
+      startingCharge: { pu_surge: 40 },
       // Per-power-up activation threshold. Any id not listed defaults to
       // `chargeMax` (100). Balanced by impact: weak/self-buff power-ups cost
       // less, game-changing power-ups cost more.
@@ -43,9 +43,9 @@ export function defaultSettings(): Settings {
         pu_steal: 100,         // 30 points — strong
         pu_freeze: 110,        // leader misses — very strong
         pu_lucky_miss: 70,     // cancel bust — weak
-        pu_double_trouble: 90, // doubles only — risky/high reward
-        pu_overcharge: 70,     // refill + 25% — self-buff
-        pu_curse: 110,         // 2 visits 50% — very strong
+        pu_bullseye_frenzy: 80, // bulls score double — medium
+        pu_hot_streak: 90,     // compounding bonus — strong self-buff
+        pu_swap: 110,          // steal leader's score — very strong
       },
     },
   };

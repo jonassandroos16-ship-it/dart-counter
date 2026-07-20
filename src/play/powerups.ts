@@ -123,10 +123,7 @@ export async function activatePowerUp(game: Game, playerIdx: number, settings: S
 function consumeCharge(game: Game, playerIdx: number, puId: string | null | undefined): Game {
   const players = game.players.map((p: any, i: number) => {
     if (i !== playerIdx) return p;
-    // Overcharge refills the orb to full instead of draining it — the whole
-    // point of the power-up is to chain into another activation next visit.
-    const refill = puId === 'pu_overcharge';
-    const updated: any = { ...p, powerUpCharge: refill ? (game.powerUpsEnabled ? 100 : 0) : 0, powerUpUses: (p.powerUpUses || 0) + 1 };
+    const updated: any = { ...p, powerUpCharge: 0, powerUpUses: (p.powerUpUses || 0) + 1 };
     if (puId === 'pu_fourth_dart') updated._fourthDart = true;
     // Track which power-up was used so post-game badges can award the winner.
     if (puId === 'pu_blocker') updated._usedBlocker = true;
@@ -138,9 +135,9 @@ function consumeCharge(game: Game, playerIdx: number, puId: string | null | unde
     if (puId === 'pu_fourth_dart') updated._usedFourthDart = true;
     if (puId === 'pu_rethrow') updated._usedRethrow = true;
     if (puId === 'pu_cripple') updated._usedCripple = true;
-    if (puId === 'pu_double_trouble') updated._usedDoubleTrouble = true;
-    if (puId === 'pu_overcharge') updated._usedOvercharge = true;
-    if (puId === 'pu_curse') updated._usedCurse = true;
+    if (puId === 'pu_bullseye_frenzy') updated._usedBullseyeFrenzy = true;
+    if (puId === 'pu_hot_streak') updated._usedHotStreak = true;
+    if (puId === 'pu_swap') updated._usedSwap = true;
     return updated;
   });
   return { ...game, players };

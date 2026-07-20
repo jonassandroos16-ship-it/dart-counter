@@ -141,42 +141,53 @@ export const POWER_UPS: PowerUpDef[] = [
     },
   },
   {
-    id: 'pu_double_trouble',
-    name: 'Double Trouble',
-    icon: '✌️',
-    desc: 'Your next visit: only doubles and bulls score — singles and triples count as 0. High risk, high reward for accurate shooters.',
+    id: 'pu_bullseye_frenzy',
+    name: 'Bullseye Frenzy',
+    icon: '🐂',
+    desc: 'Your next visit: any dart that hits the bull (25 or 50) scores DOUBLE. Singles and triples keep their normal value. Rewards sharp shooting without punishing misses.',
     apply: (game, curIdx) => {
-      const players = (game.players || []).map((pl: any, i: number) => i === curIdx ? { ...pl, _doubleTrouble: true } : pl);
-      return { game: { ...game, players }, message: 'Double Trouble armed — next visit, only doubles and bulls score!' };
+      const players = (game.players || []).map((pl: any, i: number) => i === curIdx ? { ...pl, _bullseyeFrenzy: true } : pl);
+      return { game: { ...game, players }, message: 'Bullseye Frenzy armed — next visit, bulls score double!' };
     },
   },
   {
-    id: 'pu_overcharge',
-    name: 'Overcharge',
-    icon: '🔋',
-    desc: 'Instantly refill your power-up orb to full AND add +25% to your next visit score. Self-buff for comebacks.',
+    id: 'pu_hot_streak',
+    name: 'Hot Streak',
+    icon: '🔥',
+    desc: 'Your next visit: each dart scores +5 bonus per dart already scored this visit (dart 1: +0, dart 2: +5, dart 3: +10). A comeback buff that rewards stringing your hits together.',
     apply: (game, curIdx) => {
-      const players = (game.players || []).map((pl: any, i: number) => i === curIdx ? { ...pl, _overchargeNext: true } : pl);
-      return { game: { ...game, players }, message: 'Overcharge! Orb refilled and next visit scores +25%.' };
+      const players = (game.players || []).map((pl: any, i: number) => i === curIdx ? { ...pl, _hotStreak: true } : pl);
+      return { game: { ...game, players }, message: 'Hot Streak armed — next visit, bonus grows with each dart!' };
     },
   },
   {
-    id: 'pu_curse',
-    name: 'Curse',
-    icon: '💀',
-    desc: 'Curse the lowest opponent: their next TWO visits score only 50%. They are warned when they throw.',
+    id: 'pu_swap',
+    name: 'Swap',
+    icon: '🔄',
+    desc: 'Swap your current score with the leading opponent. In High Score you take their points; in x01 you take their lower remaining. A dramatic comeback swing — use it when you are far behind.',
     apply: (game, curIdx) => {
       const players = [...(game.players || [])];
-      if (players.length < 2) return { game, message: 'Curse: no opponents to curse.', ok: false };
+      if (players.length < 2) return { game, message: 'Swap: no opponents to swap with.', ok: false };
       const others = players.map((pl, i) => ({ pl, i })).filter(({ i }) => i !== curIdx);
       const isHighScore = game.mode === 'highscore';
-      // Curse the WEAKEST opponent: in highscore the lowest score, in x01 the
-      // highest remaining (furthest from checkout).
+      // Target the LEADER: in highscore the highest score, in x01 the lowest
+      // remaining (closest to checkout).
       const target = isHighScore
-        ? others.reduce((a, b) => b.pl.score < a.pl.score ? b : a)
-        : others.reduce((a, b) => b.pl.score > a.pl.score ? b : a);
-      const newPlayers = players.map((pl: any, i: number) => i === target.i ? { ...pl, _cursedNext: 2 } : pl);
-      return { game: { ...game, players: newPlayers }, message: `Curse! ${target.pl.name} scores 50% on their next 2 visits.` };
+        ? others.reduce((a, b) => b.pl.score > a.pl.score ? b : a)
+        : others.reduce((a, b) => b.pl.score < a.pl.score ? b : a);
+      const me = players[curIdx];
+      // Only allow swap when it actually helps the user — i.e. when they are
+      // behind the leader. Otherwise the power-up would be a self-sabotage.
+      const behind = isHighScore ? target.pl.score > me.score : target.pl.score < me.score;
+      if (!behind) return { game, message: 'Swap: you are already leading — nothing to swap.', ok: false };
+      const myScore = me.score;
+      const targetScore = target.pl.score;
+      const newPlayers = players.map((pl: any, i: number) => {
+        if (i === curIdx) return { ...pl, score: targetScore };
+        if (i === target.i) return { ...pl, score: myScore };
+        return pl;
+      });
+      return { game: { ...game, players: newPlayers }, message: `Swap! You traded scores with ${target.pl.name}.` };
     },
   },
 ];
