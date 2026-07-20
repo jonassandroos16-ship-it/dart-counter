@@ -135,7 +135,13 @@ export type CoopPowerUpId =
   | 'coop_frostbite'    // C2 L2: Enemies take -accuracy for 3 turns and 40 dmg
   | 'coop_ice_lance'    // C2 L3: 120 damage to a single targeted enemy, ignoring shields
   | 'coop_winter_veil'  // C2 L4: Party takes half damage for 3 turns (shield + heal)
-  | 'coop_glacial_doom'; // C2 L5 (boss): 180 dmg to all + freeze 3 turns + full heal
+  | 'coop_glacial_doom' // C2 L5 (boss): 180 dmg to all + freeze 3 turns + full heal
+  // Advanced — Chapter 3 (Verdant Maw rewards)
+  | 'coop_vine_grasp'    // C3 L1: Root all enemies — 50 dmg + freeze 1 turn
+  | 'coop_spore_burst'   // C3 L2: 60 dmg + distract (-30% acc) for 3 turns
+  | 'coop_thorn_lance'   // C3 L3: 160 dmg to one enemy, ignoring shields
+  | 'coop_verdant_bloom' // C3 L4: Heal 100 + clear enemy shields + party +5 power 3 turns
+  | 'coop_heart_of_maw'; // C3 L5 (boss): 220 dmg to all + freeze 3 + full heal + clear shields
 
 export interface CoopPowerUpDef {
   id: CoopPowerUpId;
@@ -314,10 +320,10 @@ export interface CampaignBattleState {
 // ── Coop classes & passives ───────────────────────────────────────────
 //
 // Each player can pick one of three classes for Coop mode: Warrior, Priest,
-// or Rogue. Each class has three tiers of passives (starter, tier 2, tier 3),
-// with three distinct passives per tier to choose from — nine passives per
-// class total. Passives grant team-wide stat bonuses while the player is in
-// the party. A player equips one passive at a time per class.
+// or Rogue. Each class has five tiers of passives (starter through tier 5),
+// with three distinct passives per tier to choose from — fifteen passives
+// per class total. Passives grant team-wide stat bonuses while the player is
+// in the party. A player equips one passive at a time per class.
 
 export type CoopClassId = 'warrior' | 'priest' | 'rogue';
 
@@ -335,19 +341,25 @@ export type CoopPassiveId =
   | 'war_power_1' | 'war_crit_1' | 'war_fury_1'
   | 'war_power_2' | 'war_crit_2' | 'war_fury_2'
   | 'war_power_3' | 'war_crit_3' | 'war_fury_3'
+  | 'war_power_4' | 'war_crit_4' | 'war_fury_4'
+  | 'war_power_5' | 'war_crit_5' | 'war_fury_5'
   // Priest — party sustain/HP bonuses (3 per tier: hp, regen, shield)
   | 'pri_hp_1' | 'pri_regen_1' | 'pri_shield_1'
   | 'pri_hp_2' | 'pri_regen_2' | 'pri_shield_2'
   | 'pri_hp_3' | 'pri_regen_3' | 'pri_shield_3'
+  | 'pri_hp_4' | 'pri_regen_4' | 'pri_shield_4'
+  | 'pri_hp_5' | 'pri_regen_5' | 'pri_shield_5'
   // Rogue — party defense bonuses (3 per tier: armor, dodge, thorns)
   | 'rog_armor_1' | 'rog_dodge_1' | 'rog_thorns_1'
   | 'rog_armor_2' | 'rog_dodge_2' | 'rog_thorns_2'
-  | 'rog_armor_3' | 'rog_dodge_3' | 'rog_thorns_3';
+  | 'rog_armor_3' | 'rog_dodge_3' | 'rog_thorns_3'
+  | 'rog_armor_4' | 'rog_dodge_4' | 'rog_thorns_4'
+  | 'rog_armor_5' | 'rog_dodge_5' | 'rog_thorns_5';
 
 export interface CoopPassiveDef {
   id: CoopPassiveId;
   classId: CoopClassId;
-  tier: 1 | 2 | 3; // 1 = starter, 2/3 = progression. 3 passives per tier per class.
+  tier: 1 | 2 | 3 | 4 | 5; // 1 = starter, 2-5 = progression. 3 passives per tier per class.
   name: string;
   icon: string;
   desc: string;
