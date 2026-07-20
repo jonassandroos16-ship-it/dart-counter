@@ -30,6 +30,10 @@ export function defaultSettings(): Settings {
       // Surge is an early-game power-up, so it starts partially charged.
       // Other power-ups start at 0 by default.
       startingCharge: { pu_surge: 40 },
+      // Per-power-up activation threshold. Any id not listed defaults to
+      // `chargeMax` (100). Listed here only to make the field non-empty —
+      // tune from the Settings screen.
+      chargesNeeded: {},
     },
   };
 }

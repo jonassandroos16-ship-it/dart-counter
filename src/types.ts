@@ -196,6 +196,11 @@ export interface PowerUpScalingConfig {
   // Starting charge (0..chargeMax) for specific power-ups at the start of a
   // match. Lets early-game power-ups like Surge begin partially charged.
   startingCharge: Record<string, number>;
+  // Per-power-up activation threshold (0..chargeMax). When a power-up's
+  // charge reaches this value it becomes ready to activate. Defaults to
+  // `chargeMax` for any id not listed. Lets each power-up be balanced
+  // independently — e.g. Surge could need 80 while Blocker needs 120.
+  chargesNeeded: Record<string, number>;
 }
 
 export interface Settings {

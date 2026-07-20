@@ -5,6 +5,7 @@ import { getBadgeInfo, getBadgeContext, buildCoopBadgeCtx } from '../badges';
 import { getPlayerXPById } from '../logic';
 import { initials } from '../store';
 import { Modal } from '../Popups';
+import { chargesNeededFor } from './powerups';
 
 // Avatar that shows the player's equipped badge icon (if any) and, when the
 // player has "show badge context" enabled, a small overlay pill with the
@@ -49,10 +50,11 @@ export function PowerUpOrb({ game, curIdx, settings, onActivate }: { game: Game;
   if (!pl) return null;
   const pu = getPowerUpInfo(pl.powerUpId);
   const cap = settings.powerUpScaling.chargeMax;
-  const charge = Math.min(cap, pl.powerUpCharge || 0);
-  const pct = Math.round((charge / cap) * 100);
-  const ready = charge >= cap && !!pu && game.darts.length > 0;
-  const chargedButWaiting = charge >= cap && !!pu && game.darts.length === 0;
+  const needed = chargesNeededFor(pl.powerUpId, settings);
+  const charge = Math.min(needed, pl.powerUpCharge || 0);
+  const pct = needed > 0 ? Math.round((charge / needed) * 100) : 0;
+  const ready = charge >= needed && !!pu && game.darts.length > 0;
+  const chargedButWaiting = charge >= needed && !!pu && game.darts.length === 0;
   const uses = pl.powerUpUses || 0;
   const R = 22;
   const C = 2 * Math.PI * R;

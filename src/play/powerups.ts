@@ -2,6 +2,17 @@ import type { Game, Settings } from '../types';
 import { getPowerUpInfo, planReroll, type RerollPlan } from '../powerups';
 import { Sound } from '../sound';
 
+// Activation threshold for a given power-up id. Falls back to `chargeMax`
+// when not configured, so existing behavior is unchanged by default.
+export function chargesNeededFor(puId: string | null | undefined, settings: Settings): number {
+  const cfg = settings.powerUpScaling;
+  const cap = cfg.chargeMax;
+  if (!puId) return cap;
+  const v = cfg.chargesNeeded?.[puId];
+  if (!Number.isFinite(v) || v == null) return cap;
+  return Math.max(0, Math.min(cap, v as number));
+}
+
 export function chargeFromDart(dart: { value: number; isDouble: boolean; mult: number; base: number }, settings: Settings): number {
   const cfg = settings.powerUpScaling;
   let c = 0;
@@ -18,7 +29,12 @@ export function applyCharge(game: Game, playerIdx: number, charge: number, setti
   const cap = settings.powerUpScaling.chargeMax;
   const players = game.players.map((pl, i) => {
     if (i !== playerIdx) return pl;
-    const next = Math.min(cap, (pl.powerUpCharge || 0) + charge);
+    // Cap the orb at the activation threshold for the equipped power-up so
+    // the visual fill matches the readiness state. If the threshold is
+    // higher than chargeMax (shouldn't happen, but be safe), use chargeMax.
+    const needed = chargesNeededFor(pl.powerUpId, settings);
+    const orbCap = Math.min(cap, needed);
+    const next = Math.min(orbCap, (pl.powerUpCharge || 0) + charge);
     return { ...pl, powerUpCharge: next };
   });
   return { ...game, players };
@@ -36,7 +52,8 @@ export function catchUpBoost(game: Game, playerIdx: number, settings: Settings):
   if (!me) return 0;
   const isHighScore = game.mode === 'highscore';
   const TRAIL_THRESHOLD = 50;
-  const BOOST = Math.max(1, Math.round(settings.powerUpScaling.chargeMax * 0.05));
+  const base = chargesNeededFor(me.powerUpId, settings);
+  const BOOST = Math.max(1, Math.round(base * 0.05));
   if (isHighScore) {
     const leader = Math.max(...players.map((p) => p.score));
     if (leader - me.score > TRAIL_THRESHOLD) return BOOST;
@@ -62,8 +79,8 @@ export async function activatePowerUp(game: Game, playerIdx: number, settings: S
   if (!game.powerUpsEnabled) return null;
   const pl = game.players[playerIdx];
   if (!pl) { toast('No player'); return null; }
-  const cap = settings.powerUpScaling.chargeMax;
-  if ((pl.powerUpCharge || 0) < cap) { toast('Power-up not fully charged'); return null; }
+  const needed = chargesNeededFor(pl.powerUpId, settings);
+  if ((pl.powerUpCharge || 0) < needed) { toast('Power-up not fully charged'); return null; }
   // Power-up cannot be activated at the start of a visit — at least one dart
   // must be thrown first. This prevents "instant" activation the moment a
   // round begins even when the orb is already at 100%.
