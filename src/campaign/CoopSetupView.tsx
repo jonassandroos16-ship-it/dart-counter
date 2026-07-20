@@ -7,10 +7,9 @@ import {
   partyPowerFor,
   computePartyPassiveBonus,
   getCoopClass,
-  COOP_CLASSES,
   COOP_PASSIVES,
 } from './engine';
-import type { CoopClassId, CoopPassiveId } from './types';
+import type { CoopClassDef, CoopPassiveDef } from './types';
 
 export interface CoopSetupProps {
   players: Player[];
@@ -37,22 +36,27 @@ export function CoopSetupView({ players, settings, onStart, onBack }: CoopSetupP
   const partyPower = useMemo(() => partyPowerFor(selected, settings), [selected, settings]);
   const passiveBonus = useMemo(() => computePartyPassiveBonus(selected), [selected]);
 
-  // Distinct classes represented in the selected party, in canonical order.
+  // Classes in the selected party, one entry per player (duplicates shown).
   const partyClasses = useMemo(() => {
-    const ids = new Set<CoopClassId>();
+    const out: CoopClassDef[] = [];
     for (const p of selected) {
-      if (p.coopProgress?.classId) ids.add(p.coopProgress.classId);
+      const c = getCoopClass(p.coopProgress?.classId);
+      if (c) out.push(c);
     }
-    return COOP_CLASSES.filter(c => ids.has(c.id));
+    return out;
   }, [selected]);
 
-  // Distinct equipped passives across the selected party, in canonical order.
+  // Equipped passives across the selected party, one entry per player
+  // (duplicates shown — two rogues both running rog_armor_1 list twice).
   const partyPassives = useMemo(() => {
-    const ids = new Set<CoopPassiveId>();
+    const out: CoopPassiveDef[] = [];
     for (const p of selected) {
-      for (const pid of p.coopProgress?.equippedPassives || []) ids.add(pid);
+      for (const pid of p.coopProgress?.equippedPassives || []) {
+        const def = COOP_PASSIVES.find(pp => pp.id === pid);
+        if (def) out.push(def);
+      }
     }
-    return COOP_PASSIVES.filter(p => ids.has(p.id));
+    return out;
   }, [selected]);
 
   return (
@@ -105,8 +109,8 @@ export function CoopSetupView({ players, settings, onStart, onBack }: CoopSetupP
             <div className="muted small" style={{ marginBottom: 4 }}>Classes</div>
             {!partyClasses.length && <div className="muted small" style={{ fontStyle: 'italic' }}>No classes selected — pick players who have chosen a Coop class.</div>}
             <div className="row wrap" style={{ gap: 6 }}>
-              {partyClasses.map(c => (
-                <span key={c.id} className="pill" style={{ background: 'var(--bg-2)', color: 'var(--text)', fontSize: 12 }}>
+              {partyClasses.map((c, i) => (
+                <span key={`${c.id}_${i}`} className="pill" style={{ background: 'var(--bg-2)', color: 'var(--text)', fontSize: 12 }}>
                   <span style={{ fontSize: 14 }}>{c.icon}</span> {c.name}
                 </span>
               ))}
@@ -117,8 +121,8 @@ export function CoopSetupView({ players, settings, onStart, onBack }: CoopSetupP
             <div className="muted small" style={{ marginBottom: 4 }}>Passives</div>
             {!partyPassives.length && <div className="muted small" style={{ fontStyle: 'italic' }}>No passives equipped.</div>}
             <div className="row wrap" style={{ gap: 6 }}>
-              {partyPassives.map(p => (
-                <span key={p.id} className="pill" style={{ background: 'var(--bg-2)', color: 'var(--text)', fontSize: 12 }} title={p.desc}>
+              {partyPassives.map((p, i) => (
+                <span key={`${p.id}_${i}`} className="pill" style={{ background: 'var(--bg-2)', color: 'var(--text)', fontSize: 12 }} title={p.desc}>
                   <span style={{ fontSize: 14 }}>{p.icon}</span> {p.name}
                 </span>
               ))}
@@ -142,7 +146,7 @@ export function CoopSetupView({ players, settings, onStart, onBack }: CoopSetupP
               </div>
             </div>
             <div className="muted small" style={{ marginTop: 6, fontStyle: 'italic' }}>
-              Each unique passive buffs the party once — duplicates don't stack.
+              Each player's equipped passive buffs the party — duplicates stack per player.
             </div>
           </div>
         </div>

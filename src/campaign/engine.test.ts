@@ -348,7 +348,7 @@ describe('campaign engine', () => {
     expect(state.passiveBonus?.health).toBe(300);
   });
 
-  it('passive bonus: duplicate priests do NOT stack — pri_hp_1 applies once', () => {
+  it('passive bonus: duplicate priests stack — pri_hp_1 applies once per player', () => {
     const lvl = getLevel(1)!;
     const players = makePlayers(3).map(p => ({
       ...p,
@@ -356,16 +356,16 @@ describe('campaign engine', () => {
       coopProgress: { classId: 'priest' as CoopClassId, xp: 0, unlockedPassives: ['pri_hp_1'] as CoopPassiveId[], equippedPassives: ['pri_hp_1'] as CoopPassiveId[] },
     }));
     const state = startBattle(lvl, players, settings);
-    // 100 base + 60 (single Blessing) = 160 per priest; the bonus is
-    // applied once to the party, not three times.
-    expect(state.passiveBonus?.health).toBe(60);
-    expect(state.passiveBonus?.sources).toHaveLength(1);
+    // 100 base + 60 * 3 (one Blessing per priest) = 280 per priest; each
+    // player's equipped passive buffs the party independently.
+    expect(state.passiveBonus?.health).toBe(180);
+    expect(state.passiveBonus?.sources).toHaveLength(3);
     for (const p of state.players) {
-      expect(p.maxHp).toBe(160);
+      expect(p.maxHp).toBe(280);
     }
   });
 
-  it('passive bonus: distinct priest tiers each apply once', () => {
+  it('passive bonus: distinct priest tiers each apply once per player', () => {
     const lvl = getLevel(1)!;
     const tiers: CoopPassiveId[] = ['pri_hp_1', 'pri_hp_2', 'pri_hp_3'];
     const players = makePlayers(3).map((p, i) => ({
@@ -376,6 +376,22 @@ describe('campaign engine', () => {
     const state = startBattle(lvl, players, settings);
     // 60 + 150 + 300 = 510, but capped at healthMax (500) per player.
     expect(state.passiveBonus?.health).toBe(510);
+    expect(state.passiveBonus?.sources).toHaveLength(3);
+  });
+
+  it('passive bonus: 2 priests + 1 rogue stack Priest, Priest and Rogue bonuses', () => {
+    const lvl = getLevel(1)!;
+    const players = makePlayers(3).map((p, i) => ({
+      ...p,
+      attributes: { health: 100, armor: 0, power: 0, pointsAvailable: 0 },
+      coopProgress: i < 2
+        ? { classId: 'priest' as CoopClassId, xp: 0, unlockedPassives: ['pri_hp_1'] as CoopPassiveId[], equippedPassives: ['pri_hp_1'] as CoopPassiveId[] }
+        : { classId: 'rogue' as CoopClassId, xp: 0, unlockedPassives: ['rog_armor_1'] as CoopPassiveId[], equippedPassives: ['rog_armor_1'] as CoopPassiveId[] },
+    }));
+    const state = startBattle(lvl, players, settings);
+    // Two priests each contribute +60 HP, one rogue contributes +2 armor.
+    expect(state.passiveBonus?.health).toBe(120);
+    expect(state.passiveBonus?.armor).toBe(2);
     expect(state.passiveBonus?.sources).toHaveLength(3);
   });
 });
