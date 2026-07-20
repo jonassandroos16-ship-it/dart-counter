@@ -132,7 +132,7 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
   const showingOverlay = playerVisitDone || state.pendingEnemyAttacks.length > 0 || showingFrozen;
 
   return (
-    <div className="view-noscroll" style={{ position: 'relative', background: chapter?.theme.background || undefined, borderRadius: 14, overflow: 'hidden' }}>
+    <div className="view-noscroll coop-battle" style={{ position: 'relative', background: chapter?.theme.background || undefined, borderRadius: 14, overflow: 'hidden' }}>
       {showingFrozen && <div className="battle-frost-tint" />}
       <div className="play-current" style={{ position: 'relative', zIndex: 2 }}>
         <div className="pc-header">
