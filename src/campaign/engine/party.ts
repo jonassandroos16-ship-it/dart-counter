@@ -76,6 +76,8 @@ export function toCoopPlayer(p: Player, settings: Settings, startCharge: number)
     buffs: [],
     powerUpCharge: Math.max(0, startCharge),
     classId: p.coopProgress?.classId ?? null,
+    kills: 0,
+    damageDealt: 0,
   };
 }
 
