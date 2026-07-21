@@ -371,36 +371,47 @@ export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): Dartl
   let runPlayers = run.runPlayers;
   let trinkets = run.trinkets;
   let stats = run.stats;
-  const playerStats = run.playerStats.map(ps =>
-    ps.playerId === run.playerIds[idx]
-      ? { ...ps, rewards: [...ps.rewards, option] }
-      : ps
-  );
+  // Resolved copy of the option with the specific reward details filled in so
+  // the reveal popup can show exactly what this player received.
+  let resolved: ChoiceOption = option;
 
   if (option.kind === 'heal') {
     const rp = runPlayers[idx];
     const healAmt = Math.round(rp.maxHp * 0.2);
     runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, hp: Math.min(p.maxHp, p.hp + healAmt) } : p);
+    resolved = { ...option, amount: healAmt, label: `Heal ${healAmt} HP`, desc: `Restored ${healAmt} HP (${rp.name}).` };
   } else if (option.kind === 'stat') {
     const statRoll = Math.random();
+    let statName: 'health' | 'armor' | 'power';
+    let amount: number;
     if (statRoll < 0.4) {
+      statName = 'health'; amount = 20;
       runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, maxHp: p.maxHp + 20, hp: p.hp + 20, bonusHealth: p.bonusHealth + 20 } : p);
     } else if (statRoll < 0.7) {
+      statName = 'armor'; amount = 3;
       runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, armor: p.armor + 3, bonusArmor: p.bonusArmor + 3 } : p);
     } else {
+      statName = 'power'; amount = 4;
       runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, power: p.power + 4, bonusPower: p.bonusPower + 4 } : p);
     }
+    const statLabel = statName === 'health' ? `+${amount} Max HP` : statName === 'armor' ? `+${amount}% Armor` : `+${amount} Power`;
+    resolved = { ...option, stat: statName, amount, label: statLabel, desc: `Gained ${statLabel}.` };
   } else if (option.kind === 'trinket') {
     const pool = run.pool.length ? run.pool : STARTER_POOL;
     const id = pick(pool) as TrinketId;
     runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, trinkets: [...p.trinkets, id] } : p);
     trinkets = [...trinkets, id];
     stats = { ...stats, trinketsCollected: [...stats.trinketsCollected, id] };
-    const psIdx = playerStats.findIndex(ps => ps.playerId === run.playerIds[idx]);
-    if (psIdx >= 0) playerStats[psIdx] = { ...playerStats[psIdx], trinkets: [...playerStats[psIdx].trinkets, id] };
+    resolved = { ...option, trinketId: id };
   }
 
-  const playerChoices = run.playerChoices.map((c, i) => i === idx ? option : c);
+  const playerStats = run.playerStats.map(ps =>
+    ps.playerId === run.playerIds[idx]
+      ? { ...ps, rewards: [...ps.rewards, resolved], trinkets: resolved.trinketId ? [...ps.trinkets, resolved.trinketId] : ps.trinkets }
+      : ps
+  );
+
+  const playerChoices = run.playerChoices.map((c, i) => i === idx ? resolved : c);
 
   const nextIdx = idx + 1;
   const allChosen = nextIdx >= run.playerIds.length;
