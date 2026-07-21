@@ -7,6 +7,8 @@ import { CalendarPicker, filterForPeriod, describeFilter, type Period } from './
 import { BADGES, computeLifetimeBadgeCounts, getBadgeContext, buildCoopBadgeCtx } from './badges';
 import { loadDartliteGlobalStats } from './dartlite/stats';
 import { ALL_TRINKET_IDS, getTrinket } from './dartlite/trinkets';
+import { CARD_DEFS, getCard } from './cards/definitions';
+import { resolveCardDef } from './cards/deck';
 
 // For each stat: which direction is "better"? higher = bigger is better, lower = smaller is better.
 // null = neutral (no comparison). Used to color the comparison value red/green.
@@ -337,6 +339,7 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
       </div>
       <CoopStatsSection players={players} />
       <DartliteStatsSection players={players} />
+      <CardStatsSection players={players} games={puFiltered} />
     </div>
   );
 }
@@ -366,6 +369,108 @@ function CoopStatsSection({ players }: { players: Player[] }) {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Card-based mode stats section ───────────────────────────────────────
+
+function CardStatsSection({ players, games }: { players: Player[]; games: any[] }) {
+  // Card stats are computed from dart labels in game visits.
+  // Card-mode games don't have a separate flag, so we detect card usage
+  // by checking if any dart label matches a card name.
+  const cardNames = new Set(CARD_DEFS.map(c => c.name));
+  const cardNameUpgraded = new Set(CARD_DEFS.map(c => c.name + '+'));
+
+  let cardGames = 0;
+  let cardWins = 0;
+  let totalCardsPlayed = 0;
+  let totalDamage = 0;
+  let bullseyes = 0;
+  const cardCountMap: Record<string, number> = {};
+
+  for (const g of games) {
+    if (g.practice || g.mode === 'battle') continue;
+    let hasCards = false;
+    for (const pl of g.players || []) {
+      for (const v of pl.visits || []) {
+        for (const d of v.darts || []) {
+          if (cardNames.has(d.label) || cardNameUpgraded.has(d.label)) {
+            hasCards = true;
+            totalCardsPlayed++;
+            totalDamage += d.value || 0;
+            cardCountMap[d.label] = (cardCountMap[d.label] || 0) + 1;
+            if (d.value === 50 || d.label === 'Bullseye' || d.label === 'Bull') bullseyes++;
+          }
+        }
+      }
+    }
+    if (hasCards) {
+      cardGames++;
+      if (g.winner) cardWins++;
+    }
+  }
+
+  // Unique cards owned across all players
+  const allOwnedCards = new Set<string>();
+  for (const p of players) {
+    for (const pc of p.cards || []) {
+      allOwnedCards.add(pc.cardId);
+    }
+  }
+  const uniqueCardsOwned = allOwnedCards.size;
+  const totalCardDefs = CARD_DEFS.length;
+
+  if (cardGames === 0 && uniqueCardsOwned === 0) return null;
+
+  // Most played cards
+  const sortedCards = Object.entries(cardCountMap).sort((a, b) => b[1] - a[1]).slice(0, 6);
+
+  return (
+    <div className="card">
+      <h3 style={{ marginBottom: 10 }}>🃏 Card Mode</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
+        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{cardGames}</div>
+          <div className="muted small">Card Games</div>
+        </div>
+        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{cardWins}</div>
+          <div className="muted small">Card Wins</div>
+        </div>
+        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{totalCardsPlayed}</div>
+          <div className="muted small">Cards Played</div>
+        </div>
+        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{totalDamage}</div>
+          <div className="muted small">Total Card Damage</div>
+        </div>
+        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{bullseyes}</div>
+          <div className="muted small">Bullseyes</div>
+        </div>
+        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{uniqueCardsOwned}/{totalCardDefs}</div>
+          <div className="muted small">Cards Collected</div>
+        </div>
+      </div>
+      {sortedCards.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div className="muted small" style={{ fontWeight: 700, marginBottom: 6 }}>Most Played Cards</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {sortedCards.map(([name, count]) => {
+              const baseName = name.replace(/\+$/, '');
+              const def = getCard(baseName);
+              return (
+                <span key={name} className="pill" style={{ fontSize: 11, background: 'color-mix(in srgb,#ef4444 14%,var(--bg-3))', color: '#fca5a5', borderColor: 'transparent' }}>
+                  {def?.icon || '🃏'} {name} ×{count}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

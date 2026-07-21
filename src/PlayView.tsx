@@ -18,7 +18,10 @@ import { CampaignMap } from './campaign/CampaignMap';
 import { CampaignBattle } from './campaign/CampaignBattle';
 import { CoopSetupView } from './campaign/CoopSetupView';
 import { useCampaignProgress } from './campaign/progress';
-import { getCoopPowerUp, coopXpForBattle, addCoopXpForPlayer, defaultCoopProgress, recordLevelClearForPlayer } from './campaign/engine';
+import { getCoopPowerUp, coopXpForBattle, defaultCoopProgress, recordLevelClearForPlayer, reconcileCoopPassivesForPlayer } from './campaign/engine';
+import { awardXP } from './play/rewards';
+import { levelFromXP } from './logic';
+import { cardsForLevelUp, addCard, defaultPlayerCards } from './cards/deck';
 import { getChapter, isChapterComplete } from './campaign/campaignLevels';
 import type { CoopPowerUpId, CampaignBattleState, CampaignChapter } from './campaign/types';
 import { DartliteSetup } from './dartlite/DartliteSetup';
@@ -53,6 +56,7 @@ interface PostGameInfo {
   stats: CampaignBattleState['stats'];
   rewardPowerUpId: string | null;
   coopXpGained?: number;
+  levelUps?: { playerId: string; oldLevel: number; newLevel: number; newCards: { id: string; name: string; icon: string }[]; newPassives: string[] }[];
 }
 
 export function PlayView({ players, games, settings, activeGame, setActiveGame, setGames, setPlayers, toast, music, onQuit, onGameOver, popups }: Props) {
@@ -98,41 +102,73 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
           unlockedPowerUps: unlockedList,
           chapters: { ...(prev.chapters || {}), [coopChapterId]: newChapterCleared },
         }));
-        // Grant Coop XP to every player in the party based on battle stats.
+        // Grant unified XP to every player in the party based on battle stats.
         // Wins give more XP than losses; darts thrown and enemies defeated
-        // add bonus XP. Unlocked passives auto-grant via addCoopXpForPlayer.
+        // add bonus XP. Passive unlocking is now driven by player level via
+        // reconcileCoopPassivesForPlayer.
         const xpGained = coopXpForBattle(stats, true);
         const coopPlayerIds = (coopPlayers || []).map(p => p.id);
+        const levelUps: { playerId: string; oldLevel: number; newLevel: number; newCards: { id: string; name: string; icon: string }[]; newPassives: string[] }[] = [];
         // Record the level clear per-player so each party member tracks
-        // their own progress. A reward power-up is only granted to players
-        // who haven't already unlocked it (the shared `unlockedPowerUpId`
-        // is the first-time grant for the party; per-player we mirror it
-        // so the info box can tell when everyone has it).
+        // their own progress.
         setPlayers((prev: Player[]) => prev.map(p => {
           if (!coopPlayerIds.includes(p.id)) return p;
+          const oldLevel = p.level || 1;
+          const newXp = (p.xp || 0) + xpGained;
+          const li = levelFromXP(newXp, settings);
           const cur = p.coopProgress || defaultCoopProgress();
-          const { progress: nextProg } = addCoopXpForPlayer(cur, xpGained);
+          const { progress: nextProg, newlyUnlocked } = reconcileCoopPassivesForPlayer(cur, li.level);
           const nextCampaign = recordLevelClearForPlayer(p, coopChapterId, clearedIdx, coopLevelId, unlockedPowerUpId);
-          return { ...p, coopProgress: nextProg, campaignProgress: nextCampaign };
+          let next: Player = { ...p, xp: newXp, level: li.level, coopProgress: nextProg, campaignProgress: nextCampaign };
+          if (li.level > oldLevel && settings.gameMode === 'cards') {
+            const curCards = next.cards && next.cards.length > 0 ? next.cards : defaultPlayerCards();
+            const newCardDefs = cardsForLevelUp(next.coopProgress?.classId || null, li.level, 'coop', curCards);
+            if (newCardDefs.length > 0) {
+              let updatedCards = curCards;
+              for (const def of newCardDefs) {
+                updatedCards = addCard(updatedCards, def.id);
+              }
+              next = { ...next, cards: updatedCards };
+            }
+            levelUps.push({ playerId: p.id, oldLevel, newLevel: li.level, newCards: newCardDefs.map(d => ({ id: d.id, name: d.name, icon: d.icon })), newPassives: newlyUnlocked });
+          } else if (li.level > oldLevel) {
+            levelUps.push({ playerId: p.id, oldLevel, newLevel: li.level, newCards: [], newPassives: newlyUnlocked });
+          }
+          return next;
         }));
         // Always show the post-game screen — power-up info only if unlocked.
-        setPostGame({ chapterId: coopChapterId, levelId: coopLevelId, stats, rewardPowerUpId: unlockedPowerUpId, coopXpGained: xpGained });
+        setPostGame({ chapterId: coopChapterId, levelId: coopLevelId, stats, rewardPowerUpId: unlockedPowerUpId, coopXpGained: xpGained, levelUps });
         setCoopStage('postgame');
         music.startContext('setup', settings);
       }}
       onLose={() => {
-        // Even on a loss, the party earns a small amount of Coop XP for
+        // Even on a loss, the party earns a small amount of unified XP for
         // participating. Wins give the bulk of the XP.
         const coopPlayersLocal = (coopPlayerIds.map(id => players.find(p => p.id === id)).filter(Boolean) as Player[]) || [];
         const xpGained = coopXpForBattle({ visitsUsed: 0, dartsThrown: 0, damageDealt: 0, enemiesDefeated: 0, powerUpsUsed: 0, partyHpLost: 0 } as CampaignBattleState['stats'], false);
         const ids = coopPlayersLocal.map(p => p.id);
         setPlayers((prev: Player[]) => prev.map(p => {
           if (!ids.includes(p.id)) return p;
+          const oldLevel = p.level || 1;
+          const newXp = (p.xp || 0) + xpGained;
+          const li = levelFromXP(newXp, settings);
           const cur = p.coopProgress || defaultCoopProgress();
-          const { progress: nextProg } = addCoopXpForPlayer(cur, xpGained);
-          return { ...p, coopProgress: nextProg };
+          const { progress: nextProg } = reconcileCoopPassivesForPlayer(cur, li.level);
+          let next: Player = { ...p, xp: newXp, level: li.level, coopProgress: nextProg };
+          if (li.level > oldLevel && settings.gameMode === 'cards') {
+            const curCards = next.cards && next.cards.length > 0 ? next.cards : defaultPlayerCards();
+            const newCardDefs = cardsForLevelUp(next.coopProgress?.classId || null, li.level, 'coop', curCards);
+            if (newCardDefs.length > 0) {
+              let updatedCards = curCards;
+              for (const def of newCardDefs) {
+                updatedCards = addCard(updatedCards, def.id);
+              }
+              next = { ...next, cards: updatedCards };
+            }
+          }
+          return next;
         }));
-        toast(`Party defeated — earned ${xpGained} Coop XP. Try again.`);
+        toast(`Party defeated — earned ${xpGained} XP. Try again.`);
         setCoopStage('map');
         setCoopLevelId(null);
         music.startContext('setup', settings);
@@ -159,6 +195,8 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
       rewardPowerUp={pu ? { name: pu.name, icon: pu.icon, desc: pu.desc, tier: pu.tier } : null}
       chapterComplete={chapterComplete}
       coopXpGained={postGame.coopXpGained}
+      levelUps={postGame.levelUps}
+      players={players}
       onContinue={() => {
         setPostGame(null);
         setCoopStage('chapters');
@@ -291,7 +329,7 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
 // below the stats. If this was the chapter's boss, the chapter outro is
 // shown as the story beat.
 function PostGameOverlay({
-  chapter, levelName, isBoss, stats, rewardPowerUp, chapterComplete, coopXpGained, onContinue,
+  chapter, levelName, isBoss, stats, rewardPowerUp, chapterComplete, coopXpGained, levelUps, players, onContinue,
 }: {
   chapter: CampaignChapter | null;
   levelName: string;
@@ -300,6 +338,8 @@ function PostGameOverlay({
   rewardPowerUp: { name: string; icon: string; desc: string; tier: 'starter' | 'advanced' } | null;
   chapterComplete: boolean;
   coopXpGained?: number;
+  levelUps?: { playerId: string; oldLevel: number; newLevel: number; newCards: { id: string; name: string; icon: string }[]; newPassives: string[] }[];
+  players: Player[];
   onContinue: () => void;
 }) {
   const theme = chapter?.theme;
@@ -367,10 +407,44 @@ function PostGameOverlay({
             <div className="row" style={{ gap: 10, alignItems: 'center' }}>
               <div style={{ fontSize: 26 }}>✨</div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 800, fontSize: 14 }}>+{coopXpGained} Coop XP earned</div>
-                <div className="muted small" style={{ marginTop: 2, lineHeight: 1.4 }}>Each party member gained Coop XP toward unlocking new class passives. Check Players → Class to spend any newly unlocked passives.</div>
+                <div style={{ fontWeight: 800, fontSize: 14 }}>+{coopXpGained} XP earned</div>
+                <div className="muted small" style={{ marginTop: 2, lineHeight: 1.4 }}>Each party member gained unified XP toward leveling up. Level up to unlock new cards and class passives.</div>
               </div>
             </div>
+          </div>
+        )}
+
+        {levelUps && levelUps.length > 0 && (
+          <div className="card" style={{ marginTop: 12, padding: 14, background: `color-mix(in srgb, ${accent} 14%, var(--bg-3))`, borderColor: `color-mix(in srgb, ${accent} 50%, var(--border))` }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: accent, textTransform: 'uppercase', marginBottom: 8 }}>
+              Level Up!
+            </div>
+            {levelUps.map(lu => {
+              const pl = players.find(p => p.id === lu.playerId);
+              return (
+                <div key={lu.playerId} style={{ marginBottom: 10 }}>
+                  <div style={{ fontWeight: 800, fontSize: 14 }}>
+                    {pl?.name || 'Player'} reached Level {lu.newLevel}
+                  </div>
+                  {lu.newCards.length > 0 && (
+                    <div style={{ marginTop: 6 }}>
+                      <div className="muted small" style={{ fontWeight: 700, marginBottom: 4 }}>New cards unlocked:</div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {lu.newCards.map(c => (
+                          <div key={c.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 8px', borderRadius: 8, background: 'var(--bg-3)', border: '1px solid var(--border)', minWidth: 56 }}>
+                            <span style={{ fontSize: 20 }}>{c.icon}</span>
+                            <span style={{ fontSize: 10, fontWeight: 800, textAlign: 'center' }}>{c.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {lu.newPassives.length > 0 && (
+                    <div className="muted small" style={{ marginTop: 4 }}>{lu.newPassives.length} new class passive{lu.newPassives.length > 1 ? 's' : ''} unlocked — check Players → Class.</div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
