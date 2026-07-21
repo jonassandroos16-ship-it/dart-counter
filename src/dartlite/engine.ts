@@ -18,8 +18,10 @@ import { ENEMY_DATABASE } from '../campaign/enemyDatabase';
 import { startBattle } from '../campaign/engine/playerTurn';
 import {
   STARTER_POOL, availablePool, newlyUnlockedTrinket,
+  bossTrinketOptions, getTrinket as getTrinketDef,
   type TrinketId,
 } from './trinkets';
+import type { EnemyDef } from '../campaign/types';
 
 // ── Round & boss schedule ──────────────────────────────────────────────
 
@@ -62,7 +64,7 @@ export interface DartliteRun {
   pool: TrinketId[];          // currently available trinket pool
   stats: DartliteRunStats;
   playerStats: DartlitePlayerRunStats[]; // per-player cumulative run stats
-  phase: 'setup' | 'battle' | 'choice' | 'reward' | 'gameover';
+  phase: 'setup' | 'battle' | 'choice' | 'reward' | 'boss_victory' | 'gameover';
   battle: CampaignBattleState | null;
   pendingChoice: ChoiceOption[] | null;
   // Index of the player currently picking their personal reward. Advances
@@ -72,6 +74,9 @@ export interface DartliteRun {
   // playerIds; filled in as choicePlayerIdx advances. Reset per round.
   playerChoices: (ChoiceOption | null)[];
   lastUnlockedTrinket: TrinketId | null; // shown in a popup after boss/mini-boss
+  // Boss victory data — set when a boss is defeated, used to show the boss
+  // victory screen with boss name + trinket choices.
+  bossVictory: { bossName: string; trinketOptions: TrinketId[]; chosenTrinket: TrinketId | null } | null;
   log: string[];
 }
 
@@ -173,6 +178,7 @@ export function startRun(players: Player[], settings: Settings): DartliteRun {
     choicePlayerIdx: 0,
     playerChoices: players.map(() => null),
     lastUnlockedTrinket: null,
+    bossVictory: null,
     log: [],
   };
 }
@@ -198,25 +204,65 @@ function pickN<T>(arr: T[], n: number, rng: () => number = Math.random): T[] {
   return out;
 }
 
+// Round scaling: enemies get harder as rounds progress. HP and accuracy/precision
+// scale linearly so a normal party can reach at least round 11 (the second boss
+// at round 10 must be beatable with accumulated trinkets/stats).
+export function enemyHpScale(round: number): number {
+  // +8% HP per round past round 1. Capped at +200% so late rounds don't become
+  // unkillable.
+  return Math.min(3.0, 1 + Math.max(0, round - 1) * 0.08);
+}
+export function enemyAccScale(round: number): number {
+  // +1.5% accuracy per round past round 1, capped at +40%.
+  return Math.min(1.4, 1 + Math.max(0, round - 1) * 0.015);
+}
+export function enemyPrecScale(round: number): number {
+  // +1.5% precision per round past round 1, capped at +40%.
+  return Math.min(1.4, 1 + Math.max(0, round - 1) * 0.015);
+}
+
+// Build a scaled enemy database for a given round. Returns a modified copy of
+// ENEMY_DATABASE with HP/accuracy/precision scaled by round count.
+export function scaledEnemyDb(round: number): typeof ENEMY_DATABASE {
+  const hpMult = enemyHpScale(round);
+  const accMult = enemyAccScale(round);
+  const precMult = enemyPrecScale(round);
+  const db: typeof ENEMY_DATABASE = {};
+  for (const [id, def] of Object.entries(ENEMY_DATABASE)) {
+    db[id] = {
+      ...def,
+      max_hp: Math.round(def.max_hp * hpMult),
+      accuracy: Math.min(0.95, def.accuracy * accMult),
+      precision: Math.min(0.95, def.precision * precMult),
+    } as EnemyDef;
+  }
+  return db;
+}
+
 // Build a CampaignLevel-shaped object for a given round number.
 export function levelForRound(round: number): CampaignLevel {
   if (isBossRound(round)) {
+    // Bosses: pick from harder bosses as rounds progress.
+    const bossPool = round <= 10 ? ['warlord_malakar'] : round <= 20 ? ['ice_queen', 'warlord_malakar'] : BOSS_IDS;
     return {
       level_id: round,
       name: `Boss — Round ${round}`,
       is_boss: true,
-      enemies: [pick(BOSS_IDS)],
+      enemies: [pick(bossPool)],
     };
   }
   if (isMiniBossRound(round)) {
+    // Mini-bosses: use harder mini-bosses as rounds progress.
+    const miniPool = round <= 5 ? ['warlord_malakar'] : round <= 15 ? MINIBOSS_IDS : ['frost_knight', 'bloom_warden'];
     return {
       level_id: round,
       name: `Mini-Boss — Round ${round}`,
       is_boss: false,
-      enemies: [pick(MINIBOSS_IDS)],
+      enemies: [pick(miniPool)],
     };
   }
-  // Normal rounds: 1-3 enemies scaling with round depth.
+  // Normal rounds: 1-3 enemies scaling with round depth. Use harder enemies
+  // as rounds progress so early rounds are easy and later rounds are tough.
   const count = Math.min(3, 1 + Math.floor(round / 3));
   const pool = round <= 4 ? EASY_IDS : round <= 9 ? [...EASY_IDS, ...HARD_IDS] : HARD_IDS;
   return {
@@ -249,7 +295,7 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
       },
     } as Player;
   });
-  const battle = startBattle(level, pseudoPlayers, settings, ENEMY_DATABASE, 'dartlite');
+  const battle = startBattle(level, pseudoPlayers, settings, scaledEnemyDb(round), 'dartlite');
   // Apply overcharge trinket: start with bonus charge.
   for (const rp of run.runPlayers) {
     if (rp.trinkets.includes('trk_overcharge')) {
@@ -259,7 +305,7 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
       }
     }
   }
-  return { ...run, round, phase: 'battle', battle, lastUnlockedTrinket: null, choicePlayerIdx: 0, playerChoices: run.playerIds.map(() => null) };
+  return { ...run, round, phase: 'battle', battle, lastUnlockedTrinket: null, bossVictory: null, choicePlayerIdx: 0, playerChoices: run.playerIds.map(() => null) };
 }
 
 // ── Resolve a battle outcome ──────────────────────────────────────────
@@ -283,10 +329,51 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
     const newPool = availablePool(miniBosses, bosses);
     // Carry HP forward from the battle (party shares one HP pool).
     const partyHpAfter = Math.max(0, battle.partyHp);
-    const runPlayers = run.runPlayers.map(rp => ({
+    let runPlayers = run.runPlayers.map(rp => ({
       ...rp,
       hp: partyHpAfter > 0 ? Math.max(1, Math.round(partyHpAfter)) : rp.hp,
     }));
+    // After a boss victory: heal party to 100% and enter boss_victory phase
+    // so the UI can show the boss victory screen with trinket choices.
+    if (isBossRound(run.round)) {
+      runPlayers = runPlayers.map(rp => ({ ...rp, hp: rp.maxHp }));
+      const bossName = battle.enemies.length > 0 ? battle.enemies[0].name : `Boss`;
+      const trinketOptions = bossTrinketOptions(bosses);
+      const stats: DartliteRunStats = {
+        ...run.stats,
+        roundsCleared: run.stats.roundsCleared + 1,
+        enemiesDefeated: run.stats.enemiesDefeated + battle.stats.enemiesDefeated,
+        miniBossesDefeated: miniBosses,
+        bossesDefeated: bosses,
+        damageDealt: run.stats.damageDealt + battle.stats.damageDealt,
+        xpGained: run.stats.xpGained + xp,
+      };
+      const log = [...run.log, `Boss defeated on Round ${run.round} — ${bossName} falls! Party healed to full.`];
+      const playerStats = run.playerStats.map(ps => {
+        const bp = battle.players.find(p => p.id === ps.playerId);
+        if (!bp) return ps;
+        return {
+          ...ps,
+          kills: ps.kills + (bp.kills ?? 0),
+          damageDealt: ps.damageDealt + (bp.damageDealt ?? 0),
+        };
+      });
+      return {
+        ...run,
+        runPlayers,
+        pool: newPool,
+        stats,
+        playerStats,
+        phase: 'boss_victory',
+        battle: null,
+        pendingChoice: null,
+        choicePlayerIdx: 0,
+        playerChoices: run.playerIds.map(() => null),
+        lastUnlockedTrinket: unlocked,
+        bossVictory: { bossName, trinketOptions, chosenTrinket: null },
+        log,
+      };
+    }
     const stats: DartliteRunStats = {
       ...run.stats,
       roundsCleared: run.stats.roundsCleared + 1,
@@ -319,6 +406,7 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
       choicePlayerIdx: 0,
       playerChoices: run.playerIds.map(() => null),
       lastUnlockedTrinket: unlocked,
+      bossVictory: null,
       log,
     };
   }
@@ -328,6 +416,7 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
     phase: 'gameover',
     battle: null,
     pendingChoice: null,
+    bossVictory: null,
   };
 }
 
@@ -563,5 +652,55 @@ export function applyPhoenixRevive(run: DartliteRun): DartliteRun {
     ...run,
     runPlayers: run.runPlayers.map(p => ({ ...p, hp: Math.max(p.hp, Math.round(reviveHp / run.runPlayers.length)) })),
     stats: { ...run.stats, trinketsCollected: [...run.stats.trinketsCollected, 'trk_phoenix_heart_used' as TrinketId] },
+  };
+}
+
+// ── Boss trinket selection ────────────────────────────────────────────
+//
+// After a boss victory, the UI shows a boss victory screen with 3-4 boss
+// trinket options. The player picks one; it is applied to the party and the
+// run proceeds to the next round.
+
+export function applyBossTrinketChoice(run: DartliteRun, trinketId: TrinketId): DartliteRun {
+  if (!run.bossVictory) return run;
+  const def = getTrinketDef(trinketId);
+  if (!def) return run;
+  // Apply the boss trinket to the whole party.
+  let runPlayers = run.runPlayers.map(rp => ({ ...rp, trinkets: [...rp.trinkets, trinketId] }));
+  // Apply stat bonuses from boss trinkets.
+  if (trinketId === 'trk_boss_warlords_crown') {
+    runPlayers = runPlayers.map(rp => ({ ...rp, power: rp.power + 25, bonusPower: rp.bonusPower + 25 }));
+  } else if (trinketId === 'trk_boss_ice_crystal') {
+    runPlayers = runPlayers.map(rp => ({ ...rp, armor: rp.armor + 15, bonusArmor: rp.bonusArmor + 15 }));
+  } else if (trinketId === 'trk_boss_verdant_seed') {
+    runPlayers = runPlayers.map(rp => ({ ...rp, maxHp: rp.maxHp + 200, hp: rp.hp + 200, bonusHealth: rp.bonusHealth + 200 }));
+  } else if (trinketId === 'trk_boss_dragon_heart') {
+    runPlayers = runPlayers.map(rp => ({ ...rp, power: rp.power + 40, bonusPower: rp.bonusPower + 40 }));
+  } else if (trinketId === 'trk_boss_frost_throne') {
+    runPlayers = runPlayers.map(rp => ({ ...rp, armor: rp.armor + 25, bonusArmor: rp.bonusArmor + 25 }));
+  } else if (trinketId === 'trk_boss_maw_jaw') {
+    runPlayers = runPlayers.map(rp => ({ ...rp, maxHp: rp.maxHp + 400, hp: rp.hp + 400, bonusHealth: rp.bonusHealth + 400 }));
+  } else if (trinketId === 'trk_boss_void_cloak') {
+    runPlayers = runPlayers.map(rp => ({ ...rp, power: rp.power + 60, bonusPower: rp.bonusPower + 60 }));
+  } else if (trinketId === 'trk_boss_eternal_flame') {
+    runPlayers = runPlayers.map(rp => ({ ...rp, armor: rp.armor + 35, bonusArmor: rp.bonusArmor + 35 }));
+  } else if (trinketId === 'trk_boss_titan_heart') {
+    runPlayers = runPlayers.map(rp => ({ ...rp, maxHp: rp.maxHp + 600, hp: rp.hp + 600, bonusHealth: rp.bonusHealth + 600 }));
+  } else if (trinketId === 'trk_boss_godhand') {
+    runPlayers = runPlayers.map(rp => ({ ...rp, power: rp.power + 100, bonusPower: rp.bonusPower + 100 }));
+  }
+  const trinkets = [...run.trinkets, trinketId];
+  const stats = { ...run.stats, trinketsCollected: [...run.stats.trinketsCollected, trinketId] };
+  const playerStats = run.playerStats.map(ps => ({ ...ps, trinkets: [...ps.trinkets, trinketId] }));
+  const log = [...run.log, `Boss trinket chosen: ${def.name}`];
+  return {
+    ...run,
+    runPlayers,
+    trinkets,
+    stats,
+    playerStats,
+    bossVictory: { ...run.bossVictory, chosenTrinket: trinketId },
+    phase: 'reward',
+    log,
   };
 }
