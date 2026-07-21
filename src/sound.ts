@@ -124,6 +124,83 @@ function chime(ctx: AudioContext, dest: AudioNode, freq: number, start: number, 
   osc(ctx, dest, freq * 3, start, dur * 0.6, 'sine', peak * 0.18);
 }
 
+// ── Hit sound packs ──────────────────────────────────────────────────
+// Each pack renders a "hit" cue whose intensity scales with the damage
+// value so harder hits sound heavier. Intensity 0 = miss, 1 = light,
+// 2 = medium, 3 = heavy.
+function playHitPack(ctx: AudioContext, reverb: AudioNode | null, pack: string, intensity: number, vol: number, startOffset: number) {
+  const master = ctx.createGain();
+  master.gain.value = vol;
+  master.connect(ctx.destination);
+  if (reverb) master.connect(reverb);
+  const t = startOffset;
+  const i = Math.max(0, Math.min(3, intensity));
+  // Scale loudness and low-end with intensity.
+  const peak = 0.35 + i * 0.18;
+  const lowFreq = 60 + i * 25;
+  const dur = 0.12 + i * 0.06;
+  switch (pack) {
+    case 'board': {
+      // Cork-board fiber thud with a metallic ring.
+      osc(ctx, master, 180 + i * 40, t, dur, 'sine', peak);
+      osc(ctx, master, lowFreq, t, dur * 1.3, 'triangle', peak * 0.6);
+      noiseBurst(ctx, master, t, 0.04 + i * 0.02, 0.3 + i * 0.1, 3000 + i * 800, 1500);
+      chime(ctx, master, 1200 + i * 200, t + 0.005, 0.06, 0.06 + i * 0.02);
+      break;
+    }
+    case 'punch': {
+      // Heavy punch: sub drop + body hit.
+      kick(ctx, master, t, peak, lowFreq, dur);
+      osc(ctx, master, lowFreq * 0.7, t, dur * 1.5, 'sine', peak * 0.5);
+      noiseBurst(ctx, master, t, 0.08 + i * 0.04, peak * 0.5, 600 + i * 200, 80);
+      if (i >= 2) osc(ctx, master, 45, t + 0.02, 0.2, 'sawtooth', peak * 0.3);
+      break;
+    }
+    case 'arcade': {
+      // Retro arcade zaps with rising pitch at higher intensity.
+      const baseFreq = 300 + i * 150;
+      sweep(ctx, master, t, 0.1 + i * 0.04, baseFreq, baseFreq * 2.5, 'square', peak);
+      osc(ctx, master, baseFreq * 2, t + 0.02, 0.06, 'square', peak * 0.4);
+      if (i >= 2) chime(ctx, master, 1800, t + 0.05, 0.12, peak * 0.3);
+      break;
+    }
+    case 'thud':
+    default: {
+      // Default layered thud (same family as dart_thud but intensity-scaled).
+      osc(ctx, master, 200 + i * 50, t, dur, 'sine', peak);
+      osc(ctx, master, 90 + i * 20, t, dur * 1.4, 'triangle', peak * 0.7);
+      noiseBurst(ctx, master, t, 0.05 + i * 0.02, peak * 0.5, 3500, 1800);
+      chime(ctx, master, 1320 + i * 100, t + 0.005, 0.08, 0.08 + i * 0.03);
+      if (i >= 3) kick(ctx, master, t, peak * 0.5, 80, 0.18);
+      break;
+    }
+  }
+}
+
+// ── Click sounds ─────────────────────────────────────────────────────
+function playClickByName(ctx: AudioContext, reverb: AudioNode | null, id: string, vol: number, startOffset: number) {
+  if (id === 'none') return;
+  const master = ctx.createGain();
+  master.gain.value = vol;
+  master.connect(ctx.destination);
+  if (reverb) master.connect(reverb);
+  const t = startOffset;
+  switch (id) {
+    case 'tick':
+      osc(ctx, master, 740, t, 0.04, 'sine', 0.3);
+      osc(ctx, master, 1480, t + 0.003, 0.03, 'triangle', 0.12);
+      break;
+    case 'pop':
+      sweep(ctx, master, t, 0.1, 420, 880, 'triangle', 0.4);
+      chime(ctx, master, 880, t + 0.04, 0.12, 0.14);
+      break;
+    case 'tap':
+      noiseBurst(ctx, master, t, 0.03, 0.25, 5000, 2000);
+      osc(ctx, master, 320, t, 0.05, 'sine', 0.2);
+      break;
+  }
+}
+
 // ── SFX library ──────────────────────────────────────────────────────
 function playSfxByName(ctx: AudioContext, reverb: AudioNode | null, name: string, vol: number, startOffset: number) {
   const master = ctx.createGain();
@@ -422,6 +499,33 @@ class SoundEngine {
     const vol = settings.sfxVolume ?? 0.9;
     const t = ctx.currentTime + 0.01;
     playPlayerSoundByName(ctx, this.reverb?.input ?? null, id, vol, t);
+  }
+
+  // Play a hit sound whose intensity scales with the damage value. Higher
+  // damage = heavier/louder hit. Intensity buckets: 0 = miss, 1 = light,
+  // 2 = medium, 3 = heavy. The selected sound pack comes from settings.
+  playHit(damage: number, settings: Settings) {
+    if (!settings.sound) return;
+    const ctx = this.ensure();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') ctx.resume();
+    const intensity = damage <= 0 ? 0 : damage < 20 ? 1 : damage < 50 ? 2 : 3;
+    const pack = settings.hitSoundPack ?? 'thud';
+    const vol = settings.sfxVolume ?? 0.9;
+    playHitPack(ctx, this.reverb?.input ?? null, pack, intensity, vol, ctx.currentTime + 0.01);
+  }
+
+  // Play a UI button click sound. Respects the clickSound setting and its
+  // own volume slider.
+  playClick(settings: Settings) {
+    if (!settings.sound) return;
+    const id = settings.clickSound ?? 'none';
+    if (id === 'none') return;
+    const ctx = this.ensure();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') ctx.resume();
+    const vol = (settings.clickVolume ?? 0.6) * (settings.sfxVolume ?? 0.9);
+    playClickByName(ctx, this.reverb?.input ?? null, id, vol, ctx.currentTime + 0.005);
   }
 }
 

@@ -71,6 +71,7 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
       progress={progress}
       settings={settings}
       players={coopPlayers}
+      music={music}
       onWin={(newHighest, unlockedPowerUpId, stats) => {
         const unlockedList = unlockedPowerUpId
           ? Array.from(new Set([...(progress.unlockedPowerUps || []), unlockedPowerUpId]))

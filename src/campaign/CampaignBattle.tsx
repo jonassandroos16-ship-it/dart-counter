@@ -9,6 +9,7 @@ import {
 import { getChapter } from './campaignLevels';
 import type { Player, Settings } from '../types';
 import { Sound } from '../sound';
+import type { MusicEngine } from '../music';
 import { initials } from '../store';
 import { bumpCoopStat } from './coopStats';
 import { CoopPowerUpOrb } from './CoopPowerUpOrb';
@@ -21,17 +22,25 @@ interface Props {
   progress: CampaignProgress;
   settings: Settings;
   players: Player[];
+  music: MusicEngine;
   onWin: (newHighest: number, unlockedPowerUpId: string | null, stats: CampaignBattleState['stats']) => void;
   onLose: () => void;
   onQuit: () => void;
 }
 
-export function CampaignBattle({ levelId, chapterId, progress, settings, players, onWin, onLose, onQuit }: Props) {
+export function CampaignBattle({ levelId, chapterId, progress, settings, players, music, onWin, onLose, onQuit }: Props) {
   const chapter = getChapter(chapterId);
   const level = (chapter?.levels.find(l => l.level_id === levelId)) || getLevel(levelId)!;
   const [state, setState] = useState<CampaignBattleState>(() =>
     startBattle(level, players, settings, undefined, chapterId),
   );
+
+  // Start coop campaign music when the battle begins.
+  useEffect(() => {
+    music.startContext('coop', settings);
+    return () => { music.stop(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [mult, setMult] = useState(1);
 
   useEffect(() => {
@@ -354,6 +363,7 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
           state={state}
           onContinue={onContinue}
           onEndVisit={onEnter}
+          settings={settings}
         />
       )}
     </div>

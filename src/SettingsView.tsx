@@ -97,10 +97,36 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
         </div>
         <label className="row between" style={{ marginBottom: 14 }}><b>Sound effects</b><input type="checkbox" checked={settings.sound} onChange={e => update({ sound: e.target.checked })} style={{ width: 'auto' }} /></label>
         {settings.sound && (
-          <label className="field" style={{ marginBottom: 14 }}>
-            <span><b>SFX volume</b> · {Math.round((settings.sfxVolume ?? 0.9) * 100)}%</span>
-            <input type="range" min={0} max={1} step={0.05} value={settings.sfxVolume ?? 0.9} onChange={e => update({ sfxVolume: +e.target.value })} />
-          </label>
+          <>
+            <label className="field" style={{ marginBottom: 14 }}>
+              <span><b>SFX volume</b> · {Math.round((settings.sfxVolume ?? 0.9) * 100)}%</span>
+              <input type="range" min={0} max={1} step={0.05} value={settings.sfxVolume ?? 0.9} onChange={e => update({ sfxVolume: +e.target.value })} />
+            </label>
+            <label className="field" style={{ marginBottom: 14 }}>
+              <span><b>Hit sound pack</b> · played on dart damage</span>
+              <select value={settings.hitSoundPack ?? 'thud'} onChange={e => update({ hitSoundPack: e.target.value as any })}>
+                <option value="thud">Thud (default)</option>
+                <option value="board">Board</option>
+                <option value="punch">Punch</option>
+                <option value="arcade">Arcade</option>
+              </select>
+            </label>
+            <label className="field" style={{ marginBottom: 14 }}>
+              <span><b>Button click sound</b> · UI feedback</span>
+              <select value={settings.clickSound ?? 'none'} onChange={e => update({ clickSound: e.target.value as any })}>
+                <option value="none">None</option>
+                <option value="tick">Tick</option>
+                <option value="pop">Pop</option>
+                <option value="tap">Tap</option>
+              </select>
+            </label>
+            {settings.clickSound && settings.clickSound !== 'none' && (
+              <label className="field" style={{ marginBottom: 14 }}>
+                <span><b>Click volume</b> · {Math.round((settings.clickVolume ?? 0.6) * 100)}%</span>
+                <input type="range" min={0} max={1} step={0.05} value={settings.clickVolume ?? 0.6} onChange={e => update({ clickVolume: +e.target.value })} />
+              </label>
+            )}
+          </>
         )}
         <label className="row between" style={{ marginBottom: 14 }}><b>Background music</b><input type="checkbox" checked={settings.music} onChange={e => update({ music: e.target.checked })} style={{ width: 'auto' }} /></label>
         {settings.music && (
@@ -112,6 +138,7 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
             <TrackRow label="Start screen track" value={settings.musicStartTrack} onChange={v => update({ musicStartTrack: v })} context="start" previewing={previewing} onTogglePreview={togglePreview} onStopPreview={stopPreview} />
             <TrackRow label="Setup screen track" value={settings.musicSetupTrack} onChange={v => update({ musicSetupTrack: v })} context="setup" previewing={previewing} onTogglePreview={togglePreview} onStopPreview={stopPreview} />
             <TrackRow label="Match track" value={settings.musicMatchTrack} onChange={v => update({ musicMatchTrack: v })} context="match" previewing={previewing} onTogglePreview={togglePreview} onStopPreview={stopPreview} />
+            <TrackRow label="Coop campaign track" value={settings.musicCoopTrack} onChange={v => update({ musicCoopTrack: v })} context="coop" previewing={previewing} onTogglePreview={togglePreview} onStopPreview={stopPreview} />
           </>
         )}
         <label className="row between"><b>Confirm before quitting/reset</b><input type="checkbox" checked={settings.confirmReset} onChange={e => update({ confirmReset: e.target.checked })} style={{ width: 'auto' }} /></label>
@@ -350,7 +377,7 @@ function EditCustomTitleModal({ onClose, onSave }: { onClose: () => void; onSave
   );
 }
 
-function TrackRow({ label, value, onChange, context, previewing, onTogglePreview, onStopPreview }: { label: string; value: string; onChange: (v: string) => void; context: 'start' | 'setup' | 'match'; previewing: string | null; onTogglePreview: (id: string) => void; onStopPreview: () => void }) {
+function TrackRow({ label, value, onChange, context, previewing, onTogglePreview, onStopPreview }: { label: string; value: string; onChange: (v: string) => void; context: 'start' | 'setup' | 'match' | 'coop'; previewing: string | null; onTogglePreview: (id: string) => void; onStopPreview: () => void }) {
   const tracks = tracksFor(context);
   return (
     <div style={{ marginBottom: 14 }}>
