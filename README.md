@@ -1,6 +1,6 @@
 # Dart Counter
 
-A full-featured dart scoring app built with **React + TypeScript + Vite**. Tracks scores, stats, XP, levels, titles, badges, power-ups, battle mode, and includes synthesized sound effects and background music.
+A full-featured dart scoring app built with **React + TypeScript + Vite**. Tracks scores, stats, XP, levels, titles, badges, power-ups, battle mode, a **Co-op Campaign** with classes and passives, a **Dartlite** rogue-lite mode with trinkets and boons, a **card-based deck-builder** mode, and includes synthesized sound effects and background music.
 
 Live demo: https://jonassandroos16-ship-it.github.io/dart-counter/
 
@@ -19,6 +19,10 @@ Live demo: https://jonassandroos16-ship-it.github.io/dart-counter/
    - [Add a New Badge](#add-a-new-badge)
    - [Add a New Power-Up](#add-a-new-power-up)
    - [Add a New Showdown Background](#add-a-new-showdown-background)
+   - [Add a New Co-op Class / Passive](#add-a-new-co-op-class--passive)
+   - [Add a New Trinket (Dartlite)](#add-a-new-trinket-dartlite)
+   - [Add a New Card (Deck-builder)](#add-a-new-card-deck-builder)
+   - [Add a New Campaign Level / Enemy](#add-a-new-campaign-level--enemy)
 7. [How to Change Views (Navigation)](#how-to-change-views-navigation)
 8. [Common React Bugs and How to Fix Them](#common-react-bugs-and-how-to-fix-them)
 9. [Build, Test, Deploy](#build-test-deploy)
@@ -37,13 +41,20 @@ Live demo: https://jonassandroos16-ship-it.github.io/dart-counter/
 - **High Score** — 7 visits of 3 darts, highest total wins
 - **Battle** — HP-based combat using player attributes (health/armor/power); each dart deals damage independently; last one standing wins
 - **Team Mode** — Any of the above can be played as team vs team (2–4 teams)
+- **Card Mode (deck-builder)** — Players build a deck from collected cards (damage / spell / utility) and play them during a match; cards are drawn into a hand each turn, played to a used pile, and recycled from the graveyard when the deck runs out
+- **Co-op Campaign** — A JSON-driven PvE campaign. The party fights AI enemies with shields, armor, and accuracy. Party HP is recomputed per level from the combined `health` attribute of the selected players. Each level unlocks a coop power-up reward. A level is "beaten for everyone" only when every party member has cleared it (per-player progress).
+- **Dartlite (rogue-lite)** — Endless coop run through rounds of enemies from the campaign enemy database. Every 5th round is a mini-boss; every 10th is a boss. After each round the party chooses one of three boons: heal 20%, gain a stat, or get a random trinket. Trinkets and run-time stats do NOT carry over to new games. The run ends when the party dies.
 
 ### Progression
 - **XP and leveling** — Earn XP from wins, visits, checkouts, and darts thrown
 - **70+ built-in titles** — From "First Win" to "Dart Legend", with custom title creation
-- **30+ badges** — In-game medals (Ton, Hat Trick, Slayer), post-game comparative awards (Top Scorer, Clutch, Comeback Kid), and a dedicated power-up badge pool (Fully Charged, Unleashed, Wall Builder, Surge Rider, Thief, Cold Snap, Lucky Hand, Saved, Quad Squad)
-- **Player attributes** — Health (base 100, cap 500), armor (flat per dart, cap 25), power (flat per dart, cap 30) used in Battle mode
-- **Power-ups** — 7 power-ups (Fourth Dart, Blocker, Reroll, Surge, Steal, Freeze, Lucky Miss) that charge from doubles/triples/bullseyes
+- **30+ badges** — In-game medals (Ton, Hat Trick, Slayer), post-game comparative awards (Top Scorer, Clutch, Comeback Kid), a dedicated power-up badge pool (Fully Charged, Unleashed, Wall Builder, Surge Rider, Thief, Cold Snap, Lucky Hand, Saved, Quad Squad), and coop-only badges
+- **Player attributes** — Health (base 100, cap 500), armor (flat per dart, cap 25), power (flat per dart, cap 30) used in Battle and Co-op modes. Attribute points are awarded on level-up and reconciled when scaling settings or developer mode change.
+- **Competitive power-ups** — 7 power-ups (Fourth Dart, Blocker, Reroll, Surge, Steal, Freeze, Lucky Miss) that charge from doubles/triples/bullseyes
+- **Co-op classes & passives** — 3 classes (Warrior, Priest, Rogue), each with 5 tiers of 3 passives (15 per class, 45 total). Passives grant party-wide stat bonuses while the player is in the party. A player equips one passive at a time per class.
+- **Co-op power-ups** — A separate pool of coop-only power-ups (starter and advanced tiers) unlocked by clearing campaign levels. Each player has their own charge orb during coop battles.
+- **Trinkets (Dartlite)** — 20 trinkets in 4 tiers. A run starts with 5 in the pool; new trinkets are added after each mini-boss (tier 2) and boss (tiers 3 & 4), shown via a popup. Trinkets last only for the run.
+- **Cards (deck-builder)** — Damage, spell, and utility cards with class restrictions (warrior/priest/rogue/any), rarity (common/rare/epic), and upgrade levels. Cards are gained on level-up (based on class) and as Dartlite rewards. Each card can be upgraded once.
 - **Showdown backgrounds** — 10 selectable gradient backgrounds for the match intro animation
 - **Showdown stat titles** — Per-player highlight titles in the showdown intro (Top Scorer, Ton Master, Maximum King, Checkout Master, Winner, Fast Starter, Sharpshooter, The Finisher, Veteran) — each fires only when exactly one player leads that metric, plus a Champion crown for the highest-level player
 
@@ -51,6 +62,8 @@ Live demo: https://jonassandroos16-ship-it.github.io/dart-counter/
 - 3-dart average, first 9 average, 180s, 140+, 100+, high score, high checkout
 - Win rate, tie rate, legs won, darts thrown
 - Battle mode stats: kills, times KO'd, battle games
+- Co-op stats: campaign levels cleared, coop battles, coop kills
+- Dartlite stats: total kills, battles, mini-bosses, bosses, best round, total runs, total XP (both global in localStorage and per-player on the Player object)
 - Best/worst/average finish
 - Scoring distribution bar chart
 - Dartboard heatmap showing where darts land
@@ -62,18 +75,22 @@ Live demo: https://jonassandroos16-ship-it.github.io/dart-counter/
 
 ### Audio
 - Synthesized sound effects (no audio files needed) via Web Audio API
-- 6 background music tracks (setup + match contexts)
+- Background music tracks across multiple contexts (start, setup, match, coop)
 - Player entrance sounds (Hero, Villain, Cyborg, Mystic, Beast, Champion)
 
 ### UI/UX
 - Dark/light themes with 8 accent colors
 - Full-screen no-scroll play layout
 - Showdown intro animation with player-selected backgrounds, champion crown, and per-player stat titles
-- Score popups, milestone popups, level-up popups, title-unlock popups, kill popups
+- Score popups, milestone popups, level-up popups, title-unlock popups, kill popups, frozen popups, shield-blocked popups
 - Compact circular PowerUpOrb with charge ring + 4th-dart slot indicator
+- Coop power-up orb (per-player charge during coop battles)
 - Responsive design (mobile to desktop)
 - Cloud sync via Supabase (optional — works fully offline with localStorage)
 - Per-player Developer mode toggle for testing power-ups and battle attributes
+- Welcome overlay on first load
+- Collapsible bottom navigation
+- Version display (latest commit SHA) in the Settings footer
 
 ---
 
@@ -87,7 +104,7 @@ npm run test     # run vitest test suite
 npm run typecheck # tsc --noEmit
 ```
 
-The app deploys to GitHub Pages automatically on push to `main` (see `.github/workflows/deploy.yml`). The CI workflow runs `npm run typecheck` and `npm test` before building.
+The app deploys to GitHub Pages automatically on push to `main` (see `.github/workflows/deploy.yml`). The CI workflow runs `npm run typecheck` and `npm test` before building. The deploy workflow injects `VITE_COMMIT_SHA` at build time so the Settings footer can display the current version.
 
 ---
 
@@ -128,10 +145,9 @@ The #1 React bug: **mutating state instead of replacing it.** If you see stale U
 
 ```
 src/
-├── App.tsx                # Root component — nav, view switching, global effect, audio unlock
+├── App.tsx                # Root component — nav, view switching, global effects, audio unlock, welcome overlay
 ├── main.tsx               # Entry point — mounts <App/> to #root
 ├── index.css              # Entry stylesheet — @imports the styles/ partials below
-├── styles/                # CSS split by concern (base, layout, buttons, cards, play, modals, dartboard, battle, calendar, showdown, powerups)
 ├── types.ts               # All TypeScript interfaces (Player, Game, Settings, etc.)
 ├── constants/             # Game data split by domain — barrel re-exported via constants/index.ts
 │   ├── colors.ts          # COLORS, TEAM_COLORS, TEAM_NAMES
@@ -142,28 +158,123 @@ src/
 │   ├── popups.ts          # SCORE_POPUPS, MILESTONES
 │   ├── titles.ts          # TitleCtx, TitleDef, BUILTIN_TITLES, buildTitleCheck, conditionLabel, allTitles, getTitleInfo, titleProgressInfo
 │   └── settings.ts        # defaultSettings()
-├── logic.ts               # Pure game logic: createGame, recordFromGame, stats, XP, battle damage
-├── badges.ts              # Badge definitions, lifetime aggregations, and award logic
-├── powerups.ts            # Power-up definitions and apply hooks (returns PowerUpResult)
+├── logic.ts               # Pure game logic: createGame, recordFromGame, stats, XP, battle damage, retroUnlockAll, reconcileAllPlayersPoints
+├── powerups.ts            # Competitive power-up definitions and apply hooks (returns PowerUpResult)
 ├── sound.ts               # Web Audio synthesis — SFX, entrance sounds
-├── music.ts               # Background music engine (looped synthesized tracks)
-├── store.ts               # State management — useDB hook, localStorage, Supabase sync
-├── supabase.ts            # Supabase client init
-├── Popups.tsx             # Toast, Modal, MilestonePopup, LevelUpPopup, TitleUnlockPopup, KillPopup
-├── PlayView.tsx           # Router only — picks the right play/* module based on game state
-├── PlayersView.tsx        # Player CRUD — name, color, title, badge, attributes, power-ups, showdown bg, dev mode
-├── StatsView.tsx          # Stats dashboard — charts, badges, comparisons, battle stats
+├── PlayView.tsx           # Router only — picks the right play/* module, campaign, or dartlite based on game state
+├── PlayersView.tsx        # Player CRUD shell — delegates to players/EditPlayerModal tabs
+├── StatsView.tsx          # Stats dashboard — charts, badges, comparisons, battle/coop/dartlite stats
 ├── HistoryView.tsx        # Match history list with detail view
-├── SettingsView.tsx       # Settings — theme, sound, XP config, power-up scaling, custom titles, sync
+├── SettingsView.tsx       # Settings — theme, sound, XP config, power-up scaling, custom titles, sync, version footer
+├── Popups.tsx             # Toast, Modal, MilestonePopup, LevelUpPopup, TitleUnlockPopup, KillPopup, FrozenPopup, ShieldBlockedPopup, usePopupState
+├── WelcomeOverlay.tsx     # First-load welcome screen
 ├── Charts.tsx             # LineChart, BarChart, DartboardHeatmap (SVG-based)
 ├── CalendarPicker.tsx     # Date filtering for stats
-└── play/                  # Play flow split out of the former 1605-line PlayView.tsx
+├── supabase.ts             # Supabase client init
+├── vite-env.d.ts          # Vite env type declarations (incl. VITE_COMMIT_SHA)
+│
+├── badges/                # Badge system split into a package
+│   ├── types.ts           # BadgeDef interface
+│   ├── definitions.ts     # BADGES array (in-game, post-game, powerUpOnly, coopOnly)
+│   ├── compute.ts         # computeGameBadges — picks badge winners for a game
+│   ├── lifetime.ts        # Lifetime badge count aggregation
+│   ├── helpers.ts         # Shared badge helper functions
+│   ├── queries.ts         # Badge query helpers
+│   └── index.ts           # Barrel re-export
+│
+├── campaign/              # Co-op Campaign (PvE) package
+│   ├── types.ts           # Campaign data model (EnemyDef, CampaignLevel, CoopPlayer, CoopClassDef, CoopPassiveDef, PlayerCoopProgress, PlayerCampaignProgress, CampaignProgress, CoopPowerUpDef, etc.)
+│   ├── campaignLevels.ts  # Static level definitions (JSON-driven)
+│   ├── enemyDatabase.ts   # ENEMY_DATABASE — static enemy stats
+│   ├── coopStats.ts       # Global coop stats in localStorage
+│   ├── progress.ts        # useCampaignProgress hook + per-player progress helpers
+│   ├── engine.ts          # Campaign engine barrel
+│   ├── engine/            # Pure combat engine
+│   │   ├── classes.ts     # COOP_CLASSES, COOP_PASSIVES (3 classes × 5 tiers × 3 passives)
+│   │   ├── playerTurn.ts  # startBattle, player action processing
+│   │   ├── enemyAi.ts     # Enemy AI (accuracy, precision, shield resolution)
+│   │   ├── coopActions.ts # Coop power-up activation, focus/distract, freeze
+│   │   ├── powerUps.ts    # COOP_POWER_UPS definitions
+│   │   ├── shields.ts     # Shield layer resolution (span vs exact)
+│   │   ├── party.ts       # Party HP computation, buff application
+│   │   ├── levels.ts      # Level lookup helpers
+│   │   ├── progress.ts    # Level progression logic
+│   │   ├── enemies.ts     # Enemy instance helpers
+│   │   └── instanceIds.ts # Unique instance id generator
+│   ├── CampaignMap.tsx    # Level select map
+│   ├── ChapterSelect.tsx  # Chapter (theme) selection
+│   ├── CoopSetupView.tsx  # Coop setup — party selection, class/passive equip
+│   ├── CampaignBattle.tsx # Battle screen (player darts vs enemies)
+│   ├── CampaignEditor.tsx # Built-in campaign level editor
+│   ├── CoopPowerUpOrb.tsx # Per-player coop power-up charge orb
+│   ├── DartOverlay.tsx    # Dart input overlay for campaign
+│   ├── FrozenOverlay.tsx  # Frozen enemy effect overlay
+│   └── engine.test.ts     # Campaign engine tests
+│
+├── dartlite/              # Dartlite rogue-lite mode package
+│   ├── engine.ts          # DartliteRun state, round progression, enemy selection, boon choices, trinket application, run stats
+│   ├── trinkets.ts        # 20 trinkets in 4 tiers, STARTER_POOL, MINIBOSS_POOL, BOSS_POOL, availablePool, newlyUnlockedTrinket
+│   ├── stats.ts           # PlayerDartliteStats (per-player), DartliteGlobalStats (global localStorage), recordDartliteRun
+│   ├── cardRewards.ts     # Card reward selection after rounds
+│   ├── cardRewards.test.ts
+│   ├── DartliteSetup.tsx  # Run setup screen
+│   ├── DartliteBattle.tsx # Battle screen (reuses campaign combat engine)
+│   └── DartliteGameOver.tsx # Run summary + stats recording
+│
+├── cards/                 # Card system (deck-builder) package
+│   ├── types.ts           # CardDef, PlayerCard, CardPlayState, CardRewardOption, CardUpgradeOption
+│   ├── definitions.ts    # CARD_DEFS array (damage/spell/utility, class/mode/level restrictions, upgrades)
+│   ├── deck.ts           # Deck management, draw/hand/used/graveyard, level-up rewards, dartlite card rewards
+│   ├── rewards.ts        # Card reward helpers
+│   ├── deck.test.ts
+│   ├── deckbuilder.test.ts
+│   └── definitions.test.ts
+│
+├── players/               # Player editor package (tabbed modal)
+│   ├── EditPlayerModal.tsx # Modal shell with tabs
+│   ├── PlayerCard.tsx     # Player list card
+│   ├── BasicTab.tsx       # Name, color, sound, showdown bg
+│   ├── AttributesTab.tsx  # Health/armor/power point allocation
+│   ├── PowerUpsTab.tsx    # Competitive power-up unlock/equip
+│   ├── ClassTab.tsx       # Coop class selection + passive equip
+│   ├── DeckTab.tsx        # Card collection / deck-builder management
+│   ├── TrinketsTab.tsx    # Dartlite trinket collection viewer
+│   ├── TitlesTab.tsx      # Title picker
+│   ├── BadgesTab.tsx      # Badge picker
+│   └── helpers.ts         # Shared player helper functions
+│
+├── store/                 # State management package
+│   ├── index.ts           # Barrel re-export
+│   ├── useDB.ts           # useDB hook — localStorage, Supabase sync, debounced writes, tombstones
+│   ├── useToast.ts        # useToast hook
+│   ├── sync.ts            # Supabase sync logic
+│   ├── merge.ts           # mergeBackup — cross-device merge
+│   ├── settings.ts        # applyTheme, withDefaults, loadSettings, loadActiveGame
+│   ├── format.ts          # uid, todayKey, fmtDate, fmtTime, fmtDateTime
+│   └── keys.ts            # KEYS, loadTomb
+│
+├── music/                 # Background music engine package
+│   ├── index.ts           # Barrel re-export
+│   ├── engine.ts          # MusicEngine class — context switching, volume
+│   ├── registry.ts        # Track registry
+│   ├── types.ts           # Music track types
+│   ├── start.ts           # Start screen music
+│   ├── setup.ts           # Setup screen music
+│   ├── match.ts           # Match music
+│   └── coop.ts            # Coop campaign music
+│
+├── styles/                # CSS split by concern (base, layout, buttons, cards, play, modals, dartboard, battle, calendar, showdown, powerups, campaign, cards, dartlite)
+│
+└── play/                  # Competitive play flow
     ├── SetupView.tsx      # Setup form (mode, players, legs, double-out, teams, power-ups)
+    ├── ModeSelectView.tsx # Mode picker grid
     ├── Showdown.tsx       # Pre-match intro screen with champion crown + stat titles
     ├── GameOver.tsx       # Post-match summary + badge award display
+    ├── RerollOverlay.tsx  # Reroll power-up animation overlay
     ├── BattleVisitOverlay.tsx # Animated per-dart damage overlay shown during a Battle visit
     ├── common.tsx         # PowerUpOrb + AttributeStrip shared UI
     ├── dart.tsx           # Shared addDartToGame + KeypadPad helpers
+    ├── dart.test.ts
     ├── powerups.ts        # Charge + activate helpers (enforces 1-dart rule, ok flag)
     ├── rewards.ts         # XP, badges, milestones, title unlock popups
     ├── finish.ts          # finishSimpleGame helper
@@ -172,7 +283,8 @@ src/
         ├── AtcBoard.tsx      # Around the Clock
         ├── KillerBoard.tsx   # Killer elimination
         ├── HighScoreBoard.tsx # High Score party mode
-        └── BattleBoard.tsx   # Battle attributes mode
+        ├── BattleBoard.tsx   # Battle attributes mode
+        └── CardBoard.tsx     # Card-based deck-builder mode
 ```
 
 ### Data Flow
@@ -181,39 +293,72 @@ src/
 App.tsx
   └─ useDB() ──── localStorage ──── Supabase (optional cloud sync)
        │
-       ├─ players: Player[]
+       ├─ players: Player[]          (incl. coopProgress, campaignProgress, dartliteStats, cards)
        ├─ games: GameRecord[]
        ├─ settings: Settings
        └─ activeGame: Game | null
               │
               ▼
        PlayView (router) → SetupView / Showdown / <Mode>Board / GameOver
+                        → Campaign (CoopSetupView → CampaignMap → CampaignBattle)
+                        → Dartlite (DartliteSetup → DartliteBattle → DartliteGameOver)
               │
               ▼
        On game finish → recordFromGame() → setGames() → persisted + synced
+       On campaign win → useCampaignProgress() → per-player progress updated
+       On dartlite run end → recordDartliteRun() → per-player + global stats updated
 ```
 
-All state lives in the `useDB` hook in `store.ts`. Components read via props and write via callbacks. There is no Redux or context — just one hook at the top.
+All state lives in the `useDB` hook in `store/useDB.ts`. Components read via props and write via callbacks. There is no Redux or context — just one hook at the top, barrel-exported via `store/index.ts`.
 
-`PlayView.tsx` is now a thin router that delegates to the `play/` package based on the current game phase (setup → showdown → board → game over). The five board components in `play/boards/` each share the `addDartToGame` + `KeypadPad` helpers from `play/dart.tsx`.
+`PlayView.tsx` is a thin router that delegates to the `play/` package for competitive modes, the `campaign/` package for Co-op Campaign, and the `dartlite/` package for Dartlite runs. The six board components in `play/boards/` each share the `addDartToGame` + `KeypadPad` helpers from `play/dart.tsx`.
 
 ---
 
 ## How the App Works
 
-### Game Lifecycle
+### Game Lifecycle (Competitive)
 
-1. **Setup** — `play/SetupView.tsx` shows the setup form (mode, players, legs, double-out, team mode, power-ups).
+1. **Setup** — `play/SetupView.tsx` (or `play/ModeSelectView.tsx`) shows the setup form (mode, players, legs, double-out, team mode, power-ups).
 2. **Create** — `createGame()` in `logic.ts` builds a `Game` object with all per-player state (score, visits, lives, HP, charge, etc.).
 3. **Showdown** — `play/Showdown.tsx` renders the pre-match intro: champion crown for the highest-level player, per-player stat titles (Top Scorer, Ton Master, …), accent chips for level/title/badge/power-up, and the chosen showdown background.
 4. **Play** — Players tap dart buttons; the active board component updates `game.darts`, then on "Enter visit" calls `commitVisit()` which appends to `game.players[turn].visits`, applies power-up charge via `play/powerups.ts`, handles busts, and advances the turn.
 5. **Leg/Game end** — When a player checks out (or all visits used in High Score, or last one standing in Battle/Killer), `recordFromGame()` snapshots the game into a `GameRecord` and pushes it to `games` via `setGames()`.
 6. **XP/Titles/Badges** — After a game, `play/rewards.ts` computes XP earned, checks all title conditions in `allTitles()`, checks badges via `computeGameBadges()`, and updates the player object. Popups fire for new unlocks.
 
+### Co-op Campaign
+
+The campaign is JSON-driven. Static content (levels, enemy stats, shield definitions) lives in `campaign/campaignLevels.ts` and `campaign/enemyDatabase.ts`.
+
+1. **Setup** — `CoopSetupView.tsx` lets the party select players, equip classes and passives, and choose a chapter.
+2. **Map** — `CampaignMap.tsx` shows available levels; `ChapterSelect.tsx` picks the chapter theme (crimson, ice, jungle).
+3. **Battle** — `CampaignBattle.tsx` runs the combat. The pure engine in `campaign/engine/` (playerTurn, enemyAi, shields, party, coopActions) processes player darts and enemy AI turns. Enemies have shields (span or exact board segments), armor, accuracy, and precision. Players have per-player HP, power, armor, buffs, and a coop power-up charge orb.
+4. **Progress** — `useCampaignProgress()` (in `campaign/progress.ts`) tracks per-player progress. A level is "beaten for everyone" only when every party member has cleared it. Each level unlocks a coop power-up reward.
+5. **Classes & Passives** — `campaign/engine/classes.ts` defines 3 classes (Warrior, Priest, Rogue), each with 5 tiers of 3 passives (15 per class). Passives grant party-wide stat bonuses. A player equips one passive at a time per class.
+
+### Dartlite (Rogue-lite)
+
+Dartlite is an endless coop run using the campaign's enemy database and combat engine.
+
+1. **Setup** — `DartliteSetup.tsx` starts the run.
+2. **Battle** — `DartliteBattle.tsx` fights through rounds. Every 5th round is a mini-boss; every 10th is a boss. The combat reuses the campaign engine (`playerTurn.ts`, `enemyAi.ts`).
+3. **Boons** — After each round, the party chooses one of three boons: heal 20%, gain a stat, or get a random trinket.
+4. **Trinkets** — 20 trinkets in 4 tiers (see `dartlite/trinkets.ts`). The pool starts with 5; mini-bosses add tier-2 trinkets, bosses add tiers 3 & 4. `newlyUnlockedTrinket()` drives the "new trinket available" popup. Trinkets last only for the run.
+5. **Stats** — `dartlite/stats.ts` records per-player stats (`PlayerDartliteStats` on the Player object) and global stats (`DartliteGlobalStats` in localStorage). `recordDartliteRun()` is called once from `DartliteGameOver`.
+
+### Card Mode (Deck-builder)
+
+Card mode lives in `cards/` and `play/boards/CardBoard.tsx`.
+
+- **Cards** — `cards/definitions.ts` defines `CARD_DEFS` with three types: damage (act as dart throws), spell (temporary buffs/debuffs), and utility (draw, reroll). Each card has a `mode` (competitive/coop/both), a `class` restriction (warrior/priest/rogue/any), a `rarity`, and a `levelRequired`. Cards can be upgraded once.
+- **Deck** — `cards/deck.ts` manages the player's collection. The deck-builder flow: collection → draw deck → hand (5 cards) → used pile (max 3 plays/turn) → graveyard. When the deck runs out, the graveyard is shuffled back in.
+- **Rewards** — Cards are gained on level-up (based on class, via `cardsForLevelUp`) and as Dartlite rewards (via `randomCardReward` and `randomCardUpgradeReward`).
+- **Management** — The `players/DeckTab.tsx` tab lets players view and manage their card collection and upgrades.
+
 ### Battle Mode
 
 Battle mode uses player attributes (Health, Armor, Power) for HP-based combat:
-- Each player starts with HP equal to their Health attribute (base 100, cap 500).
+- Each player starts with HP equal to their Health attribute (base 300, cap 500).
 - **Per-dart damage formula**: `(dartValue + power) − armor`, with a minimum of 1 damage on any successful hit.
 - Armor is a flat reduction applied to EVERY dart in a visit (base 0, cap 25).
 - Power is a flat bonus added to EVERY dart that hits (base 0, cap 30).
@@ -224,9 +369,11 @@ Battle mode uses player attributes (Health, Armor, Power) for HP-based combat:
 
 ### State Persistence
 
-- **localStorage** is the source of truth offline. Keys: `dc_players`, `dc_games`, `dc_settings`, `dc_active_game`, plus tombstone keys for delete propagation.
+- **localStorage** is the source of truth offline. Keys: `dc_players`, `dc_games`, `dc_settings`, `dc_active_game`, `dc_dartlite_stats`, plus tombstone keys for delete propagation.
 - **Supabase** (optional) mirrors state to a Postgres `app_state` row + `games` table. The `useDB` hook debounces writes (800ms) and merges on pull using `mergeBackup()`. Tombstones ensure deletes propagate across devices.
 - **activeGame** stays local-only so two concurrent matches on different devices don't clash.
+- **Campaign progress** is per-player (stored on `Player.campaignProgress`) so each player tracks their own cleared levels.
+- **Dartlite stats** are both per-player (`Player.dartliteStats`) and global (`dc_dartlite_stats` in localStorage).
 
 ### Power-Ups
 
@@ -234,11 +381,11 @@ Power-ups are defined in `src/powerups.ts`. Each `apply` hook returns a `PowerUp
 
 ### Badges
 
-Badges live in `src/badges.ts`. Each `BadgeDef` has a `kind` of `in-game` (per-player, earned during the match) or `post-game` (comparative, one winner per match). A `powerUpOnly` flag separates the badge pool: when power-ups are enabled in a match, standard badges are suppressed and the power-up-only badges (Fully Charged, Unleashed, Wall Builder, Surge Rider, Thief, Cold Snap, Lucky Hand, Saved, Quad Squad) become available. This keeps the two pools mutually exclusive.
+Badges live in `src/badges/definitions.ts` (in the `badges/` package). Each `BadgeDef` has a `kind` of `in-game` (per-player, earned during the match) or `post-game` (comparative, one winner per match). A `powerUpOnly` flag separates the badge pool: when power-ups are enabled in a match, standard badges are suppressed and the power-up-only badges (Fully Charged, Unleashed, Wall Builder, Surge Rider, Thief, Cold Snap, Lucky Hand, Saved, Quad Squad) become available. A `coopOnly` flag marks badges that only fire in coop/campaign matches. This keeps the pools mutually exclusive.
 
 ### Audio
 
-All audio is synthesized at runtime via the Web Audio API — no `.mp3` or `.wav` files. `sound.ts` builds oscillators, a shared convolver reverb, and layered transients (kick, hat, chime) to produce SFX and entrance sounds. `music.ts` schedules multi-layer note patterns for background tracks. Browsers require a user gesture (click/keydown) before audio can play, so `App.tsx` attaches a one-time `pointerdown`/`keydown` listener to unlock the AudioContext.
+All audio is synthesized at runtime via the Web Audio API — no `.mp3` or `.wav` files. `sound.ts` builds oscillators, a shared convolver reverb, and layered transients (kick, hat, chime) to produce SFX and entrance sounds. The `music/` package schedules multi-layer note patterns for background tracks across contexts (start, setup, match, coop). Browsers require a user gesture (click/keydown) before audio can play, so `App.tsx` attaches a one-time `pointerdown`/`keydown` listener to unlock the AudioContext.
 
 ---
 
@@ -289,7 +436,7 @@ After adding, the title appears in the Players view title picker once earned. Th
 
 ### Add a New Badge
 
-Badges are in `src/badges.ts` in the `BADGES` array:
+Badges are in `src/badges/definitions.ts` (in the `badges/` package) in the `BADGES` array:
 
 ```ts
 {
@@ -304,17 +451,20 @@ Badges are in `src/badges.ts` in the `BADGES` array:
   // For 'post-game' badges, use `pick` instead of `check`:
   // pick: (game) => playerId | playerId[] | null
   // Optional: lifetime context value shown when equipped
-  // context: (playerId, games) => number | string | null,
+  // context: (playerId, games, ctx?) => number | string | null,
   // contextLabel: 'my stat',
   // Optional: set powerUpOnly: true to restrict the badge to power-up matches
   // (standard badges are disabled when power-ups are on)
   // powerUpOnly: true,
+  // Optional: set coopOnly: true to restrict the badge to coop/campaign matches
+  // coopOnly: true,
 },
 ```
 
 - **`in-game`** badges can be earned by multiple players in the same match.
 - **`post-game`** badges are comparative — only one player (or tied players) earn them per match.
 - **`powerUpOnly: true`** badges only fire in matches where power-ups were enabled; standard badges (`powerUpOnly` unset/false) are suppressed in those matches.
+- **`coopOnly: true`** badges only fire in coop/campaign matches.
 - The `context` function shows a lifetime counter on the equipped badge (e.g. "42 kills").
 
 ### Add a New Power-Up
@@ -353,6 +503,92 @@ Showdown backgrounds are in `src/constants/showdown.ts` in the `SHOWDOWN_BGS` ar
 
 The `css` field is any valid CSS `background` value (gradients work best). Players pick from these in the Players view; each player's chosen background renders on their own showdown card. The `showdownBgFor()` and `showdownBgCssForId()` helpers resolve which background to show.
 
+### Add a New Co-op Class / Passive
+
+Classes and passives are in `src/campaign/engine/classes.ts`.
+
+To add a new passive to an existing class, add an entry to `COOP_PASSIVES`:
+
+```ts
+{
+  id: 'war_my_passive',       // unique id, prefix with class
+  classId: 'warrior',          // 'warrior' | 'priest' | 'rogue'
+  tier: 2,                     // 1-5 (higher = stronger)
+  name: 'My Passive',
+  icon: '⚔️',
+  desc: 'Party +5 power (flat per dart).',
+  bonus: { power: 5 },         // { power?, armor?, health? }
+  levelRequired: 3,            // player level needed to unlock
+},
+```
+
+To add a new class, add an entry to `COOP_CLASSES` and its passives to `COOP_PASSIVES`. Update the `CoopClassId` type in `campaign/types.ts` and the `CardClass` type in `cards/types.ts` if the class should also restrict cards.
+
+### Add a New Trinket (Dartlite)
+
+Trinkets are in `src/dartlite/trinkets.ts`.
+
+1. Add the id to the `TrinketId` union type.
+2. Add the definition to the `TRINKETS` record:
+   ```ts
+   trk_my_trinket: { id: 'trk_my_trinket', name: 'My Trinket', icon: '🔮', tier: 2, desc: '+10 power for the run.' },
+   ```
+3. Add the id to the appropriate pool array (`STARTER_POOL`, `MINIBOSS_POOL`, or `BOSS_POOL`) based on the tier. The `availablePool()` and `newlyUnlockedTrinket()` functions will pick it up automatically.
+4. Apply the trinket's effect in `dartlite/engine.ts` where run-time stats are computed.
+
+### Add a New Card (Deck-builder)
+
+Cards are in `src/cards/definitions.ts` in the `CARD_DEFS` array:
+
+```ts
+{
+  id: 'dmg_my_card',
+  name: 'My Card',
+  icon: '🎯',
+  type: 'damage',              // 'damage' | 'spell' | 'utility'
+  mode: 'both',               // 'competitive' | 'coop' | 'both'
+  class: 'any',               // 'warrior' | 'priest' | 'rogue' | 'any'
+  rarity: 'common',           // 'common' | 'rare' | 'epic'
+  desc: 'Deal 25 damage.',
+  base: 25,                   // for damage cards
+  mult: 1,                    // for damage cards
+  // effect: 'heal',          // for spell/utility cards
+  // magnitude: 20,          // for spell/utility cards
+  levelRequired: 1,           // player level needed
+},
+```
+
+After adding, the card appears in the deck builder (`players/DeckTab.tsx`) for eligible players and in level-up / dartlite reward pools automatically via `cardsForLevelUp` and `randomCardReward`.
+
+### Add a New Campaign Level / Enemy
+
+1. **`src/campaign/enemyDatabase.ts`** — Add an enemy to `ENEMY_DATABASE`:
+   ```ts
+   my_enemy: {
+     name: 'My Enemy',
+     difficulty: 'Hard',        // 'Easy' | 'Hard' | 'Boss'
+     max_hp: 200,
+     armor: 5,
+     accuracy: 0.7,            // 0..1 — chance the AI hits its intended sector
+     precision: 0.6,          // 0..1 — clustering; high → adjacent numbers
+     shields: [
+       { type: 'span', target_value: 'TOP_HALF' },
+       { type: 'exact', target_value: 'T20' },
+     ],
+   },
+   ```
+2. **`src/campaign/campaignLevels.ts`** — Add a level that references the enemy:
+   ```ts
+   {
+     level_id: 99,
+     name: 'My Level',
+     is_boss: false,
+     enemies: ['my_enemy'],
+     // coopPowerUpId: 'coop_shield',  // power-up unlocked on clear
+   },
+   ```
+3. The level appears on the `CampaignMap` automatically. Per-player progress is tracked via `useCampaignProgress()`.
+
 ---
 
 ## How to Change Views (Navigation)
@@ -364,7 +600,7 @@ type View = 'play' | 'players' | 'stats' | 'history' | 'settings';
 const [view, setView] = useState<View>('play');
 ```
 
-The `NAV` array defines the bottom nav bar. To add a new view:
+The `NAV` array defines the bottom nav bar (collapsible via the nav-toggle button). To add a new view:
 
 1. Add the id to the `View` type union.
 2. Add an entry to `NAV` with an icon from `lucide-react`.
@@ -495,8 +731,8 @@ This only closes when the click lands on the backdrop itself (not its children),
 When adding a new field to `Player`, `Game`, or `Settings`:
 - Add it to `src/types.ts` as an optional field (`field?: Type`) if old data might not have it.
 - Add a default in `defaultSettings()` (in `constants/settings.ts`) for new Settings fields.
-- Update `loadSettings()` in `store.ts` to merge the new field with defaults.
-- For Supabase-backed fields, the merge functions in `store.ts` (`mergePlayers`, `mergeSettings`) should handle missing fields gracefully.
+- Update `loadSettings()` in `store/settings.ts` to merge the new field with defaults.
+- For Supabase-backed fields, the merge functions in `store/merge.ts` (`mergePlayers`, `mergeSettings`) should handle missing fields gracefully.
 
 ### 9. Build Fails After Changes
 
@@ -511,13 +747,21 @@ Run `npm run typecheck` to see all type errors at once. Run `npm run lint` for E
 
 - Check `src/supabase.ts` — if the env vars aren't set, `supabase` is `null` and the app runs in local-only mode (this is fine for development).
 - The Settings view shows sync status: "Local storage only" means no database configured; "Offline" means the database is unreachable; "Pending" means local changes haven't pushed yet.
-- Tombstones (deleted player/game ids) propagate deletes. If a delete isn't syncing, check that `setPlayers`/`setGames` in `store.ts` is recording the tombstone correctly.
+- Tombstones (deleted player/game ids) propagate deletes. If a delete isn't syncing, check that `setPlayers`/`setGames` in `store/useDB.ts` is recording the tombstone correctly.
 
 ### 11. Power-Up Charge Consumed on a Failed Activation
 
 **Cause:** The `apply` hook returned `ok: false` but the caller still zeroed the charge.
 
 The `activatePowerUp` helper in `play/powerups.ts` checks `ok === false` and returns `null` without touching `powerUpCharge`. If you add a new power-up whose `apply` can fail, return `ok: false` in that branch — do not consume the charge yourself.
+
+### 12. Campaign Progress Not Updating After a Win
+
+**Cause:** The `useCampaignProgress` hook reads per-player progress from `Player.campaignProgress`. If you add a new campaign flow, make sure it calls the progress update in `campaign/progress.ts` (not just `setGames`). Each player's progress is independent — a level is "beaten for everyone" only when every party member has cleared it.
+
+### 13. Dartlite Stats Not Persisting
+
+**Cause:** `recordDartliteRun()` in `dartlite/stats.ts` must be called once from `DartliteGameOver`. It updates both per-player stats (`Player.dartliteStats`) and global stats (`dc_dartlite_stats` in localStorage). If stats aren't showing, check that the run's `playerIds` match the actual player ids in the party.
 
 ---
 
@@ -526,15 +770,15 @@ The `activatePowerUp` helper in `play/powerups.ts` checks `ok === false` and ret
 ```bash
 npm run dev        # Vite dev server with HMR
 npm run build      # vite build → dist/
-npm run typecheck  # tsc --noEmit (fast type check)
+npm run typecheck  # tsc --noEmit -p tsconfig.app.json (fast type check)
 npm run lint       # ESLint
 npm run test       # vitest run (unit tests in *.test.ts)
 npm run test:watch # vitest in watch mode
 ```
 
-Tests live alongside source: `src/logic.test.ts` and `src/badges.test.ts`. Add new tests there when you add logic to `logic.ts` or `badges.ts`.
+Tests live alongside source: `src/logic.test.ts`, `src/badges.test.ts`, `src/store.test.ts`, `src/AppSpend.test.tsx`, `src/NewPlayerSave.test.tsx`, `src/play/dart.test.ts`, `src/cards/deck.test.ts`, `src/cards/deckbuilder.test.ts`, `src/cards/definitions.test.ts`, `src/campaign/engine.test.ts`, `src/dartlite/cardRewards.test.ts`. Add new tests there when you add logic to the corresponding module.
 
-Deployment is automatic via `.github/workflows/deploy.yml` — pushing to `main` runs typecheck + tests, builds, and deploys to GitHub Pages.
+Deployment is automatic via `.github/workflows/deploy.yml` — pushing to `main` runs typecheck + tests, builds, and deploys to GitHub Pages. The workflow injects `VITE_COMMIT_SHA` at build time so the Settings footer can link to the current commit.
 
 ---
 
@@ -546,9 +790,9 @@ When an AI assistant (Claude, Copilot, Cursor, etc.) modifies this codebase, it 
 
 Update the README whenever any of the following change:
 
-1. **Features** — A mode, title, badge, power-up, showdown background, stat, or audio track is added, removed, renamed, or has its behavior changed. Be specific — list the new item by name in the relevant Features bullet.
-2. **"How to Add" sections** — The data model for titles, badges, or power-ups changes. The code snippets in those sections must stay byte-accurate: if `BadgeDef` gains a field (e.g. `powerUpOnly`), update the example; if `PowerUpResult` gains an `ok` flag, update the example and the prose.
-3. **Project Architecture** — A source file is added, removed, renamed, or moved between directories. Keep the tree and the one-line descriptions in sync. The `play/` package and `play/boards/` subpackage must stay accurate.
+1. **Features** — A mode, title, badge, power-up, showdown background, stat, audio track, class, passive, trinket, card, campaign level, or enemy is added, removed, renamed, or has its behavior changed. Be specific — list the new item by name in the relevant Features bullet.
+2. **"How to Add" sections** — The data model for titles, badges, power-ups, classes, passives, trinkets, cards, or campaign content changes. The code snippets in those sections must stay byte-accurate: if `BadgeDef` gains a field (e.g. `coopOnly`), update the example; if `PowerUpResult` gains an `ok` flag, update the example and the prose.
+3. **Project Architecture** — A source file is added, removed, renamed, or moved between directories. Keep the tree and the one-line descriptions in sync. The `play/`, `campaign/`, `dartlite/`, `cards/`, `players/`, `store/`, `badges/`, and `music/` packages must stay accurate.
 4. **Data Flow diagram** — The state management approach changes (e.g. adding a context, switching to Redux, adding a new store key, or splitting a view into submodules).
 5. **Common React Bugs** — You encounter and fix a new class of bug during your work. Add it as a numbered entry with a clear "Cause" / "Bad" / "Good" structure (or "Cause" / "Fix" for non-code bugs).
 6. **Build/Test/Deploy** — Scripts in `package.json` change, or the CI workflow (`.github/workflows/deploy.yml`) changes.
@@ -559,7 +803,7 @@ Update the README whenever any of the following change:
 1. **Read the current README first.** Use the GitHub API or `Read` tool — don't rewrite from memory.
 2. **Make targeted edits.** Prefer editing the affected section over rewriting the whole file. The README is intentionally cumulative and educational.
 3. **Keep the Table of Contents in sync** with the section headings. If you add a section, add it to the TOC.
-4. **Keep code snippets accurate.** Copy real signatures from the source — don't paraphrase. If `BadgeDef` has `powerUpOnly?: boolean`, the example must show it.
+4. **Keep code snippets accurate.** Copy real signatures from the source — don't paraphrase. If `BadgeDef` has `coopOnly?: boolean`, the example must show it.
 5. **Keep it readable for a C++/C# developer.** When explaining React concepts, frame them in terms a systems programmer would understand (references, mutation, lifecycles).
 6. **Do not remove sections.** If a section becomes obsolete, mark it as such rather than deleting it.
 
@@ -582,8 +826,8 @@ Before committing, verify that the README still describes a working, building pr
 ### Quick checklist for every PR
 
 - [ ] Features section lists any new/changed feature by name
-- [ ] "How to Add" snippets match the real interfaces in `types.ts`, `badges.ts`, `powerups.ts`, `constants/`
-- [ ] Project Architecture tree matches `src/` (including `play/` and `play/boards/`)
+- [ ] "How to Add" snippets match the real interfaces in `types.ts`, `badges/types.ts`, `badges/definitions.ts`, `powerups.ts`, `cards/types.ts`, `cards/definitions.ts`, `campaign/types.ts`, `campaign/engine/classes.ts`, `dartlite/trinkets.ts`, `constants/`
+- [ ] Project Architecture tree matches `src/` (including `play/`, `play/boards/`, `campaign/`, `campaign/engine/`, `dartlite/`, `cards/`, `players/`, `store/`, `badges/`, `music/`)
 - [ ] Data Flow diagram still matches the actual state flow
 - [ ] Common React Bugs section includes any new bug class you encountered
 - [ ] `npm run typecheck`, `npm run test`, and `npm run build` all pass
