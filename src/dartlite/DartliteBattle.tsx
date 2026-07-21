@@ -31,8 +31,12 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   // Sync local battle state whenever a new round/battle starts. Without
   // this, `useState(battle)` keeps the stale first-round state after
   // `onChoice` swaps in a fresh `run.battle`, freezing the game.
-  const [state, setState] = useState<CampaignBattleState>(battle);
-  useEffect(() => { setState(battle); }, [battle]);
+  const [state, setState] = useState<CampaignBattleState | null>(battle);
+  // Sync local battle state whenever a new round/battle starts. Skip null
+  // (after resolveBattle clears run.battle) so the old state is retained and
+  // the render body / effects don't crash on null while the choice/reward
+  // screen is showing.
+  useEffect(() => { if (battle) setState(battle); }, [battle]);
   const [showProgress, setShowProgress] = useState(false);
   const [detailPlayerId, setDetailPlayerId] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
@@ -50,6 +54,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   }, []);
 
   useEffect(() => {
+    if (!state) return;
     if (state.outcome === 'victory') {
       Sound.play('win', {}, settings);
       onBattleEnd(true);
@@ -58,43 +63,45 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
       onBattleEnd(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.outcome]);
+  }, [state?.outcome]);
 
   useEffect(() => {
+    if (!state) return;
     if (state.phase !== 'enemy') return;
     if (state.outcome !== 'ongoing') return;
     if (state.pendingEnemyAttacks.length) return;
     if (state.appliedEnemyAttacks.length) return;
     if (state.frozenEnemiesThisRound.length) return;
     const t = setTimeout(() => {
-      setState(prev => prepareEnemyTurn(prev));
+      setState(prev => prev ? prepareEnemyTurn(prev) : prev);
       Sound.play('impact', {}, settings);
     }, 600);
     return () => clearTimeout(t);
-  }, [state.phase, state.outcome, state.pendingEnemyAttacks.length, state.appliedEnemyAttacks.length, state.frozenEnemiesThisRound.length, settings]);
+  }, [state?.phase, state?.outcome, state?.pendingEnemyAttacks.length, state?.appliedEnemyAttacks.length, state?.frozenEnemiesThisRound.length, settings]);
 
+  if (!state) return null;
   const aliveEnemies = state.enemies.filter(e => !e.defeated);
   const thrower = state.players[state.playerTurnIdx];
 
   const onAdd = (base: number, m: number, labelOverride?: string, isBull?: boolean) => {
-    setState(prev => addDart(prev, base, m, labelOverride, isBull, settings));
+    setState(prev => prev ? addDart(prev, base, m, labelOverride, isBull, settings) : prev);
     Sound.play('dart', { score: base * m }, settings);
     if (base > 0) Sound.play('impact', {}, settings);
     setMult(1);
   };
-  const onUndo = () => setState(prev => undoDart(prev, settings));
+  const onUndo = () => setState(prev => prev ? undoDart(prev, settings) : prev);
   const onEnter = () => {
     if (!state.darts.length) return;
-    setState(prev => resolvePlayerVisit(prev));
+    setState(prev => prev ? resolvePlayerVisit(prev) : prev);
   };
   const onContinue = () => {
     if (state.pendingEnemyAttacks.length) {
-      setState(prev => applyNextEnemyAttack(prev));
+      setState(prev => prev ? applyNextEnemyAttack(prev) : prev);
       Sound.play('impact', {}, settings);
       return;
     }
     if (state.phase === 'enemy' && state.frozenEnemiesThisRound.length) {
-      setState(prev => applyNextEnemyAttack(prev));
+      setState(prev => prev ? applyNextEnemyAttack(prev) : prev);
     }
   };
 
@@ -250,7 +257,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
               const isTarget = i === state.targetIdx && !e.defeated;
               const canTarget = state.phase === 'player' && !e.defeated && state.darts.length < 3 && state.outcome === 'ongoing';
               return (
-                <div key={e.id} className="play-other" onClick={() => canTarget && setState(prev => setTarget(prev, e.id))}
+                <div key={e.id} className="play-other" onClick={() => canTarget && setState(prev => prev ? setTarget(prev, e.id) : prev)}
                   style={{ cursor: canTarget ? 'pointer' : 'default', opacity: e.defeated ? 0.4 : 1, borderColor: isTarget ? 'var(--accent)' : 'var(--border)', boxShadow: isTarget ? '0 0 0 2px var(--accent)' : 'none', background: e.defeated ? 'var(--bg-3)' : 'var(--bg-2)' }}>
                   <div className="row between">
                     <div className="row" style={{ gap: 6 }}>
