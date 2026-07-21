@@ -30,7 +30,21 @@ export type TrinketId =
   | 'trk_soul_harvest'     // +XP per kill
   | 'trk_chain_lightning' // damage splashes to nearby enemy
   | 'trk_adamant'          // immune to first hit each round
-  | 'trk_phoenix_heart';   // revive once at 25% HP
+  | 'trk_phoenix_heart'    // revive once at 25% HP
+  // Boss trinkets — guaranteed reward after defeating a boss (10)
+  // First boss (round 10): 3 options
+  | 'trk_boss_warlords_crown'     // +25 power for the run
+  | 'trk_boss_ice_crystal'        // +15% armor for the run
+  | 'trk_boss_verdant_seed'       // +200 max HP for the run
+  // Second boss (round 20): 3 options
+  | 'trk_boss_dragon_heart'       // +40 power for the run
+  | 'trk_boss_frost_throne'       // +25% armor for the run
+  | 'trk_boss_maw_jaw'            // +400 max HP for the run
+  // Remaining boss trinkets (4)
+  | 'trk_boss_void_cloak'         // +60 power for the run
+  | 'trk_boss_eternal_flame'      // +35% armor for the run
+  | 'trk_boss_titan_heart'        // +600 max HP for the run
+  | 'trk_boss_godhand'            // +100 power for the run;
 
 export type TrinketTier = 1 | 2 | 3 | 4;
 
@@ -98,6 +112,18 @@ export const TRINKETS: Record<TrinketId, TrinketDef> = {
   trk_chain_lightning: { id: 'trk_chain_lightning', name: 'Chain Lightning', icon: '🌩️', tier: 4, desc: 'Hits splash 25% damage to another enemy.' },
   trk_adamant: { id: 'trk_adamant', name: 'Adamant', icon: '💠', tier: 4, desc: 'Ignore the first enemy hit each round.' },
   trk_phoenix_heart: { id: 'trk_phoenix_heart', name: 'Phoenix Heart', icon: '🔥', tier: 4, desc: 'Revive once per run at 25% HP.' },
+
+  // Boss trinkets — guaranteed reward after defeating a boss.
+  trk_boss_warlords_crown: { id: 'trk_boss_warlords_crown', name: "Warlord's Crown", icon: '👑', tier: 4, desc: '+25 power for the run.' },
+  trk_boss_ice_crystal: { id: 'trk_boss_ice_crystal', name: 'Ice Crystal', icon: '💎', tier: 4, desc: '+15% armor for the run.' },
+  trk_boss_verdant_seed: { id: 'trk_boss_verdant_seed', name: 'Verdant Seed', icon: '🌱', tier: 4, desc: '+200 max HP for the run.' },
+  trk_boss_dragon_heart: { id: 'trk_boss_dragon_heart', name: 'Dragon Heart', icon: '🐉', tier: 4, desc: '+40 power for the run.' },
+  trk_boss_frost_throne: { id: 'trk_boss_frost_throne', name: 'Frost Throne', icon: '🪑', tier: 4, desc: '+25% armor for the run.' },
+  trk_boss_maw_jaw: { id: 'trk_boss_maw_jaw', name: 'Maw Jaw', icon: '🦷', tier: 4, desc: '+400 max HP for the run.' },
+  trk_boss_void_cloak: { id: 'trk_boss_void_cloak', name: 'Void Cloak', icon: '🌀', tier: 4, desc: '+60 power for the run.' },
+  trk_boss_eternal_flame: { id: 'trk_boss_eternal_flame', name: 'Eternal Flame', icon: '🌋', tier: 4, desc: '+35% armor for the run.' },
+  trk_boss_titan_heart: { id: 'trk_boss_titan_heart', name: 'Titan Heart', icon: '🗿', tier: 4, desc: '+600 max HP for the run.' },
+  trk_boss_godhand: { id: 'trk_boss_godhand', name: 'Godhand', icon: '✋', tier: 4, desc: '+100 power for the run.' },
 };
 
 export function getTrinket(id: TrinketId): TrinketDef {
@@ -105,6 +131,34 @@ export function getTrinket(id: TrinketId): TrinketDef {
 }
 
 export const ALL_TRINKET_IDS = Object.keys(TRINKETS) as TrinketId[];
+
+// Boss trinkets — guaranteed reward after defeating a boss. 3 options for
+// the first boss (round 10), 3 for the second boss (round 20), and 4 for the
+// remaining bosses. The player picks one after each boss victory.
+export const BOSS_TRINKET_POOL_1: TrinketId[] = [
+  'trk_boss_warlords_crown',
+  'trk_boss_ice_crystal',
+  'trk_boss_verdant_seed',
+];
+export const BOSS_TRINKET_POOL_2: TrinketId[] = [
+  'trk_boss_dragon_heart',
+  'trk_boss_frost_throne',
+  'trk_boss_maw_jaw',
+];
+export const BOSS_TRINKET_POOL_REST: TrinketId[] = [
+  'trk_boss_void_cloak',
+  'trk_boss_eternal_flame',
+  'trk_boss_titan_heart',
+  'trk_boss_godhand',
+];
+
+// Returns the set of boss trinkets offered as a reward for the Nth boss
+// defeated (1-based). 3 for the first boss, 3 for the second, 4 for the rest.
+export function bossTrinketOptions(bossNumber: number): TrinketId[] {
+  if (bossNumber === 1) return [...BOSS_TRINKET_POOL_1];
+  if (bossNumber === 2) return [...BOSS_TRINKET_POOL_2];
+  return [...BOSS_TRINKET_POOL_REST];
+}
 
 // The order in which trinkets unlock into the pool. Index 0-4 are the starter
 // pool; each mini-boss adds the next tier-2 trinket; each boss adds the next
