@@ -1,4 +1,4 @@
-import type { GameRecord, Player, Settings } from '../types';
+import type { GameMode, GameRecord, Player, Settings } from '../types';
 import { defaultSettings } from '../constants';
 import { supabase } from '../supabase';
 import { withDefaults } from './settings';
@@ -7,6 +7,31 @@ import { withDefaults } from './settings';
 // All helpers THROW on network/permission errors (so callers can mark the
 // connection offline) and return null/empty on legitimate no-data cases.
 // Tombstones (deleted_player_ids / deleted_game_ids) propagate deletes.
+
+// gameMode is a per-device preference (dart vs cards) so concurrent players
+// can each use their own mode. It must never be overwritten by the server
+// copy, so we strip it before pushing and re-apply the local value on pull.
+// Read from the local settings JSON so it always reflects the latest choice.
+import { KEYS } from './keys';
+
+export function getLocalGameMode(): GameMode {
+  try {
+    const raw = localStorage.getItem(KEYS.settings);
+    if (!raw) return 'dartboard';
+    const s = JSON.parse(raw) as Partial<Settings>;
+    return s.gameMode === 'cards' ? 'cards' : 'dartboard';
+  } catch { return 'dartboard'; }
+}
+
+function stripGameMode(s: Settings): Omit<Settings, 'gameMode'> {
+  const { gameMode: _drop, ...rest } = s;
+  return rest as Omit<Settings, 'gameMode'>;
+}
+
+function withLocalGameMode(s: Settings | Partial<Settings> | null | undefined): Settings {
+  const merged = withDefaults(s ?? null);
+  return { ...merged, gameMode: getLocalGameMode() };
+}
 
 export async function fetchAppState(): Promise<{ players: Player[]; settings: Settings; deletedPlayerIds: string[]; deletedGameIds: string[] } | null> {
   if (!supabase) return null;
@@ -19,7 +44,7 @@ export async function fetchAppState(): Promise<{ players: Player[]; settings: Se
   if (!data) return null;
   return {
     players: (data.players as Player[]) || [],
-    settings: withDefaults(data.settings as Partial<Settings> | null),
+    settings: withLocalGameMode(data.settings as Partial<Settings> | null),
     deletedPlayerIds: (data.deleted_player_ids as string[]) || [],
     deletedGameIds: (data.deleted_game_ids as string[]) || [],
   };
@@ -34,9 +59,12 @@ export async function fetchAllGames(): Promise<GameRecord[]> {
 
 export async function pushAppState(players: Player[], settings: Settings, deletedPlayerIds: string[], deletedGameIds: string[]): Promise<boolean> {
   if (!supabase) return false;
+  // Strip gameMode before pushing — it's a per-device preference and must
+  // not overwrite what other players have chosen on their own devices.
+  const remoteSettings = stripGameMode(settings);
   const { error } = await supabase
     .from('app_state')
-    .upsert({ id: 'main', players, settings, deleted_player_ids: deletedPlayerIds, deleted_game_ids: deletedGameIds, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+    .upsert({ id: 'main', players, settings: remoteSettings, deleted_player_ids: deletedPlayerIds, deleted_game_ids: deletedGameIds, updated_at: new Date().toISOString() }, { onConflict: 'id' });
   if (error) { console.warn('[sync] app_state upsert failed:', error.message); return false; }
   return true;
 }
@@ -73,7 +101,10 @@ export async function pullAll(): Promise<{ players: Player[]; settings: Settings
   if (!supabase) return null;
   try {
     const [state, games] = await Promise.all([fetchAppState(), fetchAllGames()]);
-    return { players: state?.players || [], settings: state?.settings || defaultSettings(), games, deletedPlayerIds: state?.deletedPlayerIds || [], deletedGameIds: state?.deletedGameIds || [] };
+    // When no server row exists, fall back to defaults but preserve the
+    // local gameMode so the player's mode choice survives the merge.
+    const fallbackSettings = withLocalGameMode(defaultSettings());
+    return { players: state?.players || [], settings: state?.settings || fallbackSettings, games, deletedPlayerIds: state?.deletedPlayerIds || [], deletedGameIds: state?.deletedGameIds || [] };
   } catch (e: any) {
     console.warn('[sync] pull failed:', e?.message);
     return null;
