@@ -147,6 +147,7 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
 
   return (
     <div className="view-noscroll coop-battle" style={{ position: 'relative', background: chapter?.theme.background || undefined, borderRadius: 14, overflow: 'hidden' }}>
+      <button className="btn danger sm quit-float" onClick={() => { if (confirm('Quit this battle? Progress will be saved.')) onQuit(); }}>Quit</button>
       {showingFrozen && <div className="battle-frost-tint" />}
       {state.phase === 'player' && thrower && (() => {
         const srcPlayer = players.find(p => p.id === thrower.id);
@@ -387,7 +388,6 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
         </div>
       )}
 
-      <button className="btn danger sm" style={{ alignSelf: 'flex-end' }} onClick={() => { if (confirm('Quit this battle? Progress will be saved.')) onQuit(); }}>Quit</button>
 
       {showingFrozen && (
         <FrozenOverlay state={state} onContinue={onContinue} />
