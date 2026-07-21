@@ -15,6 +15,7 @@ import { BattleBoard } from './play/boards/BattleBoard';
 import { CardBoard } from './play/boards/CardBoard';
 import { CoopFlow, isCoopActive } from './play/CoopFlow';
 import { DartliteFlow, isDartliteActive } from './play/DartliteFlow';
+import { MultiplayerFlow } from './multiplayer/MultiplayerFlow';
 
 interface Props {
   players: Player[];
@@ -36,7 +37,7 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
   const setGame = setActiveGame;
   const [showdown, setShowdown] = useState<Game | null>(null);
   const [coopStage, setCoopStage] = useState<'none' | 'setup' | 'chapters' | 'map' | 'battle' | 'postgame'>('none');
-  const [mode, setMode] = useState<'menu' | 'competitive'>('menu');
+  const [mode, setMode] = useState<'menu' | 'competitive' | 'multiplayer'>('menu');
   const [dartliteStage, setDartliteStage] = useState<'none' | 'setup' | 'battle' | 'gameover'>('none');
 
   useEffect(() => {
@@ -62,6 +63,27 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
       music={music}
       setPlayers={setPlayers}
       onExitToMenu={() => { setDartliteStage('none'); setMode('menu'); }}
+    />;
+  }
+
+  if (mode === 'multiplayer') {
+    return <MultiplayerFlow
+      players={players}
+      settings={settings}
+      music={music}
+      popups={popups}
+      setGames={setGames}
+      toast={toast}
+      onExitToMenu={() => { setMode('menu'); music.startContext('setup', settings); }}
+      renderBoard={({ game: g, setGame: sg, popups: mpPopups }) => {
+        const quit = () => { sg(null); onQuit(); };
+        if (settings.gameMode === 'cards') return <CardBoard game={g} setGame={sg} settings={settings} players={players} games={games} setGames={setGames} setPlayers={setPlayers} toast={toast} music={music} onQuit={quit} onGameOver={onGameOver} popups={mpPopups} />;
+        if (g.atc) return <AtcBoard game={g} setGame={sg} settings={settings} players={players} games={games} toast={toast} music={music} onQuit={quit} setGames={setGames} setPlayers={setPlayers} />;
+        if (g.mode === 'killer') return <KillerBoard game={g} setGame={sg} settings={settings} players={players} games={games} toast={toast} music={music} onQuit={quit} setGames={setGames} setPlayers={setPlayers} popups={mpPopups} onGameOver={onGameOver} />;
+        if (g.mode === 'highscore') return <HighScoreBoard game={g} setGame={sg} settings={settings} players={players} games={games} toast={toast} music={music} onQuit={quit} setGames={setGames} setPlayers={setPlayers} popups={mpPopups} onGameOver={onGameOver} />;
+        if (g.mode === 'battle') return <BattleBoard game={g} setGame={sg} settings={settings} players={players} games={games} toast={toast} music={music} onQuit={quit} setGames={setGames} setPlayers={setPlayers} popups={mpPopups} onGameOver={onGameOver} />;
+        return <X01Board game={g} setGame={sg} settings={settings} players={players} games={games} setGames={setGames} setPlayers={setPlayers} toast={toast} music={music} onQuit={quit} onGameOver={onGameOver} popups={mpPopups} />;
+      }}
     />;
   }
 
@@ -98,5 +120,6 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
     onPickCompetitive={() => { setMode('competitive'); music.startContext('setup', settings); }}
     onPickCoop={() => { setCoopStage('setup'); music.startContext('setup', settings); }}
     onPickDartlite={() => { setDartliteStage('setup'); music.startContext('setup', settings); }}
+    onPickMultiplayer={() => { setMode('multiplayer'); music.startContext('setup', settings); }}
   />;
 }

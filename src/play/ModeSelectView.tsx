@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Globe } from 'lucide-react';
 import type { Player } from '../types';
 import { initials } from '../store';
 
@@ -7,12 +8,13 @@ export interface ModeSelectProps {
   onPickCompetitive: () => void;
   onPickCoop: () => void;
   onPickDartlite: () => void;
+  onPickMultiplayer: () => void;
 }
 
 // Mode selection screen shown before the play setup. Splits the app into
 // competitive modes (x01, ATC, Killer, High Score, Battle, etc.), Coop
 // (campaign + rogue-lite), and Dartlite (rogue-lite mode).
-export function ModeSelectView({ players, onPickCompetitive, onPickCoop, onPickDartlite }: ModeSelectProps) {
+export function ModeSelectView({ players, onPickCompetitive, onPickCoop, onPickDartlite, onPickMultiplayer }: ModeSelectProps) {
   const [coopOpen, setCoopOpen] = useState(false);
 
   if (coopOpen) {
@@ -100,6 +102,23 @@ export function ModeSelectView({ players, onPickCompetitive, onPickCoop, onPickD
                 <div className="muted small" style={{ marginTop: 2 }}>Campaign & Dartlite rogue-lite — team up against AI enemies</div>
               </div>
               <span style={{ marginLeft: 'auto', color: 'var(--muted)' }}>›</span>
+            </div>
+          </button>
+          <button
+            className="btn block"
+            style={{
+              padding: 16, textAlign: 'left',
+              background: 'linear-gradient(135deg, color-mix(in srgb,#0ea5e9 22%,var(--bg-3)) 0%, var(--bg-3) 80%)',
+              borderColor: 'color-mix(in srgb,#0ea5e9 50%,var(--border))',
+            }}
+            onClick={onPickMultiplayer}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <Globe size={28} style={{ color: '#0ea5e9' }} />
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 16 }}>Multiplayer</div>
+                <div className="muted small" style={{ marginTop: 2 }}>Create or join a lobby — play across devices in real time</div>
+              </div>
             </div>
           </button>
         </div>
