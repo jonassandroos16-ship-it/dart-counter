@@ -84,7 +84,7 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
   }
 
   if (mode === 'competitive') {
-    return <SetupView players={players} onBackToModeSelect={() => { setMode('menu'); music.startContext('setup', settings); }} onStart={(mode, ids, dbl, legs, teamMode, teamAssignment, powerUps) => {
+    return <SetupView players={players} settings={settings} onBackToModeSelect={() => { setMode('menu'); music.startContext('setup', settings); }} onStart={(mode, ids, dbl, legs, teamMode, teamAssignment, powerUps) => {
       const g = createGame(mode, ids, players, dbl, legs, teamMode, teamAssignment, powerUps, settings);
       Sound.play('showdown', {}, settings);
       music.stop();

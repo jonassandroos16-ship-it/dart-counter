@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import type { Player } from '../types';
+import type { Player, Settings } from '../types';
 import { MODES, TEAM_COLORS } from '../constants';
 import { initials } from '../store';
 
-export function SetupView({ players, onStart, onOpenCampaign, onBackToModeSelect }: { players: Player[]; onStart: (mode: string, ids: string[], dbl: boolean, legs: number, teamMode: boolean, teamAssignment: number[], powerUps: boolean) => void; onOpenCampaign?: () => void; onBackToModeSelect?: () => void }) {
-  const [mode, setMode] = useState('301');
+export function SetupView({ players, settings, onStart, onOpenCampaign, onBackToModeSelect }: { players: Player[]; settings: Settings; onStart: (mode: string, ids: string[], dbl: boolean, legs: number, teamMode: boolean, teamAssignment: number[], powerUps: boolean) => void; onOpenCampaign?: () => void; onBackToModeSelect?: () => void }) {
+  const cardMode = settings.gameMode === 'cards';
+  const [mode, setMode] = useState(cardMode ? 'battle' : '301');
   const [doubleOut, setDoubleOut] = useState(false);
   const [legs, setLegs] = useState(1);
   const [picked, setPicked] = useState<string[]>(players.length ? [players[0].id] : []);
@@ -44,13 +45,21 @@ export function SetupView({ players, onStart, onOpenCampaign, onBackToModeSelect
             ⚔️ Co-op Campaign
           </button>
         )}
+        {cardMode && (
+          <div className="muted small" style={{ marginBottom: 10, padding: '8px 10px', borderRadius: 8, background: 'color-mix(in srgb, var(--accent) 12%, var(--bg-3))', border: '1px solid color-mix(in srgb, var(--accent) 40%, var(--border))', fontStyle: 'italic' }}>
+            Card mode is active. Modes that require an exact checkout (501, 301, 701, 101, Speed 101) are disabled because the card deck cannot hit a precise zero. Battle mode is available for competitive play.
+          </div>
+        )}
         <label className="field"><span>Game Mode</span>
           <select value={mode} onChange={e => setMode(e.target.value)}>
-            <option value="501">501</option><option value="301">301</option>
-            <option value="701">701</option><option value="101">101</option>
-            <option value="atc">Around the Clock</option><option value="practice">Practice (free scoring)</option>
+            <option value="501" disabled={cardMode}>501{cardMode ? ' (disabled)' : ''}</option>
+            <option value="301" disabled={cardMode}>301{cardMode ? ' (disabled)' : ''}</option>
+            <option value="701" disabled={cardMode}>701{cardMode ? ' (disabled)' : ''}</option>
+            <option value="101" disabled={cardMode}>101{cardMode ? ' (disabled)' : ''}</option>
+            <option value="atc">Around the Clock</option>
+            <option value="practice">Practice (free scoring)</option>
             <option value="killer">Killer (elimination)</option>
-            <option value="speed101">Speed 101 (party)</option>
+            <option value="speed101" disabled={cardMode}>Speed 101 (party){cardMode ? ' (disabled)' : ''}</option>
             <option value="highscore">High Score (party)</option>
             <option value="battle">Battle (attributes)</option>
           </select>
