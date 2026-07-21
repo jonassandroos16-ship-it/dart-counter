@@ -1,4 +1,4 @@
-import type { Player } from '../types';
+import type { Player, Settings } from '../types';
 import {
   COOP_CLASSES, getCoopClass, getCoopPassive,
   passivesForClass, unlockedPassivesForPlayer,
@@ -6,17 +6,20 @@ import {
   defaultCoopProgress,
 } from '../campaign/engine';
 import type { CoopClassId, CoopPassiveId, PlayerCoopProgress } from '../campaign/types';
+import { levelFromXP } from '../logic';
 import type { SetPlayers, Toast } from './BasicTab';
 
-export function ClassTab({ player, setPlayers, toast }: {
+export function ClassTab({ player, setPlayers, toast, settings }: {
   player: Player;
   setPlayers: SetPlayers;
   toast: Toast;
+  settings: Settings;
 }) {
   const prog: PlayerCoopProgress = player.coopProgress || defaultCoopProgress();
   const selectedClass = getCoopClass(prog.classId);
   const classPassives = selectedClass ? passivesForClass(selectedClass.id) : [];
-  const unlockedIds = unlockedPassivesForPlayer(prog);
+  const playerLevel = levelFromXP(player.xp ?? 0, settings).level;
+  const unlockedIds = unlockedPassivesForPlayer(prog, playerLevel);
 
   const pickClass = (classId: CoopClassId) => {
     setPlayers((prev: Player[]) => prev.map(p => {
@@ -77,21 +80,18 @@ export function ClassTab({ player, setPlayers, toast }: {
               </div>
             </div>
             <div className="row between" style={{ marginTop: 10 }}>
-              <span className="muted small">Coop XP</span>
-              <span className="xp-pill">{prog.xp || 0} XP</span>
+              <span className="muted small">Player Level</span>
+              <span className="xp-pill">Level {playerLevel}</span>
             </div>
-            <div className="xp-bar" style={{ width: '100%', marginTop: 6 }}>
-              <div style={{ width: `${Math.min(100, Math.round(((prog.xp || 0) % 150) / 150 * 100))}%` }} />
-            </div>
-            <div className="muted small" style={{ marginTop: 4 }}>Earn Coop XP by playing Coop battles — wins give more than losses.</div>
+            <div className="muted small" style={{ marginTop: 4 }}>Earn XP by playing any mode — competitive or coop. Level up to unlock new passives and cards.</div>
           </div>
 
-          <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Passives</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Passives</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '34vh', overflow: 'auto' }}>
             {classPassives.map(p => {
               const isUnlocked = unlockedIds.includes(p.id);
               const isEquipped = (prog.equippedPassives || []).includes(p.id);
-              const xpPct = p.xpRequired > 0 ? Math.min(100, Math.round(((prog.xp || 0) / p.xpRequired) * 100)) : 100;
+              const levelPct = p.levelRequired > 1 ? Math.min(100, Math.round((playerLevel / p.levelRequired) * 100)) : 100;
               return (
                 <div key={p.id} style={{
                   position: 'relative',
@@ -101,7 +101,7 @@ export function ClassTab({ player, setPlayers, toast }: {
                   opacity: isUnlocked ? 1 : 0.7, overflow: 'hidden', minHeight: 64,
                 }}>
                   {isUnlocked ? null : (
-                    <div style={{ position: 'absolute', inset: 0, width: `${xpPct}%`, background: 'color-mix(in srgb,var(--accent) 18%,var(--bg-3))', transition: 'width .4s ease', pointerEvents: 'none', zIndex: 0 }} />
+                    <div style={{ position: 'absolute', inset: 0, width: `${levelPct}%`, background: 'color-mix(in srgb,var(--accent) 18%,var(--bg-3))', transition: 'width .4s ease', pointerEvents: 'none', zIndex: 0 }} />
                   )}
                   <div style={{ position: 'relative', zIndex: 1, fontSize: 26, width: 34, textAlign: 'center' }}>{isUnlocked ? p.icon : '🔒'}</div>
                   <div style={{ position: 'relative', zIndex: 1, flex: 1, minWidth: 0 }}>
@@ -112,7 +112,7 @@ export function ClassTab({ player, setPlayers, toast }: {
                     <div className="muted" style={{ fontSize: 11, marginTop: 2, lineHeight: 1.3 }}>{p.desc}</div>
                     {!isUnlocked && (
                       <div className="muted" style={{ fontSize: 11, marginTop: 4, fontWeight: 600 }}>
-                        {prog.xp || 0} / {p.xpRequired} Coop XP to unlock
+                        Level {p.levelRequired} required to unlock (you are level {playerLevel})
                       </div>
                     )}
                   </div>
@@ -130,7 +130,7 @@ export function ClassTab({ player, setPlayers, toast }: {
         <div style={{ padding: 18, borderRadius: 12, background: 'var(--bg-3)', border: '1px solid var(--border)', textAlign: 'center' }}>
           <div style={{ fontSize: 28, marginBottom: 6 }}>🛡️</div>
           <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>No class selected</div>
-          <div className="muted" style={{ fontSize: 12, lineHeight: 1.4 }}>Pick a class above to start earning Coop XP and unlocking passives. Your equipped passive grants a team-wide stat bonus to the whole party during Coop battles.</div>
+          <div className="muted" style={{ fontSize: 12, lineHeight: 1.4 }}>Pick a class above to start earning XP and unlocking passives. Your equipped passive grants a team-wide stat bonus to the whole party during Coop battles.</div>
         </div>
       )}
     </>

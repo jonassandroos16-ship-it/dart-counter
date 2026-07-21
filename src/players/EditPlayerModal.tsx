@@ -71,11 +71,13 @@ export function EditPlayerModal({ player, players, isNew, games, settings, onClo
     onClose(true);
   };
 
+  const tabs = TABS.filter(t => t.id !== 'deck' || settings.gameMode === 'cards');
+
   return (
     <Modal onClose={() => onClose(false)}>
       <h3 style={{ marginBottom: 8 }}>{isNew ? 'Add' : 'Edit'} Player — {name || livePlayer.name}</h3>
       <div className="tabbar-scroll" style={{ marginBottom: 14 }}>
-        {TABS.map(t => (
+        {tabs.map(t => (
           <button key={t.id} className={tab === t.id ? 'on' : ''} onClick={() => setTab(t.id)}>
             <span className="tab-ico">{t.icon}</span>{t.label}
           </button>
@@ -113,7 +115,7 @@ export function EditPlayerModal({ player, players, isNew, games, settings, onClo
       )}
 
       {tab === 'class' && (
-        <ClassTab player={livePlayer} setPlayers={setPlayers} toast={toast} />
+        <ClassTab player={livePlayer} setPlayers={setPlayers} toast={toast} settings={settings} />
       )}
 
       {tab === 'trinkets' && (
@@ -121,7 +123,7 @@ export function EditPlayerModal({ player, players, isNew, games, settings, onClo
       )}
 
       {tab === 'deck' && (
-        <DeckTab player={livePlayer} setPlayers={setPlayers} toast={toast} />
+        <DeckTab player={livePlayer} setPlayers={setPlayers} toast={toast} settings={settings} />
       )}
 
       <div className="row" style={{ gap: 10, marginTop: 16 }}>

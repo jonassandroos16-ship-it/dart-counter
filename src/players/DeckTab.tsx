@@ -1,8 +1,9 @@
-import type { Player } from '../types';
+import type { Player, Settings } from '../types';
 import type { SetPlayers, Toast } from './BasicTab';
 import { defaultPlayerCards, addCard, removeCard, hasCard, resolveCardDef } from '../cards/deck';
-import { CARD_DEFS, getCard, cardDamage, cardTypeColor, cardRarityColor, cardsForClass } from '../cards/definitions';
+import { CARD_DEFS, getCard, cardDamage, cardTypeColor, cardRarityColor, cardsForClass, cardsByLevel } from '../cards/definitions';
 import type { CardDef, PlayerCard } from '../cards/types';
+import { levelFromXP } from '../logic';
 
 const CLASS_ICONS: Record<string, string> = {
   warrior: '⚔️',
@@ -23,12 +24,13 @@ function ClassBadge({ def, cls }: { def: CardDef; cls: string | null }) {
   );
 }
 
-export function DeckTab({ player, setPlayers, toast }: {
-  player: Player; setPlayers: SetPlayers; toast: Toast;
+export function DeckTab({ player, setPlayers, toast, settings }: {
+  player: Player; setPlayers: SetPlayers; toast: Toast; settings: Settings;
 }) {
   const cards: PlayerCard[] = player.cards && player.cards.length > 0 ? player.cards : defaultPlayerCards();
   const cls = player.coopProgress?.classId || null;
-  const mode: 'competitive' | 'coop' = 'competitive';
+  const xpInfo = levelFromXP(player.xp ?? 0, settings);
+  const playerLevel = xpInfo.level;
 
   const addCardToPlayer = (cardId: string) => {
     setPlayers((prev: Player[]) => prev.map(p => {
@@ -49,9 +51,12 @@ export function DeckTab({ player, setPlayers, toast }: {
     toast('Card removed from deck');
   };
 
-  const availableCards = cls
-    ? cardsForClass(cls, mode).filter(c => !hasCard(cards, c.id))
-    : CARD_DEFS.filter(c => c.mode === mode && c.class === 'any' && !hasCard(cards, c.id));
+  const allCards = cls
+    ? cardsForClass(cls, 'competitive').concat(cardsForClass('any', 'competitive').filter(c => !cardsForClass(cls, 'competitive').some(x => x.id === c.id)))
+    : CARD_DEFS.filter(c => (c.mode === 'both' || c.mode === 'competitive') && c.class === 'any');
+
+  const byLevel = cardsByLevel(allCards);
+  const sortedLevels = Array.from(byLevel.keys()).sort((a, b) => a - b);
 
   const damageCards = cards.filter(c => getCard(c.cardId)?.type === 'damage');
   const spellCards = cards.filter(c => getCard(c.cardId)?.type === 'spell');
@@ -60,7 +65,7 @@ export function DeckTab({ player, setPlayers, toast }: {
   return (
     <>
       <div className="muted small" style={{ marginBottom: 10 }}>
-        Build your deck for card-based mode. Damage cards deal damage like dart throws. Spell cards grant temporary buffs and debuffs. Utility cards provide helpful effects. Cards can only be upgraded in Dartlite mode.
+        Build your deck for card-based mode. Damage cards deal damage like dart throws. Spell cards grant temporary buffs and debuffs. Utility cards provide helpful effects. Cards unlock as you level up — play any mode to earn XP.
       </div>
 
       {!cls && (
@@ -79,26 +84,55 @@ export function DeckTab({ player, setPlayers, toast }: {
       </div>
 
       <div className="card" style={{ padding: 12 }}>
-        <div style={{ fontWeight: 700, marginBottom: 8 }}>Available Cards</div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {availableCards.map(card => (
-            <button key={card.id} onClick={() => addCardToPlayer(card.id)}
-              style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-                padding: '8px 10px', borderRadius: 8, minWidth: 64,
-                background: `color-mix(in srgb, ${cardTypeColor(card.type)} 14%, var(--bg-3))`,
-                border: `1px solid ${cardRarityColor(card.rarity)}`,
-                cursor: 'pointer', color: 'inherit', textAlign: 'center',
+        <div style={{ fontWeight: 700, marginBottom: 4 }}>Available Cards</div>
+        <div className="muted small" style={{ marginBottom: 10 }}>Your level: <b style={{ color: 'var(--text)' }}>{playerLevel}</b> — cards unlock as you level up by playing any mode.</div>
+        {sortedLevels.map(level => {
+          const levelCards = byLevel.get(level)!;
+          const isLocked = playerLevel < level;
+          return (
+            <div key={level} style={{ marginBottom: 14 }}>
+              <div style={{
+                fontWeight: 800, fontSize: 12, marginBottom: 6, textTransform: 'uppercase',
+                letterSpacing: '.06em', color: isLocked ? 'var(--muted)' : 'var(--accent)',
+                display: 'flex', alignItems: 'center', gap: 6,
               }}>
-              <span style={{ fontSize: 22 }}>{card.icon}</span>
-              <span style={{ fontSize: 11, fontWeight: 800 }}>{card.name}</span>
-              <span className="muted" style={{ fontSize: 9, lineHeight: 1.2 }}>{card.type === 'damage' ? `${cardDamage(card)} dmg` : card.desc.slice(0, 30)}</span>
-              <span className="pill" style={{ fontSize: 8, marginTop: 2 }}>{card.rarity}</span>
-              <ClassBadge def={card} cls={cls} />
-            </button>
-          ))}
-          {availableCards.length === 0 && <div className="muted small">All available cards collected!</div>}
-        </div>
+                {isLocked ? '🔒' : '✅'} Level {level}
+                {isLocked && <span className="muted small" style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>— unlocks at level {level}</span>}
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {levelCards.map(card => {
+                  const owned = hasCard(cards, card.id);
+                  const cardLocked = isLocked;
+                  return (
+                    <button
+                      key={card.id}
+                      onClick={() => !cardLocked && !owned && addCardToPlayer(card.id)}
+                      disabled={cardLocked || owned}
+                      style={{
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                        padding: '8px 10px', borderRadius: 8, minWidth: 64,
+                        background: cardLocked ? 'var(--bg-3)' : `color-mix(in srgb, ${cardTypeColor(card.type)} 14%, var(--bg-3))`,
+                        border: `1px solid ${cardRarityColor(card.rarity)}`,
+                        cursor: cardLocked || owned ? 'not-allowed' : 'pointer',
+                        color: 'inherit', textAlign: 'center',
+                        opacity: cardLocked ? 0.4 : owned ? 0.6 : 1,
+                        position: 'relative',
+                      }}
+                    >
+                      <span style={{ fontSize: 22 }}>{cardLocked ? '🔒' : card.icon}</span>
+                      <span style={{ fontSize: 11, fontWeight: 800 }}>{card.name}</span>
+                      <span className="muted" style={{ fontSize: 9, lineHeight: 1.2 }}>{card.type === 'damage' ? `${cardDamage(card)} dmg` : card.desc.slice(0, 30)}</span>
+                      <span className="pill" style={{ fontSize: 8, marginTop: 2 }}>{card.rarity}</span>
+                      <ClassBadge def={card} cls={cls} />
+                      {owned && <span className="pill" style={{ fontSize: 8, position: 'absolute', top: -4, right: -4, background: 'var(--success, #22c55e)', color: '#04150a' }}>OWNED</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+        {allCards.length === 0 && <div className="muted small">No cards available.</div>}
       </div>
     </>
   );

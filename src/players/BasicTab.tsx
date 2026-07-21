@@ -102,7 +102,6 @@ export function applyDevMode(p: Player, settings: Settings): Player {
       const allPassives = passivesForClass(classId).map(pp => pp.id);
       return {
         classId,
-        xp: 9999,
         unlockedPassives: allPassives,
         equippedPassives: cur.equippedPassives?.length ? cur.equippedPassives : [allPassives[allPassives.length - 1]],
       };
