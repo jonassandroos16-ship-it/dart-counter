@@ -37,6 +37,8 @@ jobs:
         with:
           node-version: 20
       - run: npm install
+      - name: Inject commit SHA
+        run: echo "VITE_COMMIT_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
       - env:
           VITE_SUPABASE_URL: https://ulgwamsiuumwkgpolubj.supabase.co
           VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVsZ3dhbXNpdXVtd2tncG9sdWJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzNjAyMzgsImV4cCI6MjA5OTkzNjIzOH0.8L01K0TCh9HnOWYEO2qLhQKoc6bsDciiLZLzbEqdFVs

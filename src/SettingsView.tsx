@@ -334,6 +334,15 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
         <div className="muted small center" style={{ marginTop: 12 }}>{players.length} players · {games.length} games stored locally</div>
       </div>
 
+      <div className="muted small center" style={{ marginTop: 8, fontSize: 11, opacity: 0.7 }}>
+        {(() => {
+          const sha = import.meta.env.VITE_COMMIT_SHA;
+          if (!sha) return 'Version: dev';
+          const short = sha.slice(0, 7);
+          return <>Version: <a href={`https://github.com/jonassandroos16-ship-it/dart-counter/commit/${sha}`} target="_blank" rel="noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>{short}</a></>;
+        })()}
+      </div>
+
       {editingTitle && <EditCustomTitleModal onClose={() => setEditingTitle(false)} onSave={(t) => { update({ customTitles: [...settings.customTitles, t] }); setEditingTitle(false); toast('Custom title created'); }} />}
     </div>
   );
