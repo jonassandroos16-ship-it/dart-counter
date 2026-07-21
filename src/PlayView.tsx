@@ -20,6 +20,13 @@ import { useCampaignProgress } from './campaign/progress';
 import { getCoopPowerUp, coopXpForBattle, addCoopXpForPlayer, defaultCoopProgress, recordLevelClearForPlayer } from './campaign/engine';
 import { getChapter, isChapterComplete } from './campaign/campaignLevels';
 import type { CoopPowerUpId, CampaignBattleState, CampaignChapter } from './campaign/types';
+import { DartliteSetup } from './dartlite/DartliteSetup';
+import { DartliteBattle } from './dartlite/DartliteBattle';
+import {
+  startRun, beginRound, resolveBattle,
+  type DartliteRun,
+} from './dartlite/engine';
+import { DartliteGameOver } from './dartlite/DartliteGameOver';
 
 interface Props {
   players: Player[];
@@ -37,6 +44,7 @@ interface Props {
 }
 
 type CoopStage = 'none' | 'setup' | 'chapters' | 'map' | 'battle' | 'postgame';
+type DartliteStage = 'none' | 'setup' | 'battle' | 'gameover';
 
 interface PostGameInfo {
   chapterId: string;
@@ -57,6 +65,8 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
   const [mode, setMode] = useState<'menu' | 'competitive'>('menu');
   const [postGame, setPostGame] = useState<PostGameInfo | null>(null);
   const { progress, setProgress } = useCampaignProgress();
+  const [dartliteStage, setDartliteStage] = useState<DartliteStage>('none');
+  const [dartliteRun, setDartliteRun] = useState<DartliteRun | null>(null);
 
   useEffect(() => {
     if (game && !game.finished) music.startContext('match', settings);
@@ -184,6 +194,55 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
     />;
   }
 
+  // ── Dartlite rogue-lite mode ─────────────────────────────────────────
+  if (dartliteStage === 'setup') {
+    return <DartliteSetup
+      players={players}
+      onStart={(ids) => {
+        const party = players.filter(p => ids.includes(p.id));
+        const run = startRun(party, settings);
+        setDartliteRun(run);
+        setDartliteStage('battle');
+        music.startContext('coop', settings);
+      }}
+      onBack={() => { setDartliteStage('none'); setMode('menu'); music.startContext('setup', settings); }}
+    />;
+  }
+
+  if (dartliteStage === 'battle' && dartliteRun) {
+    return <DartliteBattle
+      run={dartliteRun}
+      settings={settings}
+      music={music}
+      onBattleEnd={(won) => {
+        if (won) {
+          const resolved = resolveBattle(dartliteRun, true);
+          setDartliteRun(resolved);
+          if (resolved.phase === 'gameover') {
+            setDartliteStage('gameover');
+          }
+        } else {
+          const resolved = resolveBattle(dartliteRun, false);
+          setDartliteRun(resolved);
+          setDartliteStage('gameover');
+        }
+      }}
+      onChoice={(nextRun) => {
+        const started = beginRound(nextRun, players.filter(p => nextRun.playerIds.includes(p.id)), settings);
+        setDartliteRun(started);
+      }}
+      onQuit={() => { setDartliteStage('none'); setDartliteRun(null); setMode('menu'); music.startContext('setup', settings); }}
+    />;
+  }
+
+  if (dartliteStage === 'gameover' && dartliteRun) {
+    return <DartliteGameOver
+      run={dartliteRun}
+      setPlayers={setPlayers}
+      onContinue={() => { setDartliteStage('none'); setDartliteRun(null); setMode('menu'); music.startContext('setup', settings); }}
+    />;
+  }
+
   if (showdown) {
     return <Showdown game={showdown} players={players} games={games} settings={settings} music={music}
       onClose={() => {
@@ -215,6 +274,7 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
     players={players}
     onPickCompetitive={() => { setMode('competitive'); music.startContext('setup', settings); }}
     onPickCoop={() => { setCoopStage('setup'); music.startContext('setup', settings); }}
+    onPickDartlite={() => { setDartliteStage('setup'); music.startContext('setup', settings); }}
   />;
 }
 
