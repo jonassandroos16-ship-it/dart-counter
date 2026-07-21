@@ -55,6 +55,7 @@ export function AtcBoard({ game, setGame, settings, players, games, toast, music
 
   return (
     <div className="view-noscroll">
+      <button className="btn danger sm quit-float" onClick={() => { if (confirm('Quit this game?')) onQuit(); }}>Quit</button>
       <div className="play-current">
         <div className="pc-header">
           <div className="row" style={{ gap: 8 }}>
@@ -104,7 +105,6 @@ export function AtcBoard({ game, setGame, settings, players, games, toast, music
           </div>
         </div>
       </div>
-      <button className="btn danger sm" style={{ alignSelf: 'flex-end' }} onClick={() => { if (confirm('Quit this game?')) onQuit(); }}>Quit</button>
     </div>
   );
 }
