@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { Settings } from '../types';
-import type { CampaignBattleState } from '../campaign/types';
+import type { Settings, Player } from '../types';
+import type { CampaignBattleState, CoopPlayer } from '../campaign/types';
 import {
   addDart, undoDart, resolvePlayerVisit,
   prepareEnemyTurn, applyNextEnemyAttack, setTarget, effectivePower,
@@ -12,12 +12,13 @@ import { initials } from '../store';
 import { DartOverlay } from '../campaign/DartOverlay';
 import { FrozenOverlay } from '../campaign/FrozenOverlay';
 import { Modal } from '../Popups';
-import type { DartliteRun, ChoiceOption } from './engine';
-import { isMiniBossRound, isBossRound, applyChoice } from './engine';
-import { getTrinket } from './trinkets';
+import type { DartliteRun, ChoiceOption, DartlitePlayerRunStats } from './engine';
+import { isMiniBossRound, isBossRound, applyPlayerChoice } from './engine';
+import { getTrinket, TRINKETS } from './trinkets';
 
 interface Props {
   run: DartliteRun;
+  players: Player[];
   settings: Settings;
   music: MusicEngine;
   onBattleEnd: (won: boolean) => void;
@@ -25,9 +26,15 @@ interface Props {
   onQuit: () => void;
 }
 
-export function DartliteBattle({ run, settings, music, onBattleEnd, onChoice, onQuit }: Props) {
+export function DartliteBattle({ run, players, settings, music, onBattleEnd, onChoice, onQuit }: Props) {
   const battle = run.battle!;
+  // Sync local battle state whenever a new round/battle starts. Without
+  // this, `useState(battle)` keeps the stale first-round state after
+  // `onChoice` swaps in a fresh `run.battle`, freezing the game.
   const [state, setState] = useState<CampaignBattleState>(battle);
+  useEffect(() => { setState(battle); }, [battle]);
+  const [showProgress, setShowProgress] = useState(false);
+  const [detailPlayerId, setDetailPlayerId] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [showTrinketUnlock, setShowTrinketUnlock] = useState(false);
   const [mult, setMult] = useState(1);
@@ -125,10 +132,27 @@ export function DartliteBattle({ run, settings, music, onBattleEnd, onChoice, on
       <button className="btn danger sm quit-float" onClick={() => { if (confirm('Quit this run? Progress will be saved.')) onQuit(); }}>Quit</button>
 
       {run.phase === 'choice' && run.pendingChoice ? (
-        <ChoiceScreen run={run} options={run.pendingChoice} onPick={(opt) => {
-          const next = applyChoice(run, opt);
-          onChoice(next);
-        }} />
+        <ChoiceScreen
+          run={run}
+          players={players}
+          options={run.pendingChoice}
+          onPick={(opt) => {
+            const next = applyPlayerChoice(run, opt);
+            if (next.phase === 'reward') {
+              // All players have chosen — show the progress popup. The
+              // next round starts when the player dismisses it.
+              setShowProgress(true);
+            } else {
+              onChoice(next);
+            }
+          }}
+        />
+      ) : run.phase === 'reward' ? (
+        <ProgressScreen
+          run={run}
+          players={players}
+          onContinue={() => { onChoice(run); }}
+        />
       ) : (
         <>
           <div className="play-current" style={{ position: 'relative', zIndex: 2 }}>
@@ -306,6 +330,23 @@ export function DartliteBattle({ run, settings, music, onBattleEnd, onChoice, on
               </div>
             </Modal>
           )}
+
+          {showProgress && (
+            <ProgressScreen
+              run={run}
+              players={players}
+              onContinue={() => { setShowProgress(false); onChoice(run); }}
+            />
+          )}
+
+          {detailPlayerId && (
+            <PlayerDetailModal
+              playerId={detailPlayerId}
+              run={run}
+              players={players}
+              onClose={() => setDetailPlayerId(null)}
+            />
+          )}
         </>
       )}
     </div>
@@ -314,18 +355,33 @@ export function DartliteBattle({ run, settings, music, onBattleEnd, onChoice, on
 
 // ── Choice screen ─────────────────────────────────────────────────────
 
-function ChoiceScreen({ run, options, onPick }: { run: DartliteRun; options: ChoiceOption[]; onPick: (opt: ChoiceOption) => void }) {
+function ChoiceScreen({ run, players, options, onPick }: { run: DartliteRun; players: Player[]; options: ChoiceOption[]; onPick: (opt: ChoiceOption) => void }) {
+  const chooserIdx = run.choicePlayerIdx;
+  const chooserId = run.playerIds[chooserIdx];
+  const chooser = players.find(p => p.id === chooserId);
+  const chooserName = chooser?.name || `Player ${chooserIdx + 1}`;
+  const chooserColor = chooser?.color || '#7c3aed';
+  const alreadyChosen = run.playerIds.length > 1
+    ? run.playerIds.slice(0, chooserIdx).map(id => players.find(p => p.id === id)?.name || 'Player').join(', ')
+    : '';
+
   return (
     <div className="view-scroll" style={{ background: 'radial-gradient(ellipse at top, color-mix(in srgb,#7c3aed 15%,var(--bg)) 0%, var(--bg) 70%)', minHeight: '100%' }}>
       <div className="card" style={{ maxWidth: 480, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#c4b5fd', textTransform: 'uppercase' }}>Round {run.round} Cleared</div>
           <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4 }}>Choose a Boon</div>
-          <div className="muted small" style={{ marginTop: 4 }}>Each player picks one. The party shares the reward.</div>
+          <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 999, background: `color-mix(in srgb, ${chooserColor} 22%, var(--bg-3))`, border: `1px solid ${chooserColor}` }}>
+            <span className="avatar" style={{ background: chooserColor, width: 22, height: 22, fontSize: 10 }}>{initials(chooserName)}</span>
+            <span style={{ fontWeight: 800, fontSize: 14 }}>{chooserName} is choosing</span>
+          </div>
+          <div className="muted small" style={{ marginTop: 6 }}>
+            {alreadyChosen ? `Already chosen: ${alreadyChosen}` : 'Each player picks their own personal reward.'}
+          </div>
         </div>
         <div style={{ display: 'grid', gap: 10 }}>
           {options.map((opt, i) => (
-            <button key={i} className="btn block" style={{ padding: 14, textAlign: 'left', background: 'linear-gradient(135deg, color-mix(in srgb,#7c3aed 18%,var(--bg-3)) 0%, var(--bg-3) 80%)', borderColor: 'color-mix(in srgb,#7c3aed 40%,var(--border))' }}
+            <button key={i} className="btn block" style={{ padding: 14, textAlign: 'left', background: `linear-gradient(135deg, color-mix(in srgb, ${chooserColor} 18%, var(--bg-3)) 0%, var(--bg-3) 80%)`, borderColor: `color-mix(in srgb, ${chooserColor} 40%, var(--border))` }}
               onClick={() => onPick(opt)}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span style={{ fontSize: 26 }}>{opt.icon}</span>
@@ -338,6 +394,167 @@ function ChoiceScreen({ run, options, onPick }: { run: DartliteRun; options: Cho
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Progress popup (between rounds) ─────────────────────────────────
+//
+// Shown after every player has chosen their personal reward. Lists all
+// players in the run with a quick summary. Clicking a player opens a
+// detail modal with their run stats, chosen rewards, kills, and trinkets.
+// Clicking a trinket shows the trinket's full description.
+function ProgressScreen({ run, players, onContinue }: { run: DartliteRun; players: Player[]; onContinue: () => void }) {
+  const [detailId, setDetailId] = useState<string | null>(null);
+
+  return (
+    <div className="view-scroll" style={{ background: 'radial-gradient(ellipse at top, color-mix(in srgb,#7c3aed 12%,var(--bg)) 0%, var(--bg) 70%)', minHeight: '100%' }}>
+      <div className="card" style={{ maxWidth: 520, margin: '0 auto' }}>
+        <div style={{ textAlign: 'center', marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#c4b5fd', textTransform: 'uppercase' }}>Run Progress</div>
+          <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4 }}>Round {run.round} Complete</div>
+          <div className="muted small" style={{ marginTop: 4 }}>
+            {run.stats.roundsCleared} rounds cleared · {run.stats.enemiesDefeated} kills · Round {run.round + 1} next
+          </div>
+        </div>
+
+        <div className="muted small" style={{ fontWeight: 700, marginBottom: 8 }}>Tap a player for details</div>
+        <div style={{ display: 'grid', gap: 8 }}>
+          {run.playerIds.map((pid) => {
+            const p = players.find(x => x.id === pid);
+            if (!p) return null;
+            const ps = run.playerStats.find(s => s.playerId === pid);
+            const rp = run.runPlayers.find(r => r.playerId === pid);
+            return (
+              <button key={pid} className="btn block" style={{ padding: 12, textAlign: 'left', background: 'var(--bg-3)', borderColor: 'var(--border)' }}
+                onClick={() => setDetailId(pid)}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className="avatar" style={{ background: p.color, width: 30, height: 30, fontSize: 12 }}>{initials(p.name)}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 800 }}>{p.name}</div>
+                    <div className="muted small">
+                      {ps?.kills ?? 0} kills · {ps?.damageDealt ?? 0} dmg · {ps?.trinkets.length ?? 0} trinkets
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 11, color: '#c4b5fd', fontWeight: 700 }}>{ps?.rewards.length ?? 0} rewards</div>
+                    <div className="muted small">HP {rp?.hp ?? 0}</div>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <button className="btn primary block" style={{ marginTop: 18 }} onClick={onContinue}>
+          Continue to Round {run.round + 1}
+        </button>
+      </div>
+
+      {detailId && (
+        <PlayerDetailModal playerId={detailId} run={run} players={players} onClose={() => setDetailId(null)} />
+      )}
+    </div>
+  );
+}
+
+// ── Player detail modal ──────────────────────────────────────────────
+//
+// Shows a single player's run breakdown: stats, chosen rewards, kills,
+// and acquired trinkets. Clicking a trinket shows its full description.
+function PlayerDetailModal({ playerId, run, players, onClose }: { playerId: string; run: DartliteRun; players: Player[]; onClose: () => void }) {
+  const [trinketInfo, setTrinketInfo] = useState<keyof typeof TRINKETS | null>(null);
+  const p = players.find(x => x.id === playerId);
+  if (!p) return null;
+  const ps = run.playerStats.find(s => s.playerId === playerId);
+  const rp = run.runPlayers.find(r => r.playerId === playerId);
+
+  return (
+    <Modal onClose={onClose}>
+      <div style={{ padding: 8, maxWidth: 420 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+          <span className="avatar" style={{ background: p.color, width: 36, height: 36, fontSize: 14 }}>{initials(p.name)}</span>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 900 }}>{p.name}</div>
+            <div className="muted small">Round {run.round} · Dartlite Run</div>
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: 12, background: 'var(--bg-3)', marginBottom: 12 }}>
+          <div className="muted small" style={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>Stats</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+            <DetailStat label="Kills" value={ps?.kills ?? 0} />
+            <DetailStat label="Damage" value={ps?.damageDealt ?? 0} />
+            <DetailStat label="HP" value={rp?.hp ?? 0} />
+            <DetailStat label="Max HP" value={rp?.maxHp ?? 0} />
+            <DetailStat label="Armor" value={`${rp?.armor ?? 0}%`} />
+            <DetailStat label="Power" value={rp?.power ?? 0} />
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: 12, background: 'var(--bg-3)', marginBottom: 12 }}>
+          <div className="muted small" style={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>Chosen Rewards ({ps?.rewards.length ?? 0})</div>
+          {ps && ps.rewards.length > 0 ? (
+            <div style={{ display: 'grid', gap: 6 }}>
+              {ps.rewards.map((r, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 18 }}>{r.icon}</span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 13 }}>{r.label}</div>
+                    <div className="muted small">{r.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="muted small">No rewards chosen yet.</div>
+          )}
+        </div>
+
+        <div className="card" style={{ padding: 12, background: 'var(--bg-3)' }}>
+          <div className="muted small" style={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>Trinkets ({ps?.trinkets.length ?? 0})</div>
+          {ps && ps.trinkets.length > 0 ? (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {ps.trinkets.map((tid, i) => {
+                const t = getTrinket(tid);
+                return t ? (
+                  <button key={i} className="pill" style={{ fontSize: 11, background: 'color-mix(in srgb,#7c3aed 18%,var(--bg-3))', color: '#c4b5fd', borderColor: 'transparent', cursor: 'pointer', padding: '4px 10px' }}
+                    onClick={() => setTrinketInfo(tid)}>
+                    {t.icon} {t.name}
+                  </button>
+                ) : null;
+              })}
+            </div>
+          ) : (
+            <div className="muted small">No trinkets acquired yet.</div>
+          )}
+        </div>
+
+        <button className="btn primary block" style={{ marginTop: 16 }} onClick={onClose}>Close</button>
+      </div>
+
+      {trinketInfo && (
+        <Modal onClose={() => setTrinketInfo(null)}>
+          <div style={{ padding: 16, textAlign: 'center', maxWidth: 360 }}>
+            <div style={{ fontSize: 40 }}>{TRINKETS[trinketInfo].icon}</div>
+            <div style={{ fontSize: 18, fontWeight: 900, marginTop: 6 }}>{TRINKETS[trinketInfo].name}</div>
+            <div className="pill" style={{ marginTop: 6, display: 'inline-flex', background: 'color-mix(in srgb,#7c3aed 18%,var(--bg-3))', color: '#c4b5fd', borderColor: 'transparent' }}>
+              Tier {TRINKETS[trinketInfo].tier}
+            </div>
+            <div className="muted" style={{ marginTop: 10, fontSize: 13, lineHeight: 1.5 }}>{TRINKETS[trinketInfo].desc}</div>
+            <button className="btn primary block" style={{ marginTop: 14 }} onClick={() => setTrinketInfo(null)}>Close</button>
+          </div>
+        </Modal>
+      )}
+    </Modal>
+  );
+}
+
+function DetailStat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <div style={{ fontWeight: 900, fontSize: 16 }}>{value}</div>
+      <div className="muted small" style={{ marginTop: 2 }}>{label}</div>
     </div>
   );
 }
