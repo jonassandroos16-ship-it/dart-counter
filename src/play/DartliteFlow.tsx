@@ -20,7 +20,7 @@ interface Props {
 }
 
 export function DartliteFlow({ players, settings, music, setPlayers, onExitToMenu }: Props) {
-  const [stage, setStage] = useState<DartliteStage>('none');
+  const [stage, setStage] = useState<DartliteStage>('setup');
   const [run, setRun] = useState<DartliteRun | null>(null);
 
   if (stage === 'setup') {

@@ -12,7 +12,7 @@ import { initials } from '../store';
 import { DartOverlay } from '../campaign/DartOverlay';
 import { FrozenOverlay } from '../campaign/FrozenOverlay';
 import { Modal } from '../Popups';
-import type { DartliteRun, ChoiceOption } from './engine';
+import type { DartliteRun } from './engine';
 import { isMiniBossRound, isBossRound, applyPlayerChoice } from './engine';
 import { getTrinket } from './trinkets';
 import { ChoiceScreen } from './ChoiceScreen';
