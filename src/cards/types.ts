@@ -1,5 +1,5 @@
 export type CardType = 'damage' | 'spell' | 'utility';
-export type CardMode = 'competitive' | 'coop';
+export type CardMode = 'competitive' | 'coop' | 'both';
 export type CardClass = 'warrior' | 'priest' | 'rogue' | 'any';
 
 export interface CardDef {
@@ -21,8 +21,8 @@ export interface CardDef {
   magnitude?: number;
   /** Upgrade level: 0 = base, 1 = upgraded */
   upgraded?: boolean;
-  /** Class level at which this card becomes available in the deck */
-  levelRequired?: number;
+  /** Player level at which this card becomes available in the deck */
+  levelRequired: number;
 }
 
 export interface PlayerCard {

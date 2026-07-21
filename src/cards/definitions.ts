@@ -1,4 +1,4 @@
-import type { CardDef } from './types';
+import type { CardDef, CardMode } from './types';
 
 // ── Card Definitions ─────────────────────────────────────────────────
 //
@@ -7,50 +7,64 @@ import type { CardDef } from './types';
 //   spell   (blue)   — temporary buffs to party / debuffs to enemies
 //   utility (blue)   — helpful non-combat effects (draw, reroll, etc.)
 //
-// Each card is tagged competitive or coop. Some cards exist in both modes.
+// Each card has a `mode` field: 'competitive', 'coop', or 'both'.
+// Cards with mode 'both' are available in both competitive and coop modes.
+// Each card has a `levelRequired` field — the player must reach that level
+// before the card appears in their deck builder. Level 1 cards are available
+// from the start.
+//
 // Cards can be upgraded once (upgraded=true) to improve their effect.
 
 export const CARD_DEFS: CardDef[] = [
-  // ── Damage cards — Competitive ──────────────────────────────────
-  { id: 'dmg_t20', name: 'Triple 20', icon: '🎯', type: 'damage', mode: 'competitive', class: 'any', rarity: 'common', desc: 'Deal 60 damage (Triple 20).', base: 20, mult: 3, levelRequired: 1 },
-  { id: 'dmg_t19', name: 'Triple 19', icon: '🎯', type: 'damage', mode: 'competitive', class: 'any', rarity: 'common', desc: 'Deal 57 damage (Triple 19).', base: 19, mult: 3, levelRequired: 1 },
-  { id: 'dmg_t18', name: 'Triple 18', icon: '🎯', type: 'damage', mode: 'competitive', class: 'any', rarity: 'common', desc: 'Deal 54 damage (Triple 18).', base: 18, mult: 3, levelRequired: 1 },
-  { id: 'dmg_t17', name: 'Triple 17', icon: '🎯', type: 'damage', mode: 'competitive', class: 'any', rarity: 'common', desc: 'Deal 51 damage (Triple 17).', base: 17, mult: 3, levelRequired: 1 },
-  { id: 'dmg_d20', name: 'Double 20', icon: '🎯', type: 'damage', mode: 'competitive', class: 'any', rarity: 'common', desc: 'Deal 40 damage (Double 20).', base: 20, mult: 2, levelRequired: 1 },
-  { id: 'dmg_bull', name: 'Bullseye', icon: '🐂', type: 'damage', mode: 'competitive', class: 'any', rarity: 'rare', desc: 'Deal 50 damage (Bullseye).', base: 50, mult: 1, levelRequired: 2 },
-  { id: 'dmg_outer_bull', name: 'Outer Bull', icon: '🟢', type: 'damage', mode: 'competitive', class: 'any', rarity: 'common', desc: 'Deal 25 damage (Outer Bull).', base: 25, mult: 1, levelRequired: 1 },
-  { id: 'dmg_s20', name: 'Single 20', icon: '🎯', type: 'damage', mode: 'competitive', class: 'any', rarity: 'common', desc: 'Deal 20 damage (Single 20).', base: 20, mult: 1, levelRequired: 1 },
-  { id: 'dmg_miss', name: 'Miss', icon: '💨', type: 'damage', mode: 'competitive', class: 'any', rarity: 'common', desc: 'A thrown dart that misses (0 damage).', base: 0, mult: 0, levelRequired: 1 },
+  // ── Level 1 — Starter damage cards (both modes) ───────────────────
+  { id: 'dmg_s20', name: 'Single 20', icon: '🎯', type: 'damage', mode: 'both', class: 'any', rarity: 'common', desc: 'Deal 20 damage.', base: 20, mult: 1, levelRequired: 1 },
+  { id: 'dmg_s19', name: 'Single 19', icon: '🎯', type: 'damage', mode: 'both', class: 'any', rarity: 'common', desc: 'Deal 19 damage.', base: 19, mult: 1, levelRequired: 1 },
+  { id: 'dmg_s18', name: 'Single 18', icon: '🎯', type: 'damage', mode: 'both', class: 'any', rarity: 'common', desc: 'Deal 18 damage.', base: 18, mult: 1, levelRequired: 1 },
+  { id: 'dmg_d20', name: 'Double 20', icon: '🎯', type: 'damage', mode: 'both', class: 'any', rarity: 'common', desc: 'Deal 40 damage.', base: 20, mult: 2, levelRequired: 1 },
+  { id: 'dmg_outer_bull', name: 'Outer Bull', icon: '🟢', type: 'damage', mode: 'both', class: 'any', rarity: 'common', desc: 'Deal 25 damage.', base: 25, mult: 1, levelRequired: 1 },
 
-  // ── Damage cards — Coop ──────────────────────────────────────────
-  { id: 'dmg_coop_t20', name: 'Heavy Strike', icon: '⚔️', type: 'damage', mode: 'coop', class: 'warrior', rarity: 'common', desc: 'Deal 60 damage to an enemy.', base: 20, mult: 3, levelRequired: 1 },
-  { id: 'dmg_coop_t19', name: 'Warrior Swing', icon: '⚔️', type: 'damage', mode: 'coop', class: 'warrior', rarity: 'common', desc: 'Deal 57 damage to an enemy.', base: 19, mult: 3, levelRequired: 1 },
-  { id: 'dmg_coop_bull', name: 'Holy Smite', icon: '✨', type: 'damage', mode: 'coop', class: 'priest', rarity: 'rare', desc: 'Deal 50 damage to an enemy.', base: 50, mult: 1, levelRequired: 2 },
-  { id: 'dmg_coop_s20', name: 'Quick Jab', icon: '🗡️', type: 'damage', mode: 'coop', class: 'rogue', rarity: 'common', desc: 'Deal 20 damage to an enemy.', base: 20, mult: 1, levelRequired: 1 },
-  { id: 'dmg_coop_d20', name: 'Backstab', icon: '🗡️', type: 'damage', mode: 'coop', class: 'rogue', rarity: 'rare', desc: 'Deal 40 damage to an enemy.', base: 20, mult: 2, levelRequired: 2 },
+  // ── Level 2 — Improved damage cards ───────────────────────────────
+  { id: 'dmg_t20', name: 'Triple 20', icon: '🎯', type: 'damage', mode: 'both', class: 'any', rarity: 'common', desc: 'Deal 60 damage.', base: 20, mult: 3, levelRequired: 2 },
+  { id: 'dmg_t19', name: 'Triple 19', icon: '🎯', type: 'damage', mode: 'both', class: 'any', rarity: 'common', desc: 'Deal 57 damage.', base: 19, mult: 3, levelRequired: 2 },
+  { id: 'dmg_t18', name: 'Triple 18', icon: '🎯', type: 'damage', mode: 'both', class: 'any', rarity: 'common', desc: 'Deal 54 damage.', base: 18, mult: 3, levelRequired: 2 },
+  { id: 'dmg_bull', name: 'Bullseye', icon: '🐂', type: 'damage', mode: 'both', class: 'any', rarity: 'rare', desc: 'Deal 50 damage.', base: 50, mult: 1, levelRequired: 2 },
 
-  // ── Spell cards — Competitive ────────────────────────────────────
-  { id: 'spell_bust_protect', name: 'Bust Protect', icon: '🛡️', type: 'spell', mode: 'competitive', class: 'any', rarity: 'rare', desc: 'Prevents going over 0 in a 501 game if you overscore.', effect: 'bust_protect', levelRequired: 1 },
-  { id: 'spell_double_up', name: 'Double Up', icon: '🔁', type: 'spell', mode: 'competitive', class: 'any', rarity: 'rare', desc: "Forces an opponent's next Double modifier to count as a Miss.", effect: 'double_up', levelRequired: 2 },
-  { id: 'spell_surge', name: 'Surge', icon: '⚡', type: 'spell', mode: 'competitive', class: 'warrior', rarity: 'epic', desc: 'Your next visit scores double.', effect: 'surge', magnitude: 2, levelRequired: 3 },
-  { id: 'spell_hot_streak', name: 'Hot Streak', icon: '🔥', type: 'spell', mode: 'competitive', class: 'warrior', rarity: 'rare', desc: '+5 per dart cumulative bonus next visit.', effect: 'hot_streak', magnitude: 5, levelRequired: 2 },
+  // ── Level 3 — Class-specific damage cards ─────────────────────────
+  { id: 'dmg_warrior_strike', name: 'Warrior Strike', icon: '⚔️', type: 'damage', mode: 'both', class: 'warrior', rarity: 'rare', desc: 'Deal 65 damage with warrior power.', base: 20, mult: 3, levelRequired: 3 },
+  { id: 'dmg_priest_smite', name: 'Holy Smite', icon: '✨', type: 'damage', mode: 'both', class: 'priest', rarity: 'rare', desc: 'Deal 55 damage with divine power.', base: 50, mult: 1, levelRequired: 3 },
+  { id: 'dmg_rogue_backstab', name: 'Backstab', icon: '🗡️', type: 'damage', mode: 'both', class: 'rogue', rarity: 'rare', desc: 'Deal 45 damage from the shadows.', base: 20, mult: 2, levelRequired: 3 },
 
-  // ── Spell cards — Coop ───────────────────────────────────────────
-  { id: 'spell_coop_power_buff', name: 'Power Infusion', icon: '💪', type: 'spell', mode: 'coop', class: 'warrior', rarity: 'rare', desc: 'Party gains +10 power for 3 turns.', effect: 'power_buff', magnitude: 10, levelRequired: 2 },
-  { id: 'spell_coop_heal', name: 'Healing Light', icon: '✨', type: 'spell', mode: 'coop', class: 'priest', rarity: 'rare', desc: 'Restore 80 HP to the party.', effect: 'heal', magnitude: 80, levelRequired: 2 },
-  { id: 'spell_coop_accuracy_buff', name: 'Eagle Eye', icon: '🦅', type: 'spell', mode: 'coop', class: 'priest', rarity: 'rare', desc: 'Party gains +20% accuracy for 3 turns.', effect: 'accuracy_buff', magnitude: 20, levelRequired: 3 },
-  { id: 'spell_coop_enemy_debuff', name: 'Weaken', icon: '💀', type: 'spell', mode: 'coop', class: 'rogue', rarity: 'rare', desc: 'Enemies deal -30% damage for 2 turns.', effect: 'enemy_debuff', magnitude: 30, levelRequired: 2 },
-  { id: 'spell_coop_freeze', name: 'Frost Nova', icon: '❄️', type: 'spell', mode: 'coop', class: 'rogue', rarity: 'epic', desc: 'Freeze all enemies for 1 turn.', effect: 'freeze', levelRequired: 4 },
+  // ── Level 4 — Epic damage cards ───────────────────────────────────
+  { id: 'dmg_meteor', name: 'Meteor Strike', icon: '☄️', type: 'damage', mode: 'both', class: 'any', rarity: 'epic', desc: 'Deal 80 damage in a blazing impact.', base: 80, mult: 1, levelRequired: 4 },
+  { id: 'dmg_warrior_cleave', name: 'Cleave', icon: '🪓', type: 'damage', mode: 'both', class: 'warrior', rarity: 'epic', desc: 'Deal 90 damage with a mighty cleave.', base: 90, mult: 1, levelRequired: 4 },
+  { id: 'dmg_priest_judgment', name: 'Divine Judgment', icon: '⚖️', type: 'damage', mode: 'both', class: 'priest', rarity: 'epic', desc: 'Deal 85 damage with holy judgment.', base: 85, mult: 1, levelRequired: 4 },
+  { id: 'dmg_rogue_assassinate', name: 'Assassinate', icon: '🥷', type: 'damage', mode: 'both', class: 'rogue', rarity: 'epic', desc: 'Deal 95 damage with lethal precision.', base: 95, mult: 1, levelRequired: 4 },
 
-  // ── Utility cards — Competitive ─────────────────────────────────
-  { id: 'util_reroll', name: 'Reroll', icon: '🎲', type: 'utility', mode: 'competitive', class: 'any', rarity: 'rare', desc: 'Reroll your lowest dart throw this visit.', effect: 'reroll', levelRequired: 1 },
-  { id: 'util_draw', name: 'Quick Draw', icon: '🃏', type: 'utility', mode: 'competitive', class: 'rogue', rarity: 'rare', desc: 'Draw an extra card next turn.', effect: 'draw', magnitude: 1, levelRequired: 2 },
-  { id: 'util_reserve', name: 'Reserve', icon: '📥', type: 'utility', mode: 'competitive', class: 'any', rarity: 'rare', desc: 'Reserve 1 modifier card for a future turn.', effect: 'reserve', levelRequired: 2 },
+  // ── Level 5 — Legendary damage cards ──────────────────────────────
+  { id: 'dmg_apocalypse', name: 'Apocalypse', icon: '🌋', type: 'damage', mode: 'both', class: 'any', rarity: 'epic', desc: 'Deal 120 damage. The board trembles.', base: 120, mult: 1, levelRequired: 5 },
 
-  // ── Utility cards — Coop ────────────────────────────────────────
-  { id: 'util_coop_shield', name: 'Party Shield', icon: '🛡️', type: 'utility', mode: 'coop', class: 'priest', rarity: 'rare', desc: 'Party takes 50% less damage for 2 turns.', effect: 'party_shield', magnitude: 50, levelRequired: 2 },
-  { id: 'util_coop_extra_dart', name: 'Extra Throw', icon: '➕', type: 'utility', mode: 'coop', class: 'warrior', rarity: 'epic', desc: 'Gain an extra dart throw this turn.', effect: 'extra_dart', levelRequired: 3 },
-  { id: 'util_coop_revive', name: 'Phoenix Heart', icon: '❤️', type: 'utility', mode: 'coop', class: 'priest', rarity: 'epic', desc: 'Revive the party to 25% HP once.', effect: 'revive', levelRequired: 5 },
+  // ── Spell cards — Level 1-2 (both modes) ──────────────────────────
+  { id: 'spell_bust_protect', name: 'Bust Protect', icon: '🛡️', type: 'spell', mode: 'both', class: 'any', rarity: 'rare', desc: 'Prevents going over 0 if you overscore.', effect: 'bust_protect', levelRequired: 1 },
+  { id: 'spell_surge', name: 'Surge', icon: '⚡', type: 'spell', mode: 'both', class: 'warrior', rarity: 'rare', desc: 'Your next visit scores double.', effect: 'surge', magnitude: 2, levelRequired: 2 },
+  { id: 'spell_hot_streak', name: 'Hot Streak', icon: '🔥', type: 'spell', mode: 'both', class: 'warrior', rarity: 'rare', desc: '+5 per dart cumulative bonus next visit.', effect: 'hot_streak', magnitude: 5, levelRequired: 2 },
+
+  // ── Spell cards — Level 3+ (both modes) ───────────────────────────
+  { id: 'spell_power_buff', name: 'Power Infusion', icon: '💪', type: 'spell', mode: 'both', class: 'warrior', rarity: 'rare', desc: 'Party gains +10 power for 3 turns.', effect: 'power_buff', magnitude: 10, levelRequired: 3 },
+  { id: 'spell_heal', name: 'Healing Light', icon: '✨', type: 'spell', mode: 'both', class: 'priest', rarity: 'rare', desc: 'Restore 80 HP to the party.', effect: 'heal', magnitude: 80, levelRequired: 3 },
+  { id: 'spell_accuracy_buff', name: 'Eagle Eye', icon: '🦅', type: 'spell', mode: 'both', class: 'priest', rarity: 'rare', desc: 'Party gains +20% accuracy for 3 turns.', effect: 'accuracy_buff', magnitude: 20, levelRequired: 3 },
+  { id: 'spell_enemy_debuff', name: 'Weaken', icon: '💀', type: 'spell', mode: 'both', class: 'rogue', rarity: 'rare', desc: 'Enemies deal -30% damage for 2 turns.', effect: 'enemy_debuff', magnitude: 30, levelRequired: 3 },
+  { id: 'spell_freeze', name: 'Frost Nova', icon: '❄️', type: 'spell', mode: 'both', class: 'rogue', rarity: 'epic', desc: 'Freeze all enemies for 1 turn.', effect: 'freeze', levelRequired: 4 },
+  { id: 'spell_double_up', name: 'Double Up', icon: '🔁', type: 'spell', mode: 'both', class: 'any', rarity: 'rare', desc: "Forces an opponent's next Double to count as a miss.", effect: 'double_up', levelRequired: 2 },
+
+  // ── Utility cards — Level 1-2 (both modes) ────────────────────────
+  { id: 'util_reroll', name: 'Reroll', icon: '🎲', type: 'utility', mode: 'both', class: 'any', rarity: 'rare', desc: 'Reroll your lowest dart throw this visit.', effect: 'reroll', levelRequired: 1 },
+  { id: 'util_draw', name: 'Quick Draw', icon: '🃏', type: 'utility', mode: 'both', class: 'rogue', rarity: 'rare', desc: 'Draw an extra card next turn.', effect: 'draw', magnitude: 1, levelRequired: 2 },
+  { id: 'util_reserve', name: 'Reserve', icon: '📥', type: 'utility', mode: 'both', class: 'any', rarity: 'rare', desc: 'Reserve 1 modifier card for a future turn.', effect: 'reserve', levelRequired: 2 },
+
+  // ── Utility cards — Level 3+ (both modes) ────────────────────────
+  { id: 'util_shield', name: 'Party Shield', icon: '🛡️', type: 'utility', mode: 'both', class: 'priest', rarity: 'rare', desc: 'Party takes 50% less damage for 2 turns.', effect: 'party_shield', magnitude: 50, levelRequired: 3 },
+  { id: 'util_extra_dart', name: 'Extra Throw', icon: '➕', type: 'utility', mode: 'both', class: 'warrior', rarity: 'epic', desc: 'Gain an extra dart throw this turn.', effect: 'extra_dart', levelRequired: 4 },
+  { id: 'util_revive', name: 'Phoenix Heart', icon: '❤️', type: 'utility', mode: 'both', class: 'priest', rarity: 'epic', desc: 'Revive the party to 25% HP once.', effect: 'revive', levelRequired: 5 },
 ];
 
 const CARD_MAP: Record<string, CardDef> = Object.fromEntries(CARD_DEFS.map(c => [c.id, c]));
@@ -60,29 +74,32 @@ export function getCard(id: string): CardDef | undefined {
 }
 
 export function cardsForMode(mode: 'competitive' | 'coop'): CardDef[] {
-  return CARD_DEFS.filter(c => c.mode === mode);
+  return CARD_DEFS.filter(c => c.mode === mode || c.mode === 'both');
 }
 
 export function cardsForClass(cls: 'warrior' | 'priest' | 'rogue' | 'any', mode: 'competitive' | 'coop'): CardDef[] {
-  return CARD_DEFS.filter(c => c.mode === mode && (c.class === cls || c.class === 'any'));
+  return CARD_DEFS.filter(c => (c.mode === mode || c.mode === 'both') && (c.class === cls || c.class === 'any'));
+}
+
+export function cardMatchesMode(card: CardDef, mode: 'competitive' | 'coop'): boolean {
+  return card.mode === mode || card.mode === 'both';
 }
 
 // ── Upgrades ──────────────────────────────────────────────────────────
-//
-// Each card can be upgraded once. The upgrade improves the card's effect —
-// typically +50% damage, +50% magnitude, or a stronger effect variant.
 
 export function upgradedCardDef(card: CardDef): CardDef {
   if (card.type === 'damage') {
     const base = card.base ?? 0;
     const mult = card.mult ?? 1;
+    const originalDmg = base * mult;
+    const upgradedDmg = Math.round(originalDmg * 1.5);
     return {
       ...card,
       upgraded: true,
       name: card.name + '+',
       desc: card.desc.replace(/Deal (\d+) damage/, (_, n) => `Deal ${Math.round(+n * 1.5)} damage`),
-      base: Math.round(base * 1.5),
-      mult,
+      base: mult > 1 ? Math.round(base * 1.5) : upgradedDmg,
+      mult: mult > 1 ? mult : 1,
     };
   }
   if (card.type === 'spell' || card.type === 'utility') {
@@ -114,6 +131,17 @@ export function cardTypeColor(type: CardDef['type']): string {
   switch (type) {
     case 'damage': return '#ef4444';
     case 'spell': return '#3b82f6';
-    case 'utility': return '#3b82f6';
+    case 'utility': return '#10b981';
   }
+}
+
+// Group cards by levelRequired for UI display.
+export function cardsByLevel(cards: CardDef[]): Map<number, CardDef[]> {
+  const map = new Map<number, CardDef[]>();
+  for (const c of cards) {
+    const lvl = c.levelRequired;
+    if (!map.has(lvl)) map.set(lvl, []);
+    map.get(lvl)!.push(c);
+  }
+  return map;
 }
