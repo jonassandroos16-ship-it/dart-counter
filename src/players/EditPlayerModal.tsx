@@ -9,8 +9,9 @@ import { AttributesTab } from './AttributesTab';
 import { PowerUpsTab } from './PowerUpsTab';
 import { ClassTab } from './ClassTab';
 import { TrinketsTab } from './TrinketsTab';
+import { DeckTab } from './DeckTab';
 
-type TabId = 'basic' | 'titles' | 'badges' | 'sound' | 'attributes' | 'powerups' | 'class' | 'trinkets';
+type TabId = 'basic' | 'titles' | 'badges' | 'sound' | 'attributes' | 'powerups' | 'class' | 'trinkets' | 'deck';
 
 const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: 'basic', icon: '👤', label: 'Basic' },
@@ -21,6 +22,7 @@ const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: 'powerups', icon: '⚡', label: 'Power-Ups' },
   { id: 'class', icon: '🛡️', label: 'Class' },
   { id: 'trinkets', icon: '🔮', label: 'Trinkets' },
+  { id: 'deck', icon: '🃏', label: 'Deck' },
 ];
 
 export function EditPlayerModal({ player, players, isNew, games, settings, onClose, setPlayers, toast }: {
@@ -116,6 +118,10 @@ export function EditPlayerModal({ player, players, isNew, games, settings, onClo
 
       {tab === 'trinkets' && (
         <TrinketsTab player={livePlayer} />
+      )}
+
+      {tab === 'deck' && (
+        <DeckTab player={livePlayer} setPlayers={setPlayers} toast={toast} />
       )}
 
       <div className="row" style={{ gap: 10, marginTop: 16 }}>

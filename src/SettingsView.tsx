@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Target, Layers } from 'lucide-react';
 import type { Player, GameRecord, Settings, CustomTitle } from './types';
 import { COLORS, conditionLabel } from './constants';
 import { tracksFor, MusicEngine } from './music';
@@ -57,6 +58,35 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
   return (
     <div className="view-scroll">
       <h2 style={{ marginBottom: 12 }}>Settings</h2>
+      <div className="card" style={{ marginBottom: 12 }}>
+        <div className="muted small" style={{ marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Game Mode</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <button onClick={() => { update({ gameMode: 'dartboard' }); toast('Dart Board mode selected'); }}
+            style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: 16, borderRadius: 12,
+              background: settings.gameMode === 'dartboard' ? 'color-mix(in srgb,var(--accent) 22%,var(--bg-3))' : 'var(--bg-3)',
+              border: `2px solid ${settings.gameMode === 'dartboard' ? 'var(--accent)' : 'var(--border)'}`,
+              boxShadow: settings.gameMode === 'dartboard' ? '0 0 12px color-mix(in srgb,var(--accent) 35%,transparent)' : 'none',
+              cursor: 'pointer', color: 'inherit',
+            }}>
+            <Target size={32} color={settings.gameMode === 'dartboard' ? 'var(--accent)' : 'var(--muted)'} />
+            <div style={{ fontWeight: 800, fontSize: 15 }}>Dart Board</div>
+            <div className="muted" style={{ fontSize: 11, textAlign: 'center' }}>Classic dart-throwing gameplay</div>
+          </button>
+          <button onClick={() => { update({ gameMode: 'cards' }); toast('Card Based mode selected'); }}
+            style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: 16, borderRadius: 12,
+              background: settings.gameMode === 'cards' ? 'color-mix(in srgb,var(--accent) 22%,var(--bg-3))' : 'var(--bg-3)',
+              border: `2px solid ${settings.gameMode === 'cards' ? 'var(--accent)' : 'var(--border)'}`,
+              boxShadow: settings.gameMode === 'cards' ? '0 0 12px color-mix(in srgb,var(--accent) 35%,transparent)' : 'none',
+              cursor: 'pointer', color: 'inherit',
+            }}>
+            <Layers size={32} color={settings.gameMode === 'cards' ? 'var(--accent)' : 'var(--muted)'} />
+            <div style={{ fontWeight: 800, fontSize: 15 }}>Card Based</div>
+            <div className="muted" style={{ fontSize: 11, textAlign: 'center' }}>Tactical deck-builder gameplay</div>
+          </button>
+        </div>
+      </div>
       <div className="card">
         <button className="btn block" style={{ marginBottom: 10, background: 'linear-gradient(135deg, color-mix(in srgb,#ef4444 28%,var(--bg-3)) 0%, var(--bg-3) 80%)', borderColor: 'color-mix(in srgb,#ef4444 50%,var(--border))' }} onClick={() => setShowEditor(true)}>
           ⚔️ Campaign Level Editor
