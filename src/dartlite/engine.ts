@@ -381,7 +381,6 @@ export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): Dartl
     const healAmt = Math.round(rp.maxHp * 0.2);
     runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, hp: Math.min(p.maxHp, p.hp + healAmt) } : p);
   } else if (option.kind === 'stat') {
-    const rp = runPlayers[idx];
     const statRoll = Math.random();
     if (statRoll < 0.4) {
       runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, maxHp: p.maxHp + 20, hp: p.hp + 20, bonusHealth: p.bonusHealth + 20 } : p);

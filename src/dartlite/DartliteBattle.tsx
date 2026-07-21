@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Settings, Player } from '../types';
-import type { CampaignBattleState, CoopPlayer } from '../campaign/types';
+import type { CampaignBattleState } from '../campaign/types';
 import {
   addDart, undoDart, resolvePlayerVisit,
   prepareEnemyTurn, applyNextEnemyAttack, setTarget, effectivePower,
@@ -12,7 +12,7 @@ import { initials } from '../store';
 import { DartOverlay } from '../campaign/DartOverlay';
 import { FrozenOverlay } from '../campaign/FrozenOverlay';
 import { Modal } from '../Popups';
-import type { DartliteRun, ChoiceOption, DartlitePlayerRunStats } from './engine';
+import type { DartliteRun, ChoiceOption } from './engine';
 import { isMiniBossRound, isBossRound, applyPlayerChoice } from './engine';
 import { getTrinket, TRINKETS } from './trinkets';
 
@@ -424,7 +424,7 @@ function ProgressScreen({ run, players, onContinue }: { run: DartliteRun; player
             const p = players.find(x => x.id === pid);
             if (!p) return null;
             const ps = run.playerStats.find(s => s.playerId === pid);
-            const rp = run.runPlayers.find(r => r.playerId === pid);
+            const rp = run.runPlayers.find(r => r.id === pid);
             return (
               <button key={pid} className="btn block" style={{ padding: 12, textAlign: 'left', background: 'var(--bg-3)', borderColor: 'var(--border)' }}
                 onClick={() => setDetailId(pid)}>
@@ -467,7 +467,7 @@ function PlayerDetailModal({ playerId, run, players, onClose }: { playerId: stri
   const p = players.find(x => x.id === playerId);
   if (!p) return null;
   const ps = run.playerStats.find(s => s.playerId === playerId);
-  const rp = run.runPlayers.find(r => r.playerId === playerId);
+  const rp = run.runPlayers.find(r => r.id === playerId);
 
   return (
     <Modal onClose={onClose}>
