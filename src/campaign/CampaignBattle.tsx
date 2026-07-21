@@ -280,7 +280,7 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
                           minWidth: 18, height: 18, borderRadius: 6, padding: '0 4px',
                           background: 'color-mix(in srgb,var(--accent) 22%,var(--bg))',
                           color: 'var(--accent)', fontSize: 10, fontWeight: 900, flex: '0 0 auto',
-                        }} title={r.enemyName}>{enemyIcon(r.enemyId)}</span>
+                        }} title={r.enemyName}>{enemyIcon(state.enemies.find(e => e.id === r.enemyId)?.defId ?? r.enemyId)}</span>
                         {r.damage > 0 ? `-${r.damage}` : r.kind === 'shield_break' ? '🛡' : ''}
                         {isDefeated ? ' ☠' : ''}
                       </span>
