@@ -260,9 +260,18 @@ export function addDart(
   const anyAlive = enemies.some(e => !e.defeated);
   const outcome: CampaignBattleState['outcome'] = !anyAlive ? 'victory' : state.outcome;
 
+  // Per-player kill/damage bookkeeping for the thrower (used by Dartlite
+  // progress popups). Only counts real damage/defeats, not shield breaks or
+  // misses.
+  const dartDamage = step.kind === 'damage' || step.kind === 'defeated' ? step.damage : 0;
+  const dartKill = step.kind === 'defeated' ? 1 : 0;
+  const playersWithStats = players.map((p, i) => i === throwerIdx
+    ? { ...p, kills: (p.kills ?? 0) + dartKill, damageDealt: (p.damageDealt ?? 0) + dartDamage }
+    : p);
+
   return {
     ...state,
-    players,
+    players: playersWithStats,
     enemies,
     darts: [...state.darts, dart],
     resolvedDarts: [...state.resolvedDarts, step],
@@ -274,8 +283,8 @@ export function addDart(
     stats: {
       ...state.stats,
       dartsThrown: state.stats.dartsThrown + 1,
-      damageDealt: state.stats.damageDealt + (step.kind === 'damage' || step.kind === 'defeated' ? step.damage : 0),
-      enemiesDefeated: state.stats.enemiesDefeated + (step.kind === 'defeated' ? 1 : 0),
+      damageDealt: state.stats.damageDealt + dartDamage,
+      enemiesDefeated: state.stats.enemiesDefeated + dartKill,
     },
   };
 }
