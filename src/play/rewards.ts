@@ -5,6 +5,7 @@ import { Sound } from '../sound';
 import type { PopupControls } from '../Popups';
 import { computeGameBadges } from '../badges';
 import { defaultPlayerCards, addCard, cardsForLevelUpCompetitive } from '../cards/deck';
+import { reconcileCoopPassivesForPlayer } from '../campaign/engine/classes';
 
 export function runMilestones(p: GamePlayer, remaining: number, visitScore: number, settings: Settings, popups: PopupControls, setPlayers: (updater: any) => void, game: Game, players: Player[], games: GameRecord[]) {
   if (settings.popups.scores) {
@@ -41,15 +42,22 @@ export function awardXP(playerId: string, amount: number, reason: string, settin
     const li = levelFromXP(newXp, settings);
     if (li.level > oldLevel && settings.popups.xp) { popups.setLevelUp({ level: li.level, name: p.name, xpGained: amount, reason }); Sound.play('levelup', {}, settings); }
     let next: Player = { ...p, xp: newXp, level: li.level };
-    if (li.level > oldLevel && settings.gameMode === 'cards') {
-      const curCards = next.cards && next.cards.length > 0 ? next.cards : defaultPlayerCards();
-      const newCards = cardsForLevelUpCompetitive(next.coopProgress?.classId || null, li.level, curCards);
-      if (newCards.length > 0) {
-        let updatedCards = curCards;
-        for (const def of newCards) {
-          updatedCards = addCard(updatedCards, def.id);
+    if (li.level > oldLevel) {
+      if (settings.gameMode === 'cards') {
+        const curCards = next.cards && next.cards.length > 0 ? next.cards : defaultPlayerCards();
+        const newCards = cardsForLevelUpCompetitive(next.coopProgress?.classId || null, li.level, curCards);
+        if (newCards.length > 0) {
+          let updatedCards = curCards;
+          for (const def of newCards) {
+            updatedCards = addCard(updatedCards, def.id);
+          }
+          next = { ...next, cards: updatedCards };
         }
-        next = { ...next, cards: updatedCards };
+      }
+      const coopProg = next.coopProgress;
+      if (coopProg?.classId) {
+        const { progress: reconciledProg } = reconcileCoopPassivesForPlayer(coopProg, li.level);
+        next = { ...next, coopProgress: reconciledProg };
       }
     }
     return next;
