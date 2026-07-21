@@ -1,8 +1,27 @@
 import type { Player } from '../types';
 import type { SetPlayers, Toast } from './BasicTab';
-import { defaultPlayerCards, addCard, removeCard, upgradeCard, hasCard, resolveCardDef } from '../cards/deck';
+import { defaultPlayerCards, addCard, removeCard, hasCard, resolveCardDef } from '../cards/deck';
 import { CARD_DEFS, getCard, cardDamage, cardTypeColor, cardRarityColor, cardsForClass } from '../cards/definitions';
-import type { PlayerCard } from '../cards/types';
+import type { CardDef, PlayerCard } from '../cards/types';
+
+const CLASS_ICONS: Record<string, string> = {
+  warrior: '⚔️',
+  priest: '✨',
+  rogue: '🗡️',
+};
+
+function ClassBadge({ def, cls }: { def: CardDef; cls: string | null }) {
+  if (def.class === 'any') {
+    return <span className="pill" style={{ fontSize: 8, marginTop: 2, background: 'color-mix(in srgb,#22c55e 18%,var(--bg-3))', color: '#86efac', borderColor: 'transparent' }} title="Anyone can use this card">🌐 Any</span>;
+  }
+  const icon = CLASS_ICONS[def.class] || '🃏';
+  const owned = cls === def.class;
+  return (
+    <span className="pill" style={{ fontSize: 8, marginTop: 2, background: owned ? 'color-mix(in srgb,#3b82f6 18%,var(--bg-3))' : 'color-mix(in srgb,#f59e0b 18%,var(--bg-3))', color: owned ? '#93c5fd' : '#fcd34d', borderColor: 'transparent' }} title={`${def.class} class card`}>
+      {icon} {def.class}
+    </span>
+  );
+}
 
 export function DeckTab({ player, setPlayers, toast }: {
   player: Player; setPlayers: SetPlayers; toast: Toast;
@@ -30,16 +49,6 @@ export function DeckTab({ player, setPlayers, toast }: {
     toast('Card removed from deck');
   };
 
-  const upgradePlayerCard = (cardId: string) => {
-    setPlayers((prev: Player[]) => prev.map(p => {
-      if (p.id !== player.id) return p;
-      const cur = p.cards && p.cards.length > 0 ? p.cards : defaultPlayerCards();
-      return { ...p, cards: upgradeCard(cur, cardId) };
-    }));
-    const def = getCard(cardId);
-    toast(`${def?.name || cardId} upgraded!`);
-  };
-
   const availableCards = cls
     ? cardsForClass(cls, mode).filter(c => !hasCard(cards, c.id))
     : CARD_DEFS.filter(c => c.mode === mode && c.class === 'any' && !hasCard(cards, c.id));
@@ -51,7 +60,7 @@ export function DeckTab({ player, setPlayers, toast }: {
   return (
     <>
       <div className="muted small" style={{ marginBottom: 10 }}>
-        Build your deck for card-based mode. Damage cards deal damage like dart throws. Spell cards grant temporary buffs and debuffs. Utility cards provide helpful effects. Cards can be upgraded once for improved effects.
+        Build your deck for card-based mode. Damage cards deal damage like dart throws. Spell cards grant temporary buffs and debuffs. Utility cards provide helpful effects. Cards can only be upgraded in Dartlite mode.
       </div>
 
       {!cls && (
@@ -66,7 +75,7 @@ export function DeckTab({ player, setPlayers, toast }: {
           <span style={{ fontWeight: 700 }}>Your Deck ({cards.length} cards)</span>
           <span className="pill">{damageCards.length} dmg · {spellCards.length} spell · {utilityCards.length} util</span>
         </div>
-        <CardList cards={cards} onRemove={removeCardFromPlayer} onUpgrade={upgradePlayerCard} />
+        <CardList cards={cards} onRemove={removeCardFromPlayer} />
       </div>
 
       <div className="card" style={{ padding: 12 }}>
@@ -85,6 +94,7 @@ export function DeckTab({ player, setPlayers, toast }: {
               <span style={{ fontSize: 11, fontWeight: 800 }}>{card.name}</span>
               <span className="muted" style={{ fontSize: 9, lineHeight: 1.2 }}>{card.type === 'damage' ? `${cardDamage(card)} dmg` : card.desc.slice(0, 30)}</span>
               <span className="pill" style={{ fontSize: 8, marginTop: 2 }}>{card.rarity}</span>
+              <ClassBadge def={card} cls={cls} />
             </button>
           ))}
           {availableCards.length === 0 && <div className="muted small">All available cards collected!</div>}
@@ -94,8 +104,8 @@ export function DeckTab({ player, setPlayers, toast }: {
   );
 }
 
-function CardList({ cards, onRemove, onUpgrade }: {
-  cards: PlayerCard[]; onRemove: (cardId: string) => void; onUpgrade: (cardId: string) => void;
+function CardList({ cards, onRemove }: {
+  cards: PlayerCard[]; onRemove: (cardId: string) => void;
 }) {
   if (cards.length === 0) return <div className="muted small">No cards in deck yet.</div>;
   return (
@@ -111,15 +121,15 @@ function CardList({ cards, onRemove, onUpgrade }: {
           }}>
             <div style={{ fontSize: 24, width: 34, textAlign: 'center' }}>{def.icon}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, lineHeight: 1.2 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, lineHeight: 1.2, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
                 {def.name}
-                <span className="pill" style={{ fontSize: 9, marginLeft: 6, background: typeColor, color: '#fff' }}>{def.type}</span>
-                {pc.upgraded && <span className="pill" style={{ fontSize: 9, marginLeft: 4, background: '#f59e0b', color: '#000' }}>UPGRADED</span>}
+                <span className="pill" style={{ fontSize: 9, marginLeft: 2, background: typeColor, color: '#fff' }}>{def.type}</span>
+                {pc.upgraded && <span className="pill" style={{ fontSize: 9, marginLeft: 2, background: '#f59e0b', color: '#000' }}>UPGRADED</span>}
+                <ClassBadge def={def} cls={null} />
               </div>
               <div className="muted" style={{ fontSize: 11, marginTop: 2, lineHeight: 1.3 }}>{def.desc}</div>
             </div>
             <div style={{ display: 'flex', gap: 4 }}>
-              {!pc.upgraded && <button className="btn sm ghost" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => onUpgrade(pc.cardId)}>Upgrade</button>}
               <button className="btn sm danger" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => onRemove(pc.cardId)}>Remove</button>
             </div>
           </div>
