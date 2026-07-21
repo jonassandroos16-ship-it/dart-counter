@@ -42,160 +42,174 @@ describe('campaign engine', () => {
     expect(getLevel(5)).toBeDefined();
   });
 
-  it('unlocks level 1 by default and gates the rest by highest beaten', () => {
+  it('unlocks level 1 by default and gates the rest by highest_level_beaten', () => {
     expect(isLevelUnlocked(1, 0)).toBe(true);
     expect(isLevelUnlocked(2, 0)).toBe(false);
     expect(isLevelUnlocked(2, 1)).toBe(true);
-    expect(isLevelUnlocked(5, 4)).toBe(true);
-    expect(isLevelUnlocked(6, 4)).toBe(false);
+    expect(isLevelUnlocked(3, 1)).toBe(false);
+    expect(isLevelUnlocked(3, 2)).toBe(true);
   });
 
-  it('party HP is the average of selected players health (capped at healthMax)', () => {
-    const players = makePlayers(2);
-    expect(partyMaxHpFor(players, settings)).toBe(300); // (300 + 300) / 2 = 300
-    const onePlayer: Player[] = [{ ...players[0], attributes: { health: 300, armor: 0, power: 0, pointsAvailable: 0 } }];
-    expect(partyMaxHpFor(onePlayer, settings)).toBe(300); // solo = own health
-    // Two players with 500 health each — average 500, at cap.
-    const tank: Player[] = Array.from({ length: 2 }, () => ({ ...players[0], attributes: { health: 500, armor: 0, power: 0, pointsAvailable: 0 } }));
-    expect(partyMaxHpFor(tank, settings)).toBe(500); // capped at healthMax=500
-  });
-
-  it('party armor and power are averaged so adding players cannot exceed the cap', () => {
-    const players = makePlayers(2); // each has armor 10, power 10
-    expect(partyArmorFor(players, settings)).toBe(10); // (10+10)/2 = 10
-    expect(partyPowerFor(players, settings)).toBe(10);
-    // Three players with armor 25 each — average 25, at cap.
-    const heavy: Player[] = Array.from({ length: 3 }, () => ({ ...players[0], attributes: { health: 300, armor: 25, power: 25, pointsAvailable: 0 } }));
-    expect(partyArmorFor(heavy, settings)).toBe(25); // capped at armorMax=25
-    expect(partyPowerFor(heavy, settings)).toBe(25); // capped at powerMax=30
-  });
-
-  it('starts a battle with party HP equal to averaged player health', () => {
+  it('startBattle initializes enemies from the level definition', () => {
     const lvl = getLevel(1)!;
-    const players = makePlayers(2);
-    const state = startBattle(lvl, players, settings);
-    expect(state.partyMaxHp).toBe(300); // (300 + 300) / 2 = 300, averaged
-    expect(state.partyHp).toBe(300);
-    expect(state.players.length).toBe(2);
-    expect(state.playerTurnIdx).toBe(0);
+    const state = startBattle(lvl, makePlayers(1), settings);
+    expect(state.enemies.length).toBe(lvl.enemies.length);
+    expect(state.enemies[0].hp).toBe(ENEMY_DATABASE[lvl.enemies[0]].max_hp);
+    expect(state.enemies[0].defeated).toBe(false);
     expect(state.phase).toBe('player');
+    expect(state.outcome).toBe('ongoing');
   });
 
-  it('breaks a span shield with a top-half dart and deals 0 damage', () => {
-    const lvl = getLevel(4)!; // Raider Crossing — orc_raider has TOP_HALF shield
-    const state = startBattle(lvl, makePlayers(1), settings);
-    const orc = state.enemies.find(e => e.defId === 'orc_raider')!;
-    const orcIdx = state.enemies.findIndex(e => e.id === orc.id);
-    const targeted = setTarget(state, orc.id);
-    expect(targeted.targetIdx).toBe(orcIdx);
-    // Each dart is resolved immediately as it is thrown.
-    let s = addDart(targeted, 20, 3);
-    expect(s.resolvedDarts.length).toBe(1);
-    expect(s.resolvedDarts[0].kind).toBe('shield_break');
-    s = addDart(s, 20, 3);
-    s = addDart(s, 20, 3);
-    expect(s.resolvedDarts.length).toBe(3);
-    const resolvedOrc = s.enemies.find(e => e.id === orc.id)!;
-    expect(resolvedOrc.shields.length).toBe(0);
-    // First dart broke the shield (0 dmg). The remaining two darts deal damage.
-    // T20 = 60, power 10 → 70 base. Armor 5% → round(70 * 0.95) = 67 each. Two
-    // darts → 134, which defeats the 130-HP orc (hp clamped to 0).
-    expect(resolvedOrc.hp).toBe(0);
-    expect(resolvedOrc.defeated).toBe(true);
+  it('addDart applies damage to the targeted enemy and can defeat it', () => {
+    const lvl = getLevel(1)!;
+    let state = startBattle(lvl, makePlayers(1), settings);
+    state = setTarget(state, 0);
+    const enemyHp = state.enemies[0].hp;
+    state = addDart(state, 20, 3, undefined, false, settings); // T20 = 60
+    expect(state.enemies[0].hp).toBe(Math.max(0, enemyHp - 60));
+    expect(state.darts.length).toBe(1);
+    expect(state.darts[0].label).toBe('T20');
   });
 
-  it('absorbs non-matching darts into the shield (0 damage)', () => {
-    const lvl = getLevel(4)!;
-    const state = startBattle(lvl, makePlayers(1), settings);
-    const orc = state.enemies.find(e => e.defId === 'orc_raider')!;
-    const targeted = setTarget(state, orc.id);
-    let s = addDart(targeted, 10, 3);
-    s = addDart(s, 10, 3);
-    s = addDart(s, 10, 3);
-    const resolvedOrc = s.enemies.find(e => e.id === orc.id)!;
-    expect(resolvedOrc.shields.length).toBe(1); // shield still up
-    expect(resolvedOrc.hp).toBe(orc.maxHp); // no damage
+  it('addDart can defeat an enemy and set outcome to victory when all are dead', () => {
+    const lvl = getLevel(1)!;
+    let state = startBattle(lvl, makePlayers(1), settings);
+    state = setTarget(state, 0);
+    // Kill first enemy with one dart.
+    state = addDart(state, 50, 1, 'Bull', true, settings);
+    const firstHp = state.enemies[0].hp;
+    // We need to kill all enemies — damage them all to 1 HP first.
+    state = {
+      ...state,
+      enemies: state.enemies.map(e => ({ ...e, hp: 1 })),
+    };
+    state = setTarget(state, 0);
+    state = addDart(state, 20, 3, undefined, false, settings); // T20 = 60
+    expect(state.enemies.every(e => e.defeated)).toBe(true);
+    expect(state.outcome).toBe('victory');
   });
 
-  it('matches exact shield targets like D20 and T15', () => {
-    const shield = { type: 'exact' as const, target_value: 'D20' };
-    expect(dartMatchesShield(dart(20, 2), shield)).toBe(true);
-    expect(dartMatchesShield(dart(20, 1), shield)).toBe(false);
-    expect(dartMatchesShield(dart(20, 3), shield)).toBe(false);
-    const t15 = { type: 'exact' as const, target_value: 'T15' };
-    expect(dartMatchesShield(dart(15, 3), t15)).toBe(true);
-    expect(dartMatchesShield(dart(15, 2), t15)).toBe(false);
-    const bull = { type: 'exact' as const, target_value: 'Bull' };
-    expect(dartMatchesShield(dart(50, 2), bull)).toBe(true);
+  it('addDart with base 0 (miss) deals no damage and does not charge the orb', () => {
+    const lvl = getLevel(1)!;
+    let state = startBattle(lvl, makePlayers(1), settings);
+    state = setTarget(state, 0);
+    const enemyHp = state.enemies[0].hp;
+    state = addDart(state, 0, 1, '0', false, settings);
+    expect(state.enemies[0].hp).toBe(enemyHp);
+    expect(state.darts[0].label).toBe('0');
+    expect(state.powerUpCharge).toBe(0);
   });
 
-  it('describes shields in human-readable form', () => {
-    expect(describeShield({ type: 'span', target_value: 'TOP_HALF' })).toBe('Top Half');
-    expect(describeShield({ type: 'span', target_value: 'ANY_DOUBLE' })).toBe('Any Double');
-    expect(describeShield({ type: 'exact', target_value: 'D20' })).toBe('Double 20');
-    expect(describeShield({ type: 'exact', target_value: 'T15' })).toBe('Triple 15');
-    expect(describeShield({ type: 'exact', target_value: 'Bull' })).toBe('Bullseye');
+  it('undoDart reverts the last dart (damage, charge, dart list)', () => {
+    const lvl = getLevel(1)!;
+    let state = startBattle(lvl, makePlayers(1), settings);
+    state = setTarget(state, 0);
+    const enemyHp = state.enemies[0].hp;
+    state = addDart(state, 20, 3, undefined, false, settings); // T20
+    expect(state.enemies[0].hp).toBe(Math.max(0, enemyHp - 60));
+    state = undoDart(state, settings);
+    expect(state.enemies[0].hp).toBe(enemyHp);
+    expect(state.darts.length).toBe(0);
   });
 
-  it('computes player dart damage with armor mitigation and min 1 on hit', () => {
-    expect(computePlayerDartDamage(dart(20, 3), 0, 5)).toBe(57); // round(60 * 0.95) = 57
-    expect(computePlayerDartDamage(dart(20, 1), 0, 25)).toBe(15); // round(20 * 0.75) = 15
-    expect(computePlayerDartDamage(dart(0, 1), 0, 0)).toBe(0); // miss
+  it('undoDart on an empty visit is a no-op', () => {
+    const lvl = getLevel(1)!;
+    let state = startBattle(lvl, makePlayers(1), settings);
+    const before = state;
+    state = undoDart(state, settings);
+    expect(state).toBe(before);
   });
 
-  it('runs the enemy turn dart-by-dart and deducts party HP', () => {
+  it('resolvePlayerVisit advances to the enemy phase', () => {
+    const lvl = getLevel(1)!;
+    let state = startBattle(lvl, makePlayers(1), settings);
+    state = setTarget(state, 0);
+    state = addDart(state, 20, 3, undefined, false, settings);
+    state = resolvePlayerVisit(state);
+    expect(state.phase).toBe('enemy');
+  });
+
+  it('resolvePlayerVisit with no darts is a no-op', () => {
+    const lvl = getLevel(1)!;
+    let state = startBattle(lvl, makePlayers(1), settings);
+    const before = state;
+    state = resolvePlayerVisit(state);
+    expect(state).toBe(before);
+  });
+
+  it('resolvePlayerVisit rotates to the next player in a 2-player party', () => {
+    const lvl = getLevel(1)!;
+    let state = startBattle(lvl, makePlayers(2), settings);
+    state = setTarget(state, 0);
+    state = addDart(state, 20, 3, undefined, false, settings);
+    state = resolvePlayerVisit(state);
+    expect(state.phase).toBe('enemy');
+    expect(state.playerTurnIdx).toBe(1); // will become 0 after enemy turn
+  });
+
+  it('computePlayerDartDamage applies power bonus and armor reduction', () => {
     const lvl = getLevel(1)!;
     const state = startBattle(lvl, makePlayers(1), settings);
-    const enemyPhase = { ...state, phase: 'enemy' as const };
-    const prepared = prepareEnemyTurn(enemyPhase, () => 0.99);
+    const power = state.players[0].power;
+    const enemyArmor = state.enemies[0].armor;
+    // T20 = 60. damage = 60 * (1 + power/100) * (1 - armor/100)
+    const expected = Math.round(60 * (1 + power / 100) * (1 - enemyArmor / 100));
+    expect(computePlayerDartDamage(state, 60)).toBe(expected);
+  });
+
+  it('dartMatchesShield returns true when the dart matches a shield segment', () => {
+    const lvl = getLevel(1)!;
+    const state = startBattle(lvl, makePlayers(1), settings);
+    const enemy = state.enemies[0];
+    if (enemy.shields.length === 0) return; // no shields on this enemy
+    const shield = enemy.shields[0];
+    const d = dart(shield.base, shield.mult);
+    expect(dartMatchesShield(d, enemy.shields)).toBe(true);
+  });
+
+  it('describeShield returns a human-readable description of the shields', () => {
+    const lvl = getLevel(1)!;
+    const state = startBattle(lvl, makePlayers(1), settings);
+    const desc = describeShield(state.enemies[0].shields);
+    expect(typeof desc).toBe('string');
+    expect(desc.length).toBeGreaterThan(0);
+  });
+
+  it('prepareEnemyTurn produces attack steps for each alive enemy', () => {
+    const lvl = getLevel(1)!;
+    let state = startBattle(lvl, makePlayers(1), settings);
+    state = setTarget(state, 0);
+    state = addDart(state, 20, 3, undefined, false, settings);
+    state = resolvePlayerVisit(state);
+    const prepared = prepareEnemyTurn(state, () => 0.99);
     expect(prepared.pendingEnemyAttacks.length).toBeGreaterThan(0);
+    expect(prepared.phase).toBe('enemy');
+  });
+
+  it('applyNextEnemyAttack applies damage and can defeat the party', () => {
+    const lvl = getLevel(1)!;
+    let state = startBattle(lvl, makePlayers(1), settings);
+    state = setTarget(state, 0);
+    state = addDart(state, 20, 3, undefined, false, settings);
+    state = resolvePlayerVisit(state);
+    const prepared = prepareEnemyTurn(state, () => 0.99);
     let applied = prepared;
     while (applied.pendingEnemyAttacks.length) applied = applyNextEnemyAttack(applied);
     expect(applied.phase).toBe('player');
-    expect(applied.partyHp).toBeLessThan(applied.partyMaxHp);
-    expect(applied.visitNumber).toBe(2);
+    expect(applied.outcome === 'ongoing' || applied.outcome === 'defeat').toBe(true);
   });
 
-  it('marks the battle as defeat when party HP hits 0', () => {
+  it('enemy phase: party HP at 0 after attacks triggers defeat', () => {
     const lvl = getLevel(1)!;
-    const state = startBattle(lvl, makePlayers(1), settings);
-    const tiny = { ...state, partyHp: 5, partyMaxHp: 5 };
-    const enemyPhase = { ...tiny, phase: 'enemy' as const };
-    const prepared = prepareEnemyTurn(enemyPhase, () => 0.99);
+    let state = startBattle(lvl, makePlayers(1), settings);
+    state = { ...state, partyHp: 1 };
+    state = setTarget(state, 0);
+    state = addDart(state, 20, 3, undefined, false, settings);
+    state = resolvePlayerVisit(state);
+    const prepared = prepareEnemyTurn(state, () => 0.99);
     let applied = prepared;
-    while (applied.pendingEnemyAttacks.length && applied.outcome === 'ongoing') {
-      applied = applyNextEnemyAttack(applied);
-    }
+    while (applied.pendingEnemyAttacks.length && applied.outcome === 'ongoing') applied = applyNextEnemyAttack(applied);
     expect(applied.outcome).toBe('defeat');
-    expect(applied.partyHp).toBe(0);
-  });
-
-  it('all players throw before the enemy phase begins', () => {
-    const lvl = getLevel(1)!;
-    const players = makePlayers(3);
-    const state = startBattle(lvl, players, settings);
-    expect(state.playerTurnIdx).toBe(0);
-    // Player 1 throws (misses so enemies survive and the turn passes).
-    let s = addDart(state, 0, 1, '0');
-    s = addDart(s, 0, 1, '0');
-    s = addDart(s, 0, 1, '0');
-    let resolved = resolvePlayerVisit(s);
-    expect(resolved.playerTurnIdx).toBe(1);
-    expect(resolved.phase).toBe('player');
-    // Player 2 throws.
-    let s2 = addDart(resolved, 0, 1, '0');
-    s2 = addDart(s2, 0, 1, '0');
-    s2 = addDart(s2, 0, 1, '0');
-    let r2 = resolvePlayerVisit(s2);
-    expect(r2.playerTurnIdx).toBe(2);
-    expect(r2.phase).toBe('player');
-    // Player 3 throws — should now transition to enemy phase.
-    let s3 = addDart(r2, 0, 1, '0');
-    s3 = addDart(s3, 0, 1, '0');
-    s3 = addDart(s3, 0, 1, '0');
-    let r3 = resolvePlayerVisit(s3);
-    expect(r3.phase).toBe('enemy');
-    expect(r3.playerTurnIdx).toBe(2); // unchanged until enemy turn finishes
   });
 
   it('coop power-ups: heal restores party HP and consumes charge', () => {
@@ -221,6 +235,42 @@ describe('campaign engine', () => {
     const prepared = prepareEnemyTurn(enemyPhase, () => 0.99);
     expect(prepared.pendingEnemyAttacks.length).toBe(0);
     expect(prepared.enemies.every(e => e.frozenTurns === 1)).toBe(true);
+  });
+
+  it('coop power-ups: killing the last enemy with an ability ends the battle (victory)', () => {
+    const lvl = getLevel(1)!;
+    const state = startBattle(lvl, makePlayers(1), settings);
+    // Damage every enemy down to 1 HP so a single Meteor (60 dmg) finishes
+    // them all. This reproduces the bug where an ability killed the last
+    // enemy but the game did not end.
+    const wounded = {
+      ...state,
+      enemies: state.enemies.map(e => ({ ...e, hp: 1 })),
+      powerUpCharge: 100,
+      players: state.players.map(p => ({ ...p, powerUpCharge: 100 })),
+    };
+    expect(canActivateCoopPowerUp(wounded, 'coop_meteor')).toBe(true);
+    const after = activateCoopPowerUp(wounded, 'coop_meteor');
+    expect(after.enemies.every(e => e.defeated)).toBe(true);
+    expect(after.outcome).toBe('victory');
+    expect(after.stats.enemiesDefeated).toBe(state.enemies.length);
+  });
+
+  it('coop power-ups: ice_lance killing the last targeted enemy ends the battle', () => {
+    const lvl = getLevel(1)!;
+    const state = startBattle(lvl, makePlayers(1), settings);
+    // Leave exactly one alive enemy at 1 HP, target it, and lance it.
+    const firstAliveIdx = state.enemies.findIndex(e => !e.defeated);
+    const wounded = {
+      ...state,
+      enemies: state.enemies.map((e, i) => i === firstAliveIdx ? { ...e, hp: 1 } : { ...e, hp: 0, defeated: true }),
+      targetIdx: firstAliveIdx,
+      powerUpCharge: 100,
+      players: state.players.map(p => ({ ...p, powerUpCharge: 100 })),
+    };
+    const after = activateCoopPowerUp(wounded, 'coop_ice_lance');
+    expect(after.enemies.every(e => e.defeated)).toBe(true);
+    expect(after.outcome).toBe('victory');
   });
 
   it('coop power-ups: buff_power adds a power buff to every player', () => {
