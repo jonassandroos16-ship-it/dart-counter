@@ -26,7 +26,7 @@ export function defaultSettings(): Settings {
       powerPerPoint: 1,
       armorMax: 25,
       powerMax: 30,
-      healthMax: 500,
+      healthMax: 1000,
       battleMinDamage: 1,
       // Surge is an early-game power-up, so it starts partially charged.
       // Other power-ups start at 0 by default.
