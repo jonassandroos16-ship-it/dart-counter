@@ -19,7 +19,6 @@ import { CampaignBattle } from './campaign/CampaignBattle';
 import { CoopSetupView } from './campaign/CoopSetupView';
 import { useCampaignProgress } from './campaign/progress';
 import { getCoopPowerUp, coopXpForBattle, defaultCoopProgress, recordLevelClearForPlayer, reconcileCoopPassivesForPlayer } from './campaign/engine';
-import { awardXP } from './play/rewards';
 import { levelFromXP } from './logic';
 import { cardsForLevelUp, addCard, defaultPlayerCards } from './cards/deck';
 import { getChapter, isChapterComplete } from './campaign/campaignLevels';

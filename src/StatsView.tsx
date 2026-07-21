@@ -8,7 +8,6 @@ import { BADGES, computeLifetimeBadgeCounts, getBadgeContext, buildCoopBadgeCtx 
 import { loadDartliteGlobalStats } from './dartlite/stats';
 import { ALL_TRINKET_IDS, getTrinket } from './dartlite/trinkets';
 import { CARD_DEFS, getCard } from './cards/definitions';
-import { resolveCardDef } from './cards/deck';
 
 // For each stat: which direction is "better"? higher = bigger is better, lower = smaller is better.
 // null = neutral (no comparison). Used to color the comparison value red/green.

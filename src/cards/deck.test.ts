@@ -10,15 +10,15 @@ describe('Deck Management', () => {
   it('defaultPlayerCards returns 4 starter cards', () => {
     const cards = defaultPlayerCards();
     expect(cards).toHaveLength(4);
+    expect(hasCard(cards, 'dmg_t20')).toBe(true);
+    expect(hasCard(cards, 'dmg_t19')).toBe(true);
     expect(hasCard(cards, 'dmg_s20')).toBe(true);
-    expect(hasCard(cards, 'dmg_s19')).toBe(true);
-    expect(hasCard(cards, 'dmg_d20')).toBe(true);
-    expect(hasCard(cards, 'dmg_outer_bull')).toBe(true);
+    expect(hasCard(cards, 'dmg_miss')).toBe(true);
   });
 
-  it('does not include a Miss card by default', () => {
+  it('does not include an Outer Bull card by default', () => {
     const cards = defaultPlayerCards();
-    expect(hasCard(cards, 'dmg_miss')).toBe(false);
+    expect(hasCard(cards, 'dmg_outer_bull')).toBe(false);
   });
 
   it('addCard adds a new card without duplicating', () => {
@@ -52,7 +52,6 @@ describe('Deck Management', () => {
   });
 
   it('resolveCardDef returns upgraded def when upgraded', () => {
-    const cards = upgradeCard(defaultPlayerCards(), 'dmg_t20');
     const withT20 = addCard(defaultPlayerCards(), 'dmg_t20');
     const upgraded = upgradeCard(withT20, 'dmg_t20');
     const def = resolveCardDef(upgraded.find(c => c.cardId === 'dmg_t20')!);
