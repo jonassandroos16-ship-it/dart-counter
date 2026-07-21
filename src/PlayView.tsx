@@ -201,7 +201,8 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
       onStart={(ids) => {
         const party = players.filter(p => ids.includes(p.id));
         const run = startRun(party, settings);
-        setDartliteRun(run);
+        const started = beginRound(run, party, settings);
+        setDartliteRun(started);
         setDartliteStage('battle');
         music.startContext('coop', settings);
       }}
