@@ -47,7 +47,7 @@ export function SetupView({ players, settings, onStart, onOpenCampaign, onBackTo
         )}
         {cardMode && (
           <div className="muted small" style={{ marginBottom: 10, padding: '8px 10px', borderRadius: 8, background: 'color-mix(in srgb, var(--accent) 12%, var(--bg-3))', border: '1px solid color-mix(in srgb, var(--accent) 40%, var(--border))', fontStyle: 'italic' }}>
-            Card mode is active. You play cards from your deck instead of throwing darts. Checkout modes (501, 301, 701, 101, Speed 101) and Practice are supported. Modes that require hitting specific board segments (Around the Clock, Killer, High Score, Battle) are disabled.
+            Card mode is active. You play cards from your deck instead of throwing darts. Most modes are supported — Around the Clock is disabled because it requires hitting specific board segments in sequence.
           </div>
         )}
         <label className="field"><span>Game Mode</span>
@@ -58,10 +58,10 @@ export function SetupView({ players, settings, onStart, onOpenCampaign, onBackTo
             <option value="101">101</option>
             <option value="atc" disabled={cardMode}>Around the Clock{cardMode ? ' (disabled)' : ''}</option>
             <option value="practice">Practice (free scoring)</option>
-            <option value="killer" disabled={cardMode}>Killer (elimination){cardMode ? ' (disabled)' : ''}</option>
+            <option value="killer">Killer (elimination)</option>
             <option value="speed101">Speed 101 (party)</option>
-            <option value="highscore" disabled={cardMode}>High Score (party){cardMode ? ' (disabled)' : ''}</option>
-            <option value="battle" disabled={cardMode}>Battle (attributes){cardMode ? ' (disabled)' : ''}</option>
+            <option value="highscore">High Score (party)</option>
+            <option value="battle">Battle (attributes)</option>
           </select>
         </label>
         {!noX01 && <label className="field"><span>Finish</span>
