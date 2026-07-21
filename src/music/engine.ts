@@ -7,6 +7,7 @@ import { MUSIC_TRACKS, tracksFor } from './registry';
 // and route through a DynamicsCompressor limiter so layered notes don't clip.
 function masterTarget(context: string): number {
   if (context === 'match') return 0.55;
+  if (context === 'coop') return 0.5;
   if (context === 'start') return 0.6;
   return 0.45;
 }
@@ -67,9 +68,11 @@ export class MusicEngine {
   trackFor(context: string, settings: Settings): Track | undefined {
     const chosenId = context === 'match'
       ? settings.musicMatchTrack
-      : context === 'start'
-        ? settings.musicStartTrack
-        : settings.musicSetupTrack;
+      : context === 'coop'
+        ? settings.musicCoopTrack
+        : context === 'start'
+          ? settings.musicStartTrack
+          : settings.musicSetupTrack;
     return MUSIC_TRACKS.find(t => t.id === chosenId && t.context === context) || tracksFor(context)[0];
   }
 

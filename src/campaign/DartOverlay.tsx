@@ -1,15 +1,33 @@
 import { useEffect, useState } from 'react';
 import type { CampaignBattleState, EnemyAttackStep } from './types';
 import { initials } from '../store';
+import { Sound } from '../sound';
+import type { Settings } from '../types';
 
-export function DartOverlay({ state, onContinue, onEndVisit }: {
+export function DartOverlay({ state, onContinue, onEndVisit, settings }: {
   state: CampaignBattleState;
   onContinue: () => void;
   onEndVisit: () => void;
+  settings?: Settings;
 }) {
   const isPlayer = state.phase === 'player' && state.darts.length >= 3;
   const [shakeKey, setShakeKey] = useState(0);
+  const [hitIdx, setHitIdx] = useState(0);
   const currentEnemyStep = state.pendingEnemyAttacks[0];
+  const playerSteps = isPlayer ? state.resolvedDarts : [];
+
+  // Play a hit sound for each resolved dart in the player visit summary,
+  // staggered so each damage line gets its own audible cue.
+  useEffect(() => {
+    if (!isPlayer) return;
+    if (hitIdx >= playerSteps.length) return;
+    const t = setTimeout(() => {
+      Sound.playHit(playerSteps[hitIdx].damage, settings || ({} as Settings));
+      setHitIdx((i) => i + 1);
+    }, 300 + hitIdx * 250);
+    return () => clearTimeout(t);
+  }, [hitIdx, isPlayer, playerSteps, settings]);
+
   useEffect(() => {
     if (!isPlayer) setShakeKey(k => k + 1);
   }, [currentEnemyStep, isPlayer]);
