@@ -20,6 +20,8 @@ import {
   STARTER_POOL, availablePool, newlyUnlockedTrinket,
   type TrinketId,
 } from './trinkets';
+import { generateCardRewardOptions } from './cardRewards';
+import type { PlayerCard } from '../cards/types';
 
 // ── Round & boss schedule ──────────────────────────────────────────────
 
@@ -92,7 +94,7 @@ export interface DartliteRunPlayer {
 
 // ── Choices ───────────────────────────────────────────────────────────
 
-export type ChoiceKind = 'heal' | 'stat' | 'trinket';
+export type ChoiceKind = 'heal' | 'stat' | 'trinket' | 'card_new' | 'card_upgrade';
 
 export interface ChoiceOption {
   kind: ChoiceKind;
@@ -104,6 +106,9 @@ export interface ChoiceOption {
   amount?: number;
   // For 'trinket': the trinket id
   trinketId?: TrinketId;
+  // For 'card_new' / 'card_upgrade': the card id
+  cardId?: string;
+  cardName?: string;
 }
 
 // ── XP rewards ─────────────────────────────────────────────────────────
@@ -333,7 +338,22 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
 
 // ── Boon choices ──────────────────────────────────────────────────────
 
-export function generateChoices(run: DartliteRun): ChoiceOption[] {
+export function generateChoices(run: DartliteRun, ownedCards?: PlayerCard[], cardMode?: boolean): ChoiceOption[] {
+  if (cardMode && ownedCards !== undefined) {
+    const cardOptions = generateCardRewardOptions(ownedCards, 'coop');
+    const options: ChoiceOption[] = cardOptions.map(o => ({
+      kind: o.kind,
+      label: o.label,
+      desc: o.desc,
+      icon: o.icon,
+      cardId: o.cardId,
+      cardName: o.cardName,
+    }));
+    if (!options.some(o => o.kind === 'heal')) {
+      options[options.length - 1] = { kind: 'heal', label: 'Heal 20%', desc: 'Restore 20% of max HP.', icon: '❤️‍🩹' };
+    }
+    return options;
+  }
   const pool = run.pool.length ? run.pool : STARTER_POOL;
   const options: ChoiceOption[] = [
     {
