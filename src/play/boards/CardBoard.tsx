@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Game, GameRecord, Player, Settings } from '../../types';
 import { TEAM_COLORS, getTitleInfo, MODES } from '../../constants';
 import { recordFromGame, checkoutHint, leadTrailBadge, visitAvg, levelFromXP, getPlayerXPById } from '../../logic';
@@ -9,23 +9,53 @@ import { AttributeStrip, BadgeAvatar } from '../common';
 import { clearVisitPowerUpFlags, tickShield } from '../dart';
 import { runMilestones, awardXP, checkTitleUnlocks, awardBadges } from '../rewards';
 import { GameOver } from '../GameOver';
-import type { PlayerCard, CardDef } from '../../cards/types';
-import { cardDamage, cardRarityColor } from '../../cards/definitions';
-import { defaultPlayerCards, resolveCardDef } from '../../cards/deck';
+import type { PlayerCard, CardDef, CardPlayState } from '../../cards/types';
+import { cardDamage, cardRarityColor, cardTypeColor } from '../../cards/definitions';
+import {
+  defaultPlayerCards, resolveCardDef, initCardPlayState, startTurn,
+  playCardFromHand, endTurn, MAX_PLAYS_PER_TURN,
+} from '../../cards/deck';
 
 export function CardBoard({ game, setGame, settings, players, games, setGames, setPlayers, toast, music, onQuit, onGameOver, popups }: {
   game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[];
   setGames: (updater: any) => void; setPlayers: (updater: any) => void; toast: (m: string) => void;
   music: MusicEngine; onQuit: () => void; onGameOver: () => void; popups: PopupControls;
 }) {
-  const [, setSelectedCards] = useState<number[]>([]);
+  const [, force] = useState(0);
+
+  // Initialize per-player deck-builder state the first time CardBoard mounts.
+  // Each player's collection becomes their draw deck, shuffled.
+  useEffect(() => {
+    if (game.cardState && Object.keys(game.cardState).length === game.players.length) return;
+    const cardState: Record<string, CardPlayState> = {};
+    for (const gp of game.players) {
+      const playerData = players.find(pl => pl.id === gp.id);
+      const collection: PlayerCard[] = (playerData?.cards && playerData.cards.length > 0 ? playerData.cards : defaultPlayerCards());
+      cardState[gp.id] = initCardPlayState(collection);
+    }
+    setGame({ ...game, cardState });
+  }, [game.players.length]);
+
+  // Ensure the current player has a hand drawn for their turn.
+  useEffect(() => {
+    if (!game.cardState) return;
+    const p = game.players[game.turn];
+    const state = game.cardState[p.id];
+    if (!state) return;
+    if (state.hand.length === 0 && state.used.length === 0) {
+      const next = startTurn(state);
+      setGame({ ...game, cardState: { ...game.cardState, [p.id]: next } });
+    }
+  }, [game.turn, game.cardState]);
 
   if (game.finished) return <GameOver game={game} onNewGame={() => { setGame(null); onGameOver(); music.startContext('setup', settings); }} onViewStats={() => { setGame(null); onGameOver(); }} />;
 
   const p = game.players[game.turn];
   const playerData = players.find(pl => pl.id === p.id);
-  const playerCards: PlayerCard[] = (playerData?.cards && playerData.cards.length > 0 ? playerData.cards : defaultPlayerCards());
-  const availableCards = playerCards.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
+  const collection: PlayerCard[] = (playerData?.cards && playerData.cards.length > 0 ? playerData.cards : defaultPlayerCards());
+  const state: CardPlayState = game.cardState?.[p.id] ?? initCardPlayState(collection);
+  const handDefs = state.hand.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
+  const usedDefs = state.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
 
   const buffScored = game.darts.reduce((a, d) => a + d.value, 0);
   const projected = game.practice ? p.score + buffScored : p.score - buffScored;
@@ -34,15 +64,16 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
   const curTeam = game.teamMode ? (p.team ?? 0) : -1;
   const curTeamColor = game.teamMode ? TEAM_COLORS[curTeam % TEAM_COLORS.length] : p.color;
 
-  const playCard = (cardIdx: number) => {
-    const card = availableCards[cardIdx];
+  const playCard = (handIdx: number) => {
+    const card = handDefs[handIdx];
     if (!card) return;
     if (card.type !== 'damage') {
       toast(`${card.name}: ${card.desc}`);
       return;
     }
-    const maxDarts = 3;
-    if (game.darts.length >= maxDarts) { toast('3 darts already'); return; }
+    if (game.darts.length >= MAX_PLAYS_PER_TURN) { toast(`Only ${MAX_PLAYS_PER_TURN} cards per visit`); return; }
+    const updated = playCardFromHand(state, handIdx);
+    if (!updated) return;
     const base = card.base ?? 0;
     const mult = card.mult ?? 1;
     const isBull = base === 50;
@@ -50,8 +81,37 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     const label = card.name;
     const dart = { value, label, base, mult: isBull ? 2 : (base === 25 && value === 50 ? 2 : mult), isDouble: !!(isBull || (base === 25 && value === 50) || mult === 2), isOuter: false };
     Sound.play('dart', { score: value }, settings);
-    setGame({ ...game, darts: [...game.darts, dart], mult: 1 });
-    setSelectedCards(prev => [...prev, cardIdx]);
+    setGame({
+      ...game,
+      darts: [...game.darts, dart],
+      mult: 1,
+      cardState: { ...game.cardState, [p.id]: updated },
+    });
+    force(n => n + 1);
+  };
+
+  const undoCard = () => {
+    if (!game.darts.length) return;
+    const lastDart = game.darts[game.darts.length - 1];
+    // Find the matching used card (last played) and return it to the hand.
+    const usedIdx = [...state.used].reverse().findIndex(pc => {
+      const def = resolveCardDef(pc);
+      return def?.name === lastDart.label;
+    });
+    if (usedIdx === -1) {
+      setGame({ ...game, darts: game.darts.slice(0, -1) });
+      return;
+    }
+    const realIdx = state.used.length - 1 - usedIdx;
+    const card = state.used[realIdx];
+    const updated: CardPlayState = {
+      deck: state.deck,
+      hand: [...state.hand, card],
+      used: state.used.filter((_, i) => i !== realIdx),
+      graveyard: state.graveyard,
+    };
+    setGame({ ...game, darts: game.darts.slice(0, -1), cardState: { ...game.cardState, [p.id]: updated } });
+    force(n => n + 1);
   };
 
   const enterVisit = () => {
@@ -60,14 +120,16 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
     const cur = newPlayers[game.turn] as any;
 
+    // Move the current player's used pile into the graveyard (end of turn).
+    const endedState = endTurn(state);
+
     if (game.practice) {
       cur.score += scored;
       cur.visits.push({ darts: [...game.darts], scored, remaining: cur.score, leg: 1, date: new Date().toISOString() });
       Sound.play('enter', {}, settings);
-      const next = advanceTurn({ ...game, players: newPlayers, darts: [], mult: 1 });
+      const next = advanceTurn({ ...game, players: newPlayers, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
       setGame(next);
       runMilestones(cur, cur.score, scored, settings, popups, setPlayers, { ...game, players: newPlayers }, players, games);
-      setSelectedCards([]);
       return;
     }
 
@@ -85,7 +147,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         const legsToWin = Math.ceil(game.legsBestOf / 2);
         const teamWonMatch = teamLegs[cur.team!] >= (game.legsBestOf === 1 ? 1 : legsToWin);
         if (teamWonMatch) {
-          finishGame({ ...game, players: newPlayers, teamLegsWon: teamLegs, darts: [], mult: 1, winningTeam: cur.team }, null, null);
+          finishGame({ ...game, players: newPlayers, teamLegsWon: teamLegs, darts: [], mult: 1, winningTeam: cur.team, cardState: { ...game.cardState, [p.id]: endedState } }, null, null);
           return;
         }
         const nextLeg = game.leg + 1;
@@ -98,8 +160,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         const nextTurn = ros[nextTeam][cursors[nextTeam] % ros[nextTeam].length];
         Sound.play('win', {}, settings);
         toast(`Team ${cur.team! + 1} wins leg ${game.leg}`);
-        setGame({ ...game, players: newPlayers, leg: nextLeg, turn: nextTurn, teamTurn: nextTeam, teamLegsWon: teamLegs, roundStartTurn: nextTurn, checkedOutThisRound: [], thrownThisRound: [], darts: [], mult: 1 });
-        setSelectedCards([]);
+        setGame({ ...game, players: newPlayers, leg: nextLeg, turn: nextTurn, teamTurn: nextTeam, teamLegsWon: teamLegs, roundStartTurn: nextTurn, checkedOutThisRound: [], thrownThisRound: [], darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
         return;
       }
       const checkedOut = [...game.checkedOutThisRound, cur.id];
@@ -113,13 +174,12 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         if (playersLeft.length > 0 && canTie.length === playersLeft.length) {
           toast(`${cur.name} checked out! ${playersLeft.length} player${playersLeft.length > 1 ? 's' : ''} left to tie.`);
           Sound.play('win', {}, settings);
-          const next = advanceTurn({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, thrownThisRound: thrown, darts: [], mult: 1 });
+          const next = advanceTurn({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
           setGame(next);
-          setSelectedCards([]);
           return;
         }
-        if (checkedOut.length > 1) { finishGame({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, thrownThisRound: thrown, darts: [], mult: 1 }, null, checkedOut); return; }
-        finishGame({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, thrownThisRound: thrown, darts: [], mult: 1 }, cur, null);
+        if (checkedOut.length > 1) { finishGame({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } }, null, checkedOut); return; }
+        finishGame({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } }, cur, null);
         return;
       }
       const nextLeg = game.leg + 1;
@@ -128,8 +188,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       if (game.powerUpsEnabled) newPlayers[game.turn] = tickShield(newPlayers[game.turn]);
       Sound.play('win', {}, settings);
       toast(`${cur.name} wins leg ${game.leg}`);
-      setGame({ ...game, players: newPlayers, leg: nextLeg, turn: nextTurn, roundStartTurn: nextTurn, checkedOutThisRound: [], thrownThisRound: [], darts: [], mult: 1 });
-      setSelectedCards([]);
+      setGame({ ...game, players: newPlayers, leg: nextLeg, turn: nextTurn, roundStartTurn: nextTurn, checkedOutThisRound: [], thrownThisRound: [], darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
       return;
     }
 
@@ -138,9 +197,8 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       Sound.play('bust', {}, settings);
       toast('Bust!');
       const thrown = [...game.thrownThisRound, cur.id];
-      const next = advanceTurn({ ...game, players: newPlayers, thrownThisRound: thrown, darts: [], mult: 1 });
+      const next = advanceTurn({ ...game, players: newPlayers, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
       setGame(next);
-      setSelectedCards([]);
       return;
     }
 
@@ -149,10 +207,9 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     cur.visits.push({ darts: [...game.darts], scored, remaining, leg: game.leg, date: new Date().toISOString() });
     Sound.play('enter', {}, settings);
     const thrown = [...game.thrownThisRound, cur.id];
-    const next = advanceTurn({ ...game, players: newPlayers, thrownThisRound: thrown, darts: [], mult: 1 });
+    const next = advanceTurn({ ...game, players: newPlayers, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
     setGame(next);
     runMilestones(cur, remaining, scored, settings, popups, setPlayers, { ...game, players: newPlayers }, players, games);
-    setSelectedCards([]);
   };
 
   const advanceTurn = (g: Game): Game => {
@@ -238,9 +295,9 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     setGame(finished);
   };
 
-  const damageCards = availableCards.filter(c => c.type === 'damage');
-  const spellCards = availableCards.filter(c => c.type === 'spell');
-  const utilityCards = availableCards.filter(c => c.type === 'utility');
+  const damageCards = handDefs.filter(c => c.type === 'damage');
+  const spellCards = handDefs.filter(c => c.type === 'spell');
+  const utilityCards = handDefs.filter(c => c.type === 'utility');
 
   return (
     <div className="view-noscroll">
@@ -261,9 +318,9 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         <div className="pc-remaining" style={{ color: projected < 0 ? 'var(--danger)' : 'var(--text)' }}>{projected}</div>
         <div className="checkout-hint center">{checkoutHint(game.practice ? null : projected, game.doubleOut, game.practice)}</div>
         <div className="pc-slots">
-          {Array.from({ length: 3 }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
+          {Array.from({ length: MAX_PLAYS_PER_TURN }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
         </div>
-        <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{buffScored}</b> · Cards played: <b style={{ color: 'var(--text)' }}>{game.darts.length}</b></div>
+        <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{buffScored}</b> · Cards played: <b style={{ color: 'var(--text)' }}>{game.darts.length}</b>/{MAX_PLAYS_PER_TURN}</div>
         <AttributeStrip playerId={p.id} players={players} mode={game.mode} />
       </div>
 
@@ -302,15 +359,58 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       <div className="play-input">
         <div className="pad-card">
           <div className="muted small" style={{ marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Your Hand — {p.name}</div>
-          <CardSection title="Damage" cards={damageCards} onPlay={playCard} disabled={game.darts.length >= 3} typeColor="#ef4444" />
+          <PileBar deckCount={state.deck.length} handCount={state.hand.length} usedCount={state.used.length} graveyardCount={state.graveyard.length} />
+          <CardSection title="Damage" cards={damageCards} onPlay={playCard} disabled={game.darts.length >= MAX_PLAYS_PER_TURN} typeColor="#ef4444" />
           {spellCards.length > 0 && <CardSection title="Spells" cards={spellCards} onPlay={playCard} disabled={false} typeColor="#3b82f6" />}
           {utilityCards.length > 0 && <CardSection title="Utility" cards={utilityCards} onPlay={playCard} disabled={false} typeColor="#3b82f6" />}
+          {usedDefs.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div className="muted small" style={{ marginBottom: 4, fontWeight: 600 }}>Used this turn (cannot replay)</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', opacity: 0.55 }}>
+                {usedDefs.map((card, idx) => (
+                  <div key={idx} style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                    padding: '6px 8px', borderRadius: 8, minWidth: 52,
+                    background: 'var(--bg-3)', border: `1px solid ${cardRarityColor(card.rarity)}`,
+                  }}>
+                    <span style={{ fontSize: 18 }}>{card.icon}</span>
+                    <span style={{ fontSize: 10, fontWeight: 800 }}>{card.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="row" style={{ gap: 8, marginTop: 8 }}>
-            <button className="btn block ghost" onClick={() => { if (game.darts.length) { setGame({ ...game, darts: game.darts.slice(0, -1) }); setSelectedCards(prev => prev.slice(0, -1)); } }}>↶ Undo card</button>
+            <button className="btn block ghost" onClick={undoCard}>↶ Undo card</button>
             <button className="btn block primary" onClick={enterVisit}>Enter visit</button>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PileBar({ deckCount, handCount, usedCount, graveyardCount }: { deckCount: number; handCount: number; usedCount: number; graveyardCount: number }) {
+  const piles: { label: string; value: number; icon: string }[] = [
+    { label: 'Deck', value: deckCount, icon: '🂠' },
+    { label: 'Hand', value: handCount, icon: '✋' },
+    { label: 'Used', value: usedCount, icon: '🗑️' },
+    { label: 'Graveyard', value: graveyardCount, icon: '⚰️' },
+  ];
+  return (
+    <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+      {piles.map(pl => (
+        <div key={pl.label} style={{
+          display: 'flex', alignItems: 'center', gap: 4,
+          padding: '4px 8px', borderRadius: 6,
+          background: 'var(--bg-3)', border: '1px solid var(--border)',
+          fontSize: 11,
+        }}>
+          <span>{pl.icon}</span>
+          <span className="muted">{pl.label}</span>
+          <b style={{ color: 'var(--text)' }}>{pl.value}</b>
+        </div>
+      ))}
     </div>
   );
 }
@@ -332,7 +432,11 @@ function CardSection({ title, cards, onPlay, disabled, typeColor }: {
               border: `1px solid ${cardRarityColor(card.rarity)}`,
               cursor: 'pointer', color: 'inherit', textAlign: 'center',
               opacity: disabled && card.type === 'damage' ? 0.5 : 1,
-            }}>
+              transition: 'transform 0.1s ease, box-shadow 0.1s ease',
+            }}
+            onMouseEnter={e => { if (!(disabled && card.type === 'damage')) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 4px 12px ${cardTypeColor(card.type)}33`; } }}
+            onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
+          >
             <span style={{ fontSize: 22 }}>{card.icon}</span>
             <span style={{ fontSize: 11, fontWeight: 800 }}>{card.name}</span>
             <span className="muted" style={{ fontSize: 9, lineHeight: 1.2 }}>{card.type === 'damage' ? `${cardDamage(card)} dmg` : card.desc.slice(0, 30)}</span>

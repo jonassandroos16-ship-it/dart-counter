@@ -1,6 +1,6 @@
 import type { PlayerCoopProgress, PlayerCampaignProgress } from './campaign/types';
 import type { PlayerDartliteStats } from './dartlite/stats';
-import type { PlayerCard } from './cards/types';
+import type { PlayerCard, CardPlayState } from './cards/types';
 
 export type PlayerSoundId = 'none' | 'hero' | 'villain' | 'cyborg' | 'mystic' | 'beast' | 'champion';
 
@@ -134,6 +134,7 @@ export interface Game {
   teamPlayerCursor?: number[];  // per-team index into its player rotation order
   winningTeam?: number | null;  // team that won (for team mode)
   powerUpsEnabled?: boolean;    // true when power ups are active for this match
+  cardState?: Record<string, CardPlayState>; // per-player deck-builder state (card mode)
 }
 
 export interface GameRecord {
