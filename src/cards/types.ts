@@ -1,5 +1,5 @@
 export type CardType = 'damage' | 'spell' | 'utility';
-export type CardMode = 'competitive' | 'coop';
+export type CardMode = 'competitive' | 'coop' | 'both';
 export type CardClass = 'warrior' | 'priest' | 'rogue' | 'any';
 
 export interface CardDef {

@@ -1,4 +1,4 @@
-import type { CardDef, CardMode } from './types';
+import type { CardDef } from './types';
 
 // ── Card Definitions ─────────────────────────────────────────────────
 //
@@ -139,7 +139,7 @@ export function cardTypeColor(type: CardDef['type']): string {
 export function cardsByLevel(cards: CardDef[]): Map<number, CardDef[]> {
   const map = new Map<number, CardDef[]>();
   for (const c of cards) {
-    const lvl = c.levelRequired;
+    const lvl = c.levelRequired ?? 1;
     if (!map.has(lvl)) map.set(lvl, []);
     map.get(lvl)!.push(c);
   }
