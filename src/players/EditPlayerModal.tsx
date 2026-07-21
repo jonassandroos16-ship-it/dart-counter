@@ -8,8 +8,9 @@ import { BadgesTab } from './BadgesTab';
 import { AttributesTab } from './AttributesTab';
 import { PowerUpsTab } from './PowerUpsTab';
 import { ClassTab } from './ClassTab';
+import { TrinketsTab } from './TrinketsTab';
 
-type TabId = 'basic' | 'titles' | 'badges' | 'sound' | 'attributes' | 'powerups' | 'class';
+type TabId = 'basic' | 'titles' | 'badges' | 'sound' | 'attributes' | 'powerups' | 'class' | 'trinkets';
 
 const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: 'basic', icon: '👤', label: 'Basic' },
@@ -19,6 +20,7 @@ const TABS: { id: TabId; icon: string; label: string }[] = [
   { id: 'attributes', icon: '📊', label: 'Stats' },
   { id: 'powerups', icon: '⚡', label: 'Power-Ups' },
   { id: 'class', icon: '🛡️', label: 'Class' },
+  { id: 'trinkets', icon: '🔮', label: 'Trinkets' },
 ];
 
 export function EditPlayerModal({ player, players, isNew, games, settings, onClose, setPlayers, toast }: {
@@ -110,6 +112,10 @@ export function EditPlayerModal({ player, players, isNew, games, settings, onClo
 
       {tab === 'class' && (
         <ClassTab player={livePlayer} setPlayers={setPlayers} toast={toast} />
+      )}
+
+      {tab === 'trinkets' && (
+        <TrinketsTab player={livePlayer} />
       )}
 
       <div className="row" style={{ gap: 10, marginTop: 16 }}>

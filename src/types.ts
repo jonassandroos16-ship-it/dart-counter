@@ -1,4 +1,5 @@
 import type { PlayerCoopProgress, PlayerCampaignProgress } from './campaign/types';
+import type { PlayerDartliteStats } from './dartlite/stats';
 
 export type PlayerSoundId = 'none' | 'hero' | 'villain' | 'cyborg' | 'mystic' | 'beast' | 'champion';
 
@@ -39,6 +40,9 @@ export interface Player {
   // cleared levels and unlocked power-up rewards, so a level is only
   // "beaten for everyone" when every party member has cleared it.
   campaignProgress?: PlayerCampaignProgress;
+  // Per-player Dartlite (rogue-lite) stats. Persist across runs; trinkets
+  // and run-time attributes do NOT carry over.
+  dartliteStats?: PlayerDartliteStats;
 }
 
 export interface Dart {
