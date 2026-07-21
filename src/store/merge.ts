@@ -1,5 +1,20 @@
 import type { CustomTitle, GameRecord, Player, Settings } from '../types';
+import type { PlayerCard } from '../cards/types';
 import { uid } from './format';
+
+function mergeCards(a: PlayerCard[] | undefined, b: PlayerCard[] | undefined): PlayerCard[] | undefined {
+  if (!a && !b) return undefined;
+  const map = new Map<string, PlayerCard>();
+  for (const c of [...(a || []), ...(b || [])]) {
+    const existing = map.get(c.cardId);
+    if (!existing) {
+      map.set(c.cardId, { ...c });
+    } else {
+      map.set(c.cardId, { cardId: c.cardId, upgraded: existing.upgraded || c.upgraded });
+    }
+  }
+  return Array.from(map.values());
+}
 
 export interface BackupShape {
   players?: Player[];
@@ -38,6 +53,7 @@ function mergePlayers(existing: Player[], incoming: Player[]): Player[] {
         unlockedTitles: Array.from(new Set([...(idMatch.unlockedTitles || []), ...(p.unlockedTitles || [])])),
         unlockedBadges: Array.from(new Set([...(idMatch.unlockedBadges || []), ...(p.unlockedBadges || [])])),
         badgeCounts: mergeBadgeCounts(idMatch.badgeCounts, p.badgeCounts),
+        cards: mergeCards(idMatch.cards, p.cards),
       });
       byKey.set(matchPlayerKey(p), byId.get(p.id)!);
       continue;
@@ -53,6 +69,7 @@ function mergePlayers(existing: Player[], incoming: Player[]): Player[] {
         unlockedTitles: Array.from(new Set([...(keyMatch.unlockedTitles || []), ...(p.unlockedTitles || [])])),
         unlockedBadges: Array.from(new Set([...(keyMatch.unlockedBadges || []), ...(p.unlockedBadges || [])])),
         badgeCounts: mergeBadgeCounts(keyMatch.badgeCounts, p.badgeCounts),
+        cards: mergeCards(keyMatch.cards, p.cards),
       });
       continue;
     }

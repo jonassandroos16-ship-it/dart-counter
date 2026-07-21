@@ -2,7 +2,7 @@ import type { Settings } from '../types';
 
 export function defaultSettings(): Settings {
   return {
-    theme: 'dark', accent: '#22c55e', confirmReset: true, sound: true, music: true,
+    theme: 'dark', accent: '#22c55e', gameMode: 'dartboard', confirmReset: true, sound: true, music: true,
     musicStartTrack: 'start_bullseye_anthem', musicSetupTrack: 'setup_horizon', musicMatchTrack: 'match_drive', musicCoopTrack: 'coop_siege',
     sfxVolume: 0.9, musicVolume: 0.9,
     hitSoundPack: 'thud', clickSound: 'tick', clickVolume: 0.6,
