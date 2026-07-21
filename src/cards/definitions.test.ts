@@ -5,9 +5,10 @@ describe('Card Definitions', () => {
   it('has cards with valid types', () => {
     for (const c of CARD_DEFS) {
       expect(['damage', 'spell', 'utility']).toContain(c.type);
-      expect(['competitive', 'coop']).toContain(c.mode);
+      expect(['competitive', 'coop', 'both']).toContain(c.mode);
       expect(['warrior', 'priest', 'rogue', 'any']).toContain(c.class);
       expect(['common', 'rare', 'epic']).toContain(c.rarity);
+      expect(c.levelRequired).toBeGreaterThanOrEqual(1);
     }
   });
 
@@ -17,9 +18,12 @@ describe('Card Definitions', () => {
     expect(CARD_DEFS.some(c => c.type === 'utility')).toBe(true);
   });
 
-  it('has both competitive and coop cards', () => {
-    expect(CARD_DEFS.some(c => c.mode === 'competitive')).toBe(true);
-    expect(CARD_DEFS.some(c => c.mode === 'coop')).toBe(true);
+  it('has cards for both competitive and coop modes', () => {
+    const comp = cardsForMode('competitive');
+    const coop = cardsForMode('coop');
+    expect(comp.length).toBeGreaterThan(0);
+    expect(coop.length).toBeGreaterThan(0);
+    expect(comp.length).toBe(coop.length);
   });
 
   it('getCard returns definition by id', () => {
@@ -36,7 +40,7 @@ describe('Card Definitions', () => {
   it('cardDamage computes base * mult', () => {
     expect(cardDamage(getCard('dmg_t20')!)).toBe(60);
     expect(cardDamage(getCard('dmg_d20')!)).toBe(40);
-    expect(cardDamage(getCard('dmg_miss')!)).toBe(0);
+    expect(cardDamage(getCard('dmg_s20')!)).toBe(20);
   });
 
   it('cardDamage returns 0 for non-damage cards', () => {
@@ -53,20 +57,20 @@ describe('Card Definitions', () => {
   });
 
   it('upgradedCardDef increases magnitude by 50%', () => {
-    const base = getCard('spell_coop_heal')!;
+    const base = getCard('spell_heal')!;
     const upgraded = upgradedCardDef(base);
     expect(upgraded.magnitude).toBe(120);
   });
 
-  it('cardsForMode filters by mode', () => {
+  it('cardsForMode filters by mode (both includes all)', () => {
     const comp = cardsForMode('competitive');
     const coop = cardsForMode('coop');
-    expect(comp.every(c => c.mode === 'competitive')).toBe(true);
-    expect(coop.every(c => c.mode === 'coop')).toBe(true);
+    expect(comp.every(c => c.mode === 'competitive' || c.mode === 'both')).toBe(true);
+    expect(coop.every(c => c.mode === 'coop' || c.mode === 'both')).toBe(true);
   });
 
   it('cardsForClass filters by class and includes any', () => {
-    const warriorCards = cardsForClass('warrior', 'coop');
+    const warriorCards = cardsForClass('warrior', 'competitive');
     expect(warriorCards.every(c => c.class === 'warrior' || c.class === 'any')).toBe(true);
     expect(warriorCards.length).toBeGreaterThan(0);
   });
@@ -77,9 +81,22 @@ describe('Card Definitions', () => {
     expect(cardRarityColor('epic')).toBe('#f59e0b');
   });
 
-  it('cardTypeColor returns red for damage, blue for spell and utility', () => {
+  it('cardTypeColor returns red for damage, blue for spell, green for utility', () => {
     expect(cardTypeColor('damage')).toBe('#ef4444');
     expect(cardTypeColor('spell')).toBe('#3b82f6');
-    expect(cardTypeColor('utility')).toBe('#3b82f6');
+    expect(cardTypeColor('utility')).toBe('#10b981');
+  });
+
+  it('does not include a Miss card', () => {
+    expect(CARD_DEFS.find(c => c.id === 'dmg_miss')).toBeUndefined();
+    expect(CARD_DEFS.find(c => c.name === 'Miss')).toBeUndefined();
+  });
+
+  it('has level-based card unlocks', () => {
+    expect(CARD_DEFS.some(c => c.levelRequired === 1)).toBe(true);
+    expect(CARD_DEFS.some(c => c.levelRequired === 2)).toBe(true);
+    expect(CARD_DEFS.some(c => c.levelRequired === 3)).toBe(true);
+    expect(CARD_DEFS.some(c => c.levelRequired === 4)).toBe(true);
+    expect(CARD_DEFS.some(c => c.levelRequired === 5)).toBe(true);
   });
 });

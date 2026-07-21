@@ -4,14 +4,21 @@ import {
   resolveCardDef, cardsForLevelUp, randomCardReward, randomCardUpgradeReward,
   deckSize, isDeckValid,
 } from './deck';
+import { CARD_DEFS } from './definitions';
+
 describe('Deck Management', () => {
   it('defaultPlayerCards returns 4 starter cards', () => {
     const cards = defaultPlayerCards();
     expect(cards).toHaveLength(4);
-    expect(hasCard(cards, 'dmg_t20')).toBe(true);
-    expect(hasCard(cards, 'dmg_t19')).toBe(true);
     expect(hasCard(cards, 'dmg_s20')).toBe(true);
-    expect(hasCard(cards, 'dmg_miss')).toBe(true);
+    expect(hasCard(cards, 'dmg_s19')).toBe(true);
+    expect(hasCard(cards, 'dmg_d20')).toBe(true);
+    expect(hasCard(cards, 'dmg_outer_bull')).toBe(true);
+  });
+
+  it('does not include a Miss card by default', () => {
+    const cards = defaultPlayerCards();
+    expect(hasCard(cards, 'dmg_miss')).toBe(false);
   });
 
   it('addCard adds a new card without duplicating', () => {
@@ -25,42 +32,44 @@ describe('Deck Management', () => {
 
   it('removeCard removes a card', () => {
     const cards = defaultPlayerCards();
-    const updated = removeCard(cards, 'dmg_miss');
-    expect(hasCard(updated, 'dmg_miss')).toBe(false);
+    const updated = removeCard(cards, 'dmg_s20');
+    expect(hasCard(updated, 'dmg_s20')).toBe(false);
     expect(updated).toHaveLength(3);
   });
 
   it('upgradeCard marks a card as upgraded', () => {
     const cards = defaultPlayerCards();
-    const updated = upgradeCard(cards, 'dmg_t20');
-    const t20 = updated.find(c => c.cardId === 'dmg_t20');
-    expect(t20?.upgraded).toBe(true);
+    const updated = upgradeCard(cards, 'dmg_s20');
+    const s20 = updated.find(c => c.cardId === 'dmg_s20');
+    expect(s20?.upgraded).toBe(true);
   });
 
   it('canUpgradeCard returns true for non-upgraded cards', () => {
     const cards = defaultPlayerCards();
-    expect(canUpgradeCard(cards, 'dmg_t20')).toBe(true);
-    const upgraded = upgradeCard(cards, 'dmg_t20');
-    expect(canUpgradeCard(upgraded, 'dmg_t20')).toBe(false);
+    expect(canUpgradeCard(cards, 'dmg_s20')).toBe(true);
+    const upgraded = upgradeCard(cards, 'dmg_s20');
+    expect(canUpgradeCard(upgraded, 'dmg_s20')).toBe(false);
   });
 
   it('resolveCardDef returns upgraded def when upgraded', () => {
     const cards = upgradeCard(defaultPlayerCards(), 'dmg_t20');
-    const def = resolveCardDef(cards.find(c => c.cardId === 'dmg_t20')!);
+    const withT20 = addCard(defaultPlayerCards(), 'dmg_t20');
+    const upgraded = upgradeCard(withT20, 'dmg_t20');
+    const def = resolveCardDef(upgraded.find(c => c.cardId === 'dmg_t20')!);
     expect(def?.upgraded).toBe(true);
     expect(def?.name).toBe('Triple 20+');
   });
 
   it('resolveCardDef returns base def when not upgraded', () => {
     const cards = defaultPlayerCards();
-    const def = resolveCardDef(cards.find(c => c.cardId === 'dmg_t20')!);
+    const def = resolveCardDef(cards.find(c => c.cardId === 'dmg_s20')!);
     expect(def?.upgraded).toBeUndefined();
-    expect(def?.name).toBe('Triple 20');
+    expect(def?.name).toBe('Single 20');
   });
 
   it('cardsForLevelUp returns cards available for level and class', () => {
     const owned = defaultPlayerCards();
-    const available = cardsForLevelUp('warrior', 1, 'competitive', owned);
+    const available = cardsForLevelUp('warrior', 2, 'competitive', owned);
     expect(available.length).toBeGreaterThan(0);
     expect(available.every(c => !hasCard(owned, c.id))).toBe(true);
   });
@@ -80,7 +89,7 @@ describe('Deck Management', () => {
   });
 
   it('randomCardReward returns empty when all cards owned', () => {
-    const allOwned = CARD_DEFS_ALL.map(c => ({ cardId: c.id, upgraded: false }));
+    const allOwned = CARD_DEFS.map(c => ({ cardId: c.id, upgraded: false }));
     const rewards = randomCardReward(allOwned, 'competitive', 3);
     expect(rewards).toHaveLength(0);
   });
@@ -109,7 +118,3 @@ describe('Deck Management', () => {
     expect(isDeckValid([defaultPlayerCards()[0]])).toBe(false);
   });
 });
-
-// Helper: all card defs as PlayerCard[]
-import { CARD_DEFS } from './definitions';
-const CARD_DEFS_ALL = CARD_DEFS;

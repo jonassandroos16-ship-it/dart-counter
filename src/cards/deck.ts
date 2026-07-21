@@ -1,5 +1,5 @@
 import type { CardDef, PlayerCard } from './types';
-import { CARD_DEFS, cardsForClass, getCard, upgradedCardDef } from './definitions';
+import { CARD_DEFS, cardsForClass, getCard, upgradedCardDef, cardMatchesMode } from './definitions';
 import type { CoopClassId } from '../campaign/types';
 
 // ── Deck management ────────────────────────────────────────────────────
@@ -9,12 +9,12 @@ import type { CoopClassId } from '../campaign/types';
 // card can be upgraded once.
 
 export function defaultPlayerCards(): PlayerCard[] {
-  // Starter cards: one T20, one T19, one Single 20, one Miss
+  // Starter cards: one S20, one S19, one D20, one Outer Bull
   return [
-    { cardId: 'dmg_t20', upgraded: false },
-    { cardId: 'dmg_t19', upgraded: false },
     { cardId: 'dmg_s20', upgraded: false },
-    { cardId: 'dmg_miss', upgraded: false },
+    { cardId: 'dmg_s19', upgraded: false },
+    { cardId: 'dmg_d20', upgraded: false },
+    { cardId: 'dmg_outer_bull', upgraded: false },
   ];
 }
 
@@ -67,7 +67,7 @@ export function cardsForLevelUp(
 ): CardDef[] {
   const classId = cls || 'any';
   const pool = cardsForClass(classId as 'warrior' | 'priest' | 'rogue' | 'any', mode);
-  return pool.filter(c => (c.levelRequired ?? 1) <= level && !hasCard(ownedCards, c.id));
+  return pool.filter(c => c.levelRequired <= level && !hasCard(ownedCards, c.id));
 }
 
 export function cardsForLevelUpCoop(
@@ -86,7 +86,7 @@ export function cardsForLevelUpCompetitive(
   return cardsForLevelUp(cls, level, 'competitive', ownedCards);
 }
 
-// ── Dartlite card rewards ──────────────────────────────────────────────
+// ── Dartlite card rewards ─────────────────────────────────────────────
 //
 // In dartlite mode, after winning a round, the player can choose 1 of 3
 // randomly available cards. Cards can also be upgraded as a separate reward.
@@ -96,7 +96,7 @@ export function randomCardReward(
   mode: 'competitive' | 'coop',
   count: number = 3,
 ): CardDef[] {
-  const pool = CARD_DEFS.filter(c => c.mode === mode && !hasCard(ownedCards, c.id));
+  const pool = CARD_DEFS.filter(c => cardMatchesMode(c, mode) && !hasCard(ownedCards, c.id));
   if (pool.length === 0) return [];
   const shuffled = [...pool].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, Math.min(count, pool.length));
