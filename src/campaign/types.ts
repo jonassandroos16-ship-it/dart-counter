@@ -198,6 +198,10 @@ export interface CoopPlayer {
   // Snapshot of the player's equipped class id (e.g. 'warrior') for this
   // battle. Used by the engine to apply class-based passive bonuses.
   classId?: CoopClassId | null;
+  // Per-player cumulative kills and damage for this battle (for display in
+  // Dartlite progress popups). Incremented in addDart as darts resolve.
+  kills?: number;
+  damageDealt?: number;
 }
 
 export interface CampaignDart {
