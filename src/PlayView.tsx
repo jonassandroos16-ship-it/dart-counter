@@ -213,6 +213,7 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
   if (dartliteStage === 'battle' && dartliteRun) {
     return <DartliteBattle
       run={dartliteRun}
+      players={players}
       settings={settings}
       music={music}
       onBattleEnd={(won) => {
