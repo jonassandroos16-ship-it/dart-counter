@@ -4,6 +4,7 @@ import { getTitleInfo } from '../constants';
 import { initials } from '../store';
 import { getBadgeInfo, getBadgeContext, buildCoopBadgeCtx } from '../badges';
 import { getPowerUpInfo } from '../powerups';
+import { getCoopClass, defaultCoopProgress } from '../campaign/engine';
 
 export function PlayerCard({ player, games, settings, customTitles, onEdit, onDelete }: {
   player: Player;
@@ -25,6 +26,7 @@ export function PlayerCard({ player, games, settings, customTitles, onEdit, onDe
   const attrs = p.attributes || defaultAttributes(settings);
   const pwr = p.powerUps || defaultPowerUps(settings);
   const activePu = getPowerUpInfo(pwr.active);
+  const coopClass = getCoopClass((p.coopProgress || defaultCoopProgress()).classId);
 
   return (
     <div className="card player-card" style={{ padding: 12, borderLeft: `5px solid ${p.color}`, background: `linear-gradient(135deg, color-mix(in srgb, ${p.color} 10%, var(--bg-2)) 0%, var(--bg-2) 60%)` }}>
@@ -50,6 +52,7 @@ export function PlayerCard({ player, games, settings, customTitles, onEdit, onDe
             {ti ? <span className="title-badge">{ti.icon || ''} {ti.name}</span> : null}
             {bi ? <span className="title-badge" title={bi.desc}>{bi.icon} {bi.name}</span> : null}
             {activePu ? <span className="title-badge" title={activePu.desc}>{activePu.icon} {activePu.name}</span> : null}
+            {coopClass ? <span className="title-badge" title={coopClass.desc}>{coopClass.icon} {coopClass.name}</span> : null}
             {p.developerMode ? <span className="xp-pill" title="Developer mode — bonus points for testing">DEV</span> : null}
           </div>
           <div className="muted small">{s.games} games ({s.competitiveGames} competitive) · {s.avg.toFixed(1)} avg · {s.n180} × 180 · {xp.xp} XP · {(xp.unlockedBadges || []).length} badges · {totalBadgeEarns} earned</div>
