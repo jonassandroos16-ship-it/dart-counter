@@ -1,5 +1,6 @@
 import type { PlayerCoopProgress, PlayerCampaignProgress } from './campaign/types';
 import type { PlayerDartliteStats } from './dartlite/stats';
+import type { PlayerCard } from './cards/types';
 
 export type PlayerSoundId = 'none' | 'hero' | 'villain' | 'cyborg' | 'mystic' | 'beast' | 'champion';
 
@@ -43,6 +44,8 @@ export interface Player {
   // Per-player Dartlite (rogue-lite) stats. Persist across runs; trinkets
   // and run-time attributes do NOT carry over.
   dartliteStats?: PlayerDartliteStats;
+  // Per-player card collection for card-based mode.
+  cards?: PlayerCard[];
 }
 
 export interface Dart {
@@ -214,9 +217,12 @@ export interface PowerUpScalingConfig {
 export type HitSoundPackId = 'thud' | 'board' | 'punch' | 'arcade';
 export type ClickSoundId = 'none' | 'tick' | 'pop' | 'tap';
 
+export type GameMode = 'dartboard' | 'cards';
+
 export interface Settings {
   theme: 'dark' | 'light';
   accent: string;
+  gameMode: GameMode;
   confirmReset: boolean;
   sound: boolean;
   music: boolean;
