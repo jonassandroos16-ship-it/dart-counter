@@ -42,6 +42,16 @@ export interface DartliteRunStats {
   trinketsCollected: TrinketId[];
 }
 
+// Per-player run stats tracked across the whole run (kills, damage, rewards
+// chosen, trinkets acquired). Used by the between-round progress popup.
+export interface DartlitePlayerRunStats {
+  playerId: string;
+  kills: number;
+  damageDealt: number;
+  rewards: ChoiceOption[];     // every reward this player has chosen so far
+  trinkets: TrinketId[];        // trinkets this player personally holds
+}
+
 export interface DartliteRun {
   round: number;              // current round (1-based; 0 = not started)
   playerIds: string[];
@@ -51,9 +61,16 @@ export interface DartliteRun {
   trinkets: TrinketId[];      // trinkets the party has collected this run
   pool: TrinketId[];          // currently available trinket pool
   stats: DartliteRunStats;
+  playerStats: DartlitePlayerRunStats[]; // per-player cumulative run stats
   phase: 'setup' | 'battle' | 'choice' | 'reward' | 'gameover';
   battle: CampaignBattleState | null;
   pendingChoice: ChoiceOption[] | null;
+  // Index of the player currently picking their personal reward. Advances
+  // one-by-one through the party during the 'choice' phase.
+  choicePlayerIdx: number;
+  // Each player's chosen reward for the current round. Length matches
+  // playerIds; filled in as choicePlayerIdx advances. Reset per round.
+  playerChoices: (ChoiceOption | null)[];
   lastUnlockedTrinket: TrinketId | null; // shown in a popup after boss/mini-boss
   log: string[];
 }
@@ -143,9 +160,18 @@ export function startRun(players: Player[], settings: Settings): DartliteRun {
       xpGained: 0,
       trinketsCollected: [],
     },
+    playerStats: players.map(p => ({
+      playerId: p.id,
+      kills: 0,
+      damageDealt: 0,
+      rewards: [],
+      trinkets: [],
+    })),
     phase: 'setup',
     battle: null,
     pendingChoice: null,
+    choicePlayerIdx: 0,
+    playerChoices: players.map(() => null),
     lastUnlockedTrinket: null,
     log: [],
   };
@@ -233,7 +259,7 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
       }
     }
   }
-  return { ...run, round, phase: 'battle', battle, lastUnlockedTrinket: null };
+  return { ...run, round, phase: 'battle', battle, lastUnlockedTrinket: null, choicePlayerIdx: 0, playerChoices: run.playerIds.map(() => null) };
 }
 
 // ── Resolve a battle outcome ──────────────────────────────────────────
@@ -271,14 +297,27 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
       xpGained: run.stats.xpGained + xp,
     };
     const log = [...run.log, `Round ${run.round} cleared — +${xp} XP`];
+    // Accumulate per-player kills/damage from this battle into run stats.
+    const playerStats = run.playerStats.map(ps => {
+      const bp = battle.players.find(p => p.id === ps.playerId);
+      if (!bp) return ps;
+      return {
+        ...ps,
+        kills: ps.kills + (bp.kills ?? 0),
+        damageDealt: ps.damageDealt + (bp.damageDealt ?? 0),
+      };
+    });
     return {
       ...run,
       runPlayers,
       pool: newPool,
       stats,
+      playerStats,
       phase: 'choice',
       battle: null,
       pendingChoice: generateChoices(run),
+      choicePlayerIdx: 0,
+      playerChoices: run.playerIds.map(() => null),
       lastUnlockedTrinket: unlocked,
       log,
     };
@@ -323,6 +362,64 @@ export function generateChoices(run: DartliteRun): ChoiceOption[] {
   return options;
 }
 
+// Apply a single player's personal reward choice. Only that player receives
+// the benefit. When every player has chosen, the run moves to the 'reward'
+// phase so the UI can show the progress popup before the next round starts.
+export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): DartliteRun {
+  const idx = run.choicePlayerIdx;
+  let runPlayers = run.runPlayers;
+  let trinkets = run.trinkets;
+  let stats = run.stats;
+  const playerStats = run.playerStats.map(ps =>
+    ps.playerId === run.playerIds[idx]
+      ? { ...ps, rewards: [...ps.rewards, option] }
+      : ps
+  );
+
+  if (option.kind === 'heal') {
+    const rp = runPlayers[idx];
+    const healAmt = Math.round(rp.maxHp * 0.2);
+    runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, hp: Math.min(p.maxHp, p.hp + healAmt) } : p);
+  } else if (option.kind === 'stat') {
+    const rp = runPlayers[idx];
+    const statRoll = Math.random();
+    if (statRoll < 0.4) {
+      runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, maxHp: p.maxHp + 20, hp: p.hp + 20, bonusHealth: p.bonusHealth + 20 } : p);
+    } else if (statRoll < 0.7) {
+      runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, armor: p.armor + 3, bonusArmor: p.bonusArmor + 3 } : p);
+    } else {
+      runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, power: p.power + 4, bonusPower: p.bonusPower + 4 } : p);
+    }
+  } else if (option.kind === 'trinket') {
+    const pool = run.pool.length ? run.pool : STARTER_POOL;
+    const id = pick(pool) as TrinketId;
+    runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, trinkets: [...p.trinkets, id] } : p);
+    trinkets = [...trinkets, id];
+    stats = { ...stats, trinketsCollected: [...stats.trinketsCollected, id] };
+    const psIdx = playerStats.findIndex(ps => ps.playerId === run.playerIds[idx]);
+    if (psIdx >= 0) playerStats[psIdx] = { ...playerStats[psIdx], trinkets: [...playerStats[psIdx].trinkets, id] };
+  }
+
+  const playerChoices = run.playerChoices.map((c, i) => i === idx ? option : c);
+  const nextIdx = idx + 1;
+  const allChosen = nextIdx >= run.playerIds.length;
+
+  return {
+    ...run,
+    runPlayers,
+    trinkets,
+    stats,
+    playerStats,
+    playerChoices,
+    choicePlayerIdx: allChosen ? idx : nextIdx,
+    pendingChoice: allChosen ? null : run.pendingChoice,
+    lastUnlockedTrinket: run.lastUnlockedTrinket,
+    phase: allChosen ? 'reward' : 'choice',
+  };
+}
+
+// Legacy single-choice API kept for backwards compat / tests. Applies one
+// choice to the whole party and moves to 'setup' (next round ready).
 export function applyChoice(run: DartliteRun, option: ChoiceOption): DartliteRun {
   let runPlayers = run.runPlayers;
   let trinkets = run.trinkets;
@@ -332,7 +429,6 @@ export function applyChoice(run: DartliteRun, option: ChoiceOption): DartliteRun
   if (option.kind === 'heal') {
     const totalMax = runPlayers.reduce((a, p) => a + p.maxHp, 0);
     const healTotal = Math.round(totalMax * 0.2);
-    // Distribute heal proportionally.
     let remaining = healTotal;
     runPlayers = runPlayers.map(p => {
       const share = Math.round((p.maxHp / totalMax) * healTotal);
@@ -343,19 +439,15 @@ export function applyChoice(run: DartliteRun, option: ChoiceOption): DartliteRun
   } else if (option.kind === 'stat') {
     const statRoll = Math.random();
     if (statRoll < 0.4) {
-      // +20 HP to all
       runPlayers = runPlayers.map(p => ({ ...p, maxHp: p.maxHp + 20, hp: p.hp + 20, bonusHealth: p.bonusHealth + 20 }));
     } else if (statRoll < 0.7) {
-      // +3% armor
       runPlayers = runPlayers.map(p => ({ ...p, armor: p.armor + 3, bonusArmor: p.bonusArmor + 3 }));
     } else {
-      // +4 power
       runPlayers = runPlayers.map(p => ({ ...p, power: p.power + 4, bonusPower: p.bonusPower + 4 }));
     }
   } else if (option.kind === 'trinket') {
     const pool = run.pool.length ? run.pool : STARTER_POOL;
     const id = pick(pool) as TrinketId;
-    // Assign the trinket to a random party member.
     const idx = Math.floor(Math.random() * runPlayers.length);
     runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, trinkets: [...p.trinkets, id] } : p);
     trinkets = [...trinkets, id];
@@ -369,7 +461,7 @@ export function applyChoice(run: DartliteRun, option: ChoiceOption): DartliteRun
     stats,
     pendingChoice: null,
     lastUnlockedTrinket: lastUnlocked,
-    phase: 'setup', // ready for next round
+    phase: 'setup',
   };
 }
 
