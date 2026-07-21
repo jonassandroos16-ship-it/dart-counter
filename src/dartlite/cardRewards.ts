@@ -8,8 +8,10 @@ import { randomCardReward, randomCardUpgradeReward, hasCard, addCard, upgradeCar
 // can choose 1 of 3 randomly available cards. Cards can also be upgraded
 // as a separate reward choice.
 
+export type CardRewardKind = 'card_new' | 'card_upgrade' | 'heal';
+
 export interface CardRewardChoice {
-  kind: 'card_new' | 'card_upgrade';
+  kind: CardRewardKind;
   label: string;
   desc: string;
   icon: string;
@@ -17,42 +19,43 @@ export interface CardRewardChoice {
   cardName?: string;
 }
 
+// Generate 3 reward options for card mode: up to 2 new cards and 1 upgrade,
+// falling back to a heal when the new-card pool or upgradeable cards are
+// exhausted so the player always has 3 choices.
 export function generateCardRewardOptions(
   ownedCards: PlayerCard[],
   mode: 'competitive' | 'coop',
 ): CardRewardChoice[] {
-  const newCards = randomCardReward(ownedCards, mode, 3);
-  const upgrades = randomCardUpgradeReward(ownedCards, 3);
+  const newCards = randomCardReward(ownedCards, mode, 2);
+  const upgrades = randomCardUpgradeReward(ownedCards, 1);
 
   const options: CardRewardChoice[] = [];
 
-  if (newCards.length > 0) {
-    const pick = newCards[Math.floor(Math.random() * newCards.length)];
+  for (const c of newCards) {
     options.push({
       kind: 'card_new',
-      label: `New Card: ${pick.name}`,
-      desc: pick.desc,
-      icon: pick.icon,
-      cardId: pick.id,
-      cardName: pick.name,
+      label: `New Card: ${c.name}`,
+      desc: c.desc,
+      icon: c.icon,
+      cardId: c.id,
+      cardName: c.name,
     });
   }
 
-  if (upgrades.length > 0) {
-    const pick = upgrades[Math.floor(Math.random() * upgrades.length)];
+  for (const u of upgrades) {
     options.push({
       kind: 'card_upgrade',
-      label: `Upgrade: ${pick.name}`,
-      desc: `Upgrade ${pick.name} to improve its effect.`,
+      label: `Upgrade: ${u.name}`,
+      desc: `Improve ${u.name}'s effect.`,
       icon: '⬆️',
-      cardId: pick.cardId,
-      cardName: pick.name,
+      cardId: u.cardId,
+      cardName: u.name,
     });
   }
 
   while (options.length < 3) {
     options.push({
-      kind: 'card_new',
+      kind: 'heal',
       label: 'Heal 20%',
       desc: 'Restore 20% of max HP.',
       icon: '❤️‍🩹',

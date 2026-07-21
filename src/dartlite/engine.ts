@@ -22,6 +22,11 @@ import {
   type TrinketId,
 } from './trinkets';
 import type { EnemyDef } from '../campaign/types';
+import type { PlayerCard } from '../cards/types';
+import { defaultPlayerCards } from '../cards/deck';
+import {
+  generateCardRewardOptions, applyCardReward, type CardRewardChoice,
+} from './cardRewards';
 
 // ── Round & boss schedule ──────────────────────────────────────────────
 
@@ -65,6 +70,7 @@ export interface DartliteRun {
   stats: DartliteRunStats;
   playerStats: DartlitePlayerRunStats[]; // per-player cumulative run stats
   phase: 'setup' | 'battle' | 'choice' | 'reward' | 'boss_victory' | 'gameover';
+  cardMode: boolean;          // true = card-based rewards instead of trinket boons
   battle: CampaignBattleState | null;
   pendingChoice: ChoiceOption[] | null;
   // Index of the player currently picking their personal reward. Advances
@@ -76,7 +82,7 @@ export interface DartliteRun {
   lastUnlockedTrinket: TrinketId | null; // shown in a popup after boss/mini-boss
   // Boss victory data — set when a boss is defeated, used to show the boss
   // victory screen with boss name + trinket choices.
-  bossVictory: { bossName: string; trinketOptions: TrinketId[]; chosenTrinket: TrinketId | null } | null;
+  bossVictory: { bossName: string; trinketOptions: TrinketId[]; chosenTrinket: TrinketId | null; claimedTrinket: TrinketId | null } | null;
   log: string[];
 }
 
@@ -93,11 +99,13 @@ export interface DartliteRunPlayer {
   bonusHealth: number;
   bonusArmor: number;
   bonusPower: number;
+  // Card mode: this player's collected card deck
+  cards: PlayerCard[];
 }
 
 // ── Choices ───────────────────────────────────────────────────────────
 
-export type ChoiceKind = 'heal' | 'stat' | 'trinket';
+export type ChoiceKind = 'heal' | 'stat' | 'trinket' | 'card_new' | 'card_upgrade';
 
 export interface ChoiceOption {
   kind: ChoiceKind;
@@ -109,6 +117,9 @@ export interface ChoiceOption {
   amount?: number;
   // For 'trinket': the trinket id
   trinketId?: TrinketId;
+  // For 'card_new' / 'card_upgrade': the card id and name
+  cardId?: string;
+  cardName?: string;
 }
 
 // ── XP rewards ─────────────────────────────────────────────────────────
@@ -127,7 +138,7 @@ export function xpForBattleWin(round: number): number {
 
 // ── Run initialization ────────────────────────────────────────────────
 
-export function startRun(players: Player[], settings: Settings): DartliteRun {
+export function startRun(players: Player[], settings: Settings, cardMode: boolean = false): DartliteRun {
   const runPlayers: DartliteRunPlayer[] = players.map(p => {
     const cfg = settings.powerUpScaling;
     const startHealth = Number.isFinite(cfg.attributeStartHealth) ? cfg.attributeStartHealth : 400;
@@ -148,6 +159,7 @@ export function startRun(players: Player[], settings: Settings): DartliteRun {
       bonusHealth: 0,
       bonusArmor: 0,
       bonusPower: 0,
+      cards: cardMode ? defaultPlayerCards() : [],
     };
   });
   return {
@@ -179,6 +191,7 @@ export function startRun(players: Player[], settings: Settings): DartliteRun {
     playerChoices: players.map(() => null),
     lastUnlockedTrinket: null,
     bossVictory: null,
+    cardMode,
     log: [],
   };
 }
@@ -370,7 +383,7 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
         choicePlayerIdx: 0,
         playerChoices: run.playerIds.map(() => null),
         lastUnlockedTrinket: unlocked,
-        bossVictory: { bossName, trinketOptions, chosenTrinket: null },
+        bossVictory: { bossName, trinketOptions, chosenTrinket: null, claimedTrinket: null },
         log,
       };
     }
@@ -423,6 +436,11 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
 // ── Boon choices ──────────────────────────────────────────────────────
 
 export function generateChoices(run: DartliteRun): ChoiceOption[] {
+  // Card mode: offer card-based rewards (new cards + upgrades) instead of
+  // the standard heal/stat/trinket boons.
+  if (run.cardMode) {
+    return generateCardChoices(run);
+  }
   const pool = run.pool.length ? run.pool : STARTER_POOL;
   const options: ChoiceOption[] = [
     {
@@ -451,6 +469,24 @@ export function generateChoices(run: DartliteRun): ChoiceOption[] {
   return options;
 }
 
+// Generate card-based reward options for card mode. Offers up to 2 new card
+// rewards and 1 card upgrade, falling back to heal if the pool/upgradeable
+// cards are exhausted.
+function generateCardChoices(run: DartliteRun): ChoiceOption[] {
+  const idx = run.choicePlayerIdx;
+  const rp = run.runPlayers[idx];
+  const ownedCards = rp?.cards ?? [];
+  const cardOpts = generateCardRewardOptions(ownedCards, 'coop');
+  return cardOpts.map(o => ({
+    kind: o.kind,
+    label: o.label,
+    desc: o.desc,
+    icon: o.icon,
+    cardId: o.cardId,
+    cardName: o.cardName,
+  }));
+}
+
 // Apply one player's reward choice. That player receives the benefit. The
 // run stays in 'choice' and advances choicePlayerIdx so the next player
 // can pick; only after the last player picks does it move to 'reward' so
@@ -469,6 +505,21 @@ export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): Dartl
     const healAmt = Math.round(rp.maxHp * 0.2);
     runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, hp: Math.min(p.maxHp, p.hp + healAmt) } : p);
     resolved = { ...option, amount: healAmt, label: `Heal ${healAmt} HP`, desc: `Restored ${healAmt} HP (${rp.name}).` };
+  } else if (option.kind === 'card_new' || option.kind === 'card_upgrade') {
+    const rp = runPlayers[idx];
+    const ownedCards = rp.cards;
+    const cardChoice: CardRewardChoice = {
+      kind: option.kind,
+      label: option.label,
+      desc: option.desc,
+      icon: option.icon,
+      cardId: option.cardId,
+      cardName: option.cardName,
+    };
+    const updatedCards = applyCardReward(ownedCards, cardChoice);
+    runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, cards: updatedCards } : p);
+    const cardLabel = option.kind === 'card_new' ? `New Card: ${option.cardName ?? '??'}` : `Upgraded: ${option.cardName ?? '??'}`;
+    resolved = { ...option, label: cardLabel, desc: option.desc };
   } else if (option.kind === 'stat') {
     const statRoll = Math.random();
     let statName: 'health' | 'armor' | 'power';
@@ -699,7 +750,7 @@ export function applyBossTrinketChoice(run: DartliteRun, trinketId: TrinketId): 
     trinkets,
     stats,
     playerStats,
-    bossVictory: { ...run.bossVictory, chosenTrinket: trinketId },
+    bossVictory: { ...run.bossVictory, chosenTrinket: trinketId, claimedTrinket: trinketId },
     phase: 'reward',
     log,
   };

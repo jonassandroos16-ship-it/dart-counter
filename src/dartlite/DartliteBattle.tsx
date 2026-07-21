@@ -368,6 +368,29 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
           const trinket = choice?.trinketId ? getTrinket(choice.trinketId) : null;
           return { name: p?.name || `Player ${i + 1}`, color: p?.color || '#7c3aed', choice, trinket };
         }).filter(c => c.choice);
+        // Boss victory path: playerChoices are null, but a boss trinket was
+        // claimed. Show the boss trinket as the reward instead.
+        if (!choosers.length && chosenRun.bossVictory && chosenRun.bossVictory.claimedTrinket) {
+          const t = getTrinket(chosenRun.bossVictory.claimedTrinket);
+          if (t) {
+            return (
+              <div onClick={() => { setShowRewardReveal(false); setShowProgress(true); }}
+                style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.82)', cursor: 'pointer' }}>
+                <div style={{ textAlign: 'center', maxWidth: 440, padding: 24 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#fbbf24', textTransform: 'uppercase' }}>Boss Trinket Claimed</div>
+                  <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, background: 'color-mix(in srgb,#f59e0b 18%, var(--bg-3))', border: '1px solid #f59e0b' }}>
+                    <span style={{ fontSize: 28 }}>{t.icon}</span>
+                    <div style={{ textAlign: 'left', flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{t.name}</div>
+                      <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>{t.desc}</div>
+                    </div>
+                  </div>
+                  <div className="muted small" style={{ marginTop: 28, fontStyle: 'italic' }}>Tap anywhere to continue</div>
+                </div>
+              </div>
+            );
+          }
+        }
         if (!choosers.length) return null;
         return (
           <div onClick={() => { setShowRewardReveal(false); setShowProgress(true); }}
