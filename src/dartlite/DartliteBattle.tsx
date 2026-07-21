@@ -13,11 +13,12 @@ import { DartOverlay } from '../campaign/DartOverlay';
 import { FrozenOverlay } from '../campaign/FrozenOverlay';
 import { Modal } from '../Popups';
 import type { DartliteRun } from './engine';
-import { isMiniBossRound, isBossRound, applyPlayerChoice } from './engine';
+import { isMiniBossRound, isBossRound, applyPlayerChoice, applyBossTrinketChoice } from './engine';
 import { getTrinket } from './trinkets';
 import { ChoiceScreen } from './ChoiceScreen';
 import { ProgressScreen } from './ProgressScreen';
 import { PlayerDetailModal } from './PlayerDetailModal';
+import { BossVictoryScreen } from './BossVictoryScreen';
 
 interface Props {
   run: DartliteRun;
@@ -31,14 +32,7 @@ interface Props {
 
 export function DartliteBattle({ run, players, settings, music, onBattleEnd, onChoice, onQuit }: Props) {
   const battle = run.battle!;
-  // Sync local battle state whenever a new round/battle starts. Without
-  // this, `useState(battle)` keeps the stale first-round state after
-  // `onChoice` swaps in a fresh `run.battle`, freezing the game.
   const [state, setState] = useState<CampaignBattleState | null>(battle);
-  // Sync local battle state whenever a new round/battle starts. Skip null
-  // (after resolveBattle clears run.battle) so the old state is retained and
-  // the render body / effects don't crash on null while the choice/reward
-  // screen is showing.
   useEffect(() => { if (battle) setState(battle); }, [battle]);
   const [showProgress, setShowProgress] = useState(false);
   const [detailPlayerId, setDetailPlayerId] = useState<string | null>(null);
@@ -143,16 +137,23 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     <div className="view-noscroll coop-battle" style={{ position: 'relative', background: 'radial-gradient(ellipse at top, color-mix(in srgb,#7c3aed 15%,var(--bg)) 0%, var(--bg) 70%)', borderRadius: 14, overflow: 'hidden' }}>
       <button className="btn danger sm quit-float" onClick={() => { if (confirm('Quit this run? Progress will be saved.')) onQuit(); }}>Quit</button>
 
-      {run.phase === 'choice' && run.pendingChoice ? (
+      {run.phase === 'boss_victory' && run.bossVictory ? (
+        <BossVictoryScreen
+          run={run}
+          players={players}
+          onPick={(trinketId) => {
+            const next = applyBossTrinketChoice(run, trinketId);
+            setChosenRun(next);
+            setShowRewardReveal(true);
+          }}
+        />
+      ) : run.phase === 'choice' && run.pendingChoice ? (
         <ChoiceScreen
           run={run}
           players={players}
           options={run.pendingChoice}
           onPick={(opt) => {
             const next = applyPlayerChoice(run, opt);
-            // Only show the reveal + progress popup after the LAST player has
-            // picked. Intermediate picks stay in 'choice' and the ChoiceScreen
-            // re-renders for the next chooser.
             if (next.phase === 'reward') {
               setChosenRun(next);
               setShowRewardReveal(true);
