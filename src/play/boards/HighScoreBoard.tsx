@@ -101,6 +101,7 @@ export function HighScoreBoard({ game, setGame, settings, players, games, toast,
 
   return (
     <div className="view-noscroll">
+      <button className="btn danger sm quit-float" onClick={() => { if (confirm('Quit this game?')) onQuit(); }}>Quit</button>
       <div className="play-current">
         <div className="pc-header">
           <div className="row" style={{ gap: 8 }}>
@@ -180,7 +181,6 @@ export function HighScoreBoard({ game, setGame, settings, players, games, toast,
       <div className="play-input">
         <KeypadPad game={game} setGame={setGame as any} onAdd={addDart} onUndo={() => setGame(undoDart(game))} onEnter={enterVisit} />
       </div>
-      <button className="btn danger sm" style={{ alignSelf: 'flex-end' }} onClick={() => { if (confirm('Quit this game?')) onQuit(); }}>Quit</button>
       {reroll ? (
         <RerollOverlay
           plan={reroll}
