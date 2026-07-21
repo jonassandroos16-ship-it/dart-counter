@@ -4,7 +4,7 @@ import {
   addDart, undoDart, resolvePlayerVisit,
   prepareEnemyTurn, applyNextEnemyAttack, setTarget, startBattle, getLevel,
   describeShield, getCoopPowerUp, canActivateCoopPowerUp, activateCoopPowerUp,
-  levelRewardPowerUp, getCoopClass,
+  levelRewardPowerUp, getCoopClass, effectivePower,
 } from './engine';
 import { getChapter } from './campaignLevels';
 import type { Player, Settings } from '../types';
@@ -292,6 +292,12 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
             </div>
             <div className="muted small">
               <b style={{ color: 'var(--text)' }}>{thrower.name}</b> is throwing · this visit: <b style={{ color: 'var(--text)' }}>{state.resolvedDarts.reduce((a, d) => a + d.damage, 0)} dmg</b>
+              <span style={{ marginLeft: 8, color: '#fbbf24' }}>
+                ⚡ Effective power: <b>{effectivePower(thrower)}</b>
+                {state.passiveBonus && state.passiveBonus.power > 0 && (
+                  <span style={{ opacity: 0.8 }}> (base {thrower.power - (state.passiveBonus?.power || 0)} + {state.passiveBonus.power} passive)</span>
+                )}
+              </span>
               {validTarget && validTarget.shields.length > 0 && (
                 <span style={{ marginLeft: 8, color: '#fbbf24' }}>
                   🛡 {validTarget.name} shields: {validTarget.shields.map(describeShield).join(' → ')}

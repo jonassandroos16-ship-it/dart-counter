@@ -75,18 +75,28 @@ export function DartOverlay({ state, onContinue, onEndVisit, settings, enemyIcon
               return (
                 <div key={i} className={`bo-step current${s.damage <= 0 ? ' miss' : ''}`}>
                   <span className="bo-step-dart">{s.dart.label}</span>
-                  <span className="bo-step-formula">
-                    <span style={{
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      minWidth: 20, height: 20, borderRadius: 6, padding: '0 4px',
-                      background: 'color-mix(in srgb,var(--accent) 22%,var(--bg))',
-                      color: 'var(--accent)', fontSize: 11, fontWeight: 900, marginRight: 4, flex: '0 0 auto',
-                    }} title={s.enemyName}>{icon}</span>
-                    {s.kind === 'shield_break' ? `Broke ${s.shieldTarget} — 0 dmg`
-                      : s.kind === 'miss' ? 'Absorbed by shield — 0 dmg'
-                      : s.dart.value <= 0 ? 'Miss · 0 dmg'
-                      : `${s.dart.value} dmg`}
-                    {s.kind === 'defeated' ? ' · DEFEATED' : ''}
+                  <span className="bo-step-formula" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        minWidth: 20, height: 20, borderRadius: 6, padding: '0 4px',
+                        background: 'color-mix(in srgb,var(--accent) 22%,var(--bg))',
+                        color: 'var(--accent)', fontSize: 11, fontWeight: 900, marginRight: 4, flex: '0 0 auto',
+                      }} title={s.enemyName}>{icon}</span>
+                      {s.kind === 'shield_break' ? `Broke ${s.shieldTarget} — 0 dmg`
+                        : s.kind === 'miss' ? 'Absorbed by shield — 0 dmg'
+                        : s.dart.value <= 0 ? 'Miss · 0 dmg'
+                        : `${s.dart.value} dmg`}
+                      {s.kind === 'defeated' ? ' · DEFEATED' : ''}
+                    </span>
+                    {s.damage > 0 && s.attackerPower != null && s.targetArmor != null && (
+                      <span className="muted" style={{ fontSize: 9, fontWeight: 600, lineHeight: 1.3 }}>
+                        ({s.dart.value} + {s.attackerPower} power)
+                        {s.targetArmor > 0 ? ` × (1 − ${s.targetArmor}% armor)` : ''}
+                        {s.vulnerable ? ' × 1.5 (vulnerable)' : ''}
+                        {' = '}{s.damage}
+                      </span>
+                    )}
                   </span>
                   <span className="bo-step-dmg">{s.damage > 0 ? `-${s.damage}` : '0'}</span>
                 </div>

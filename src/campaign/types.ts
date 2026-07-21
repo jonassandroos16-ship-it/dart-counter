@@ -219,6 +219,10 @@ export interface ResolvedDart {
   enemyId: string;
   enemyName: string;
   hpAfter: number;
+  // Damage breakdown so the UI can show how the final damage was computed.
+  attackerPower?: number;
+  targetArmor?: number;
+  vulnerable?: boolean;
 }
 
 // An enemy attack step (one dart) — used for the dart-by-dart enemy overlay.

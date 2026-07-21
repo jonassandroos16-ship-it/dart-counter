@@ -234,22 +234,26 @@ export function addDart(
         dart, damage: 0, kind: 'shield_break',
         shieldTarget: describeShield(shield),
         enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
+        attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0,
       };
     } else {
       step = {
         dart, damage: 0, kind: 'miss',
         enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
+        attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0,
       };
     }
   } else {
     const dmg = computePlayerDartDamage(dart, power, t.armor);
-    const finalDmg = t.vulnerableTurns > 0 ? Math.round(dmg * 1.5) : dmg;
+    const vulnerable = t.vulnerableTurns > 0;
+    const finalDmg = vulnerable ? Math.round(dmg * 1.5) : dmg;
     t.hp = Math.max(0, t.hp - finalDmg);
     const defeated = t.hp <= 0;
     if (defeated) t.defeated = true;
     step = {
       dart, damage: finalDmg, kind: defeated ? 'defeated' : 'damage',
       enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
+      attackerPower: power, targetArmor: t.armor, vulnerable,
     };
   }
 
