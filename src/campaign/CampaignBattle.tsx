@@ -15,6 +15,8 @@ import { bumpCoopStat } from './coopStats';
 import { CoopPowerUpOrb } from './CoopPowerUpOrb';
 import { DartOverlay } from './DartOverlay';
 import { FrozenOverlay } from './FrozenOverlay';
+import { Modal } from '../Popups';
+import { getEnemyDef } from './engine/enemies';
 
 interface Props {
   levelId: number;
@@ -34,6 +36,24 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
   const [state, setState] = useState<CampaignBattleState>(() =>
     startBattle(level, players, settings, undefined, chapterId),
   );
+  const [showInfo, setShowInfo] = useState(false);
+
+  // Build a stable enemy index map (defId → enemy number) so each enemy
+  // gets a consistent number badge across renders. Bosses use ☠ instead.
+  const enemyNumberMap: Record<string, number> = {};
+  let enemyCounter = 0;
+  for (const e of state.enemies) {
+    if (enemyNumberMap[e.defId] == null) {
+      const def = getEnemyDef(e.defId);
+      if (def?.difficulty !== 'Boss') enemyCounter++;
+      enemyNumberMap[e.defId] = enemyCounter;
+    }
+  }
+  const enemyIcon = (defId: string): string => {
+    const def = getEnemyDef(defId);
+    if (def?.difficulty === 'Boss') return '☠';
+    return `${enemyNumberMap[defId]}`;
+  };
 
   // Start coop campaign music when the battle begins.
   useEffect(() => {
@@ -128,29 +148,37 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
   return (
     <div className="view-noscroll coop-battle" style={{ position: 'relative', background: chapter?.theme.background || undefined, borderRadius: 14, overflow: 'hidden' }}>
       {showingFrozen && <div className="battle-frost-tint" />}
+      {state.phase === 'player' && thrower && (() => {
+        const srcPlayer = players.find(p => p.id === thrower.id);
+        const equippedId = srcPlayer?.powerUps?.coopActive ?? null;
+        const pu = equippedId ? getCoopPowerUp(equippedId as CoopPowerUpId) : null;
+        if (!pu) return null;
+        const can = canActivateCoopPowerUp(state, pu.id);
+        return (
+          <div className="coop-orb-float">
+            <CoopPowerUpOrb
+              charge={thrower.powerUpCharge}
+              pu={pu}
+              canActivate={can && state.darts.length === 0}
+              onActivate={() => onActivatePowerUp(pu.id)}
+            />
+          </div>
+        );
+      })()}
+
       <div className="play-current" style={{ position: 'relative', zIndex: 2 }}>
         <div className="pc-header">
           <div className="row" style={{ gap: 8, alignItems: 'center' }}>
-            <span className="pc-name">{level.is_boss ? '☠ BOSS · ' : ''}{level.name}</span>
-            {chapter && <span className="muted small" style={{ color: chapter.theme.accent }}>{chapter.name}</span>}
-          </div>
-          <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+            <button
+              onClick={() => setShowInfo(true)}
+              title="Level & chapter info"
+              style={{
+                background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 8,
+                width: 32, height: 32, fontSize: 16, cursor: 'pointer', padding: 0, color: 'inherit',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto',
+              }}
+            >ℹ</button>
             <span className="muted small">VISIT {state.visitNumber} · {state.phase === 'player' ? 'YOUR TURN' : 'ENEMY TURN'}</span>
-            {state.phase === 'player' && thrower && (() => {
-              const srcPlayer = players.find(p => p.id === thrower.id);
-              const equippedId = srcPlayer?.powerUps?.coopActive ?? null;
-              const pu = equippedId ? getCoopPowerUp(equippedId as CoopPowerUpId) : null;
-              if (!pu) return null;
-              const can = canActivateCoopPowerUp(state, pu.id);
-              return (
-                <CoopPowerUpOrb
-                  charge={thrower.powerUpCharge}
-                  pu={pu}
-                  canActivate={can && state.darts.length === 0}
-                  onActivate={() => onActivatePowerUp(pu.id)}
-                />
-              );
-            })()}
           </div>
         </div>
         <div className="row between" style={{ width: '100%', margin: '4px 0' }}>
@@ -242,13 +270,20 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
                   <div key={i} className="pc-slot filled" style={{
                     borderColor: isDefeated ? '#ef4444' : undefined,
                     background: isDefeated ? 'color-mix(in srgb,#ef4444 18%,var(--bg-3))' : undefined,
+                    flexDirection: 'row', gap: 6, justifyContent: 'space-between', padding: '4px 8px',
                   }}>
-                    <div style={{ fontWeight: 800 }}>{d.label}</div>
+                    <span style={{ fontWeight: 800, fontSize: 15 }}>{d.label}</span>
                     {r && (
-                      <div style={{ fontSize: 9, marginTop: 2, opacity: 0.85 }}>
-                        → {r.enemyName}{r.damage > 0 ? ` · -${r.damage}` : r.kind === 'shield_break' ? ' · 🛡' : ''}
-                        {isDefeated ? ' · ☠' : ''}
-                      </div>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, opacity: 0.9 }}>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          minWidth: 18, height: 18, borderRadius: 6, padding: '0 4px',
+                          background: 'color-mix(in srgb,var(--accent) 22%,var(--bg))',
+                          color: 'var(--accent)', fontSize: 10, fontWeight: 900, flex: '0 0 auto',
+                        }} title={r.enemyName}>{enemyIcon(r.enemyId)}</span>
+                        {r.damage > 0 ? `-${r.damage}` : r.kind === 'shield_break' ? '🛡' : ''}
+                        {isDefeated ? ' ☠' : ''}
+                      </span>
                     )}
                   </div>
                 );
@@ -364,7 +399,34 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
           onContinue={onContinue}
           onEndVisit={onEnter}
           settings={settings}
+          enemyIcon={enemyIcon}
         />
+      )}
+
+      {showInfo && (
+        <Modal onClose={() => setShowInfo(false)}>
+          <div style={{ textAlign: 'center', padding: 8 }}>
+            {chapter && (
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: chapter.theme.accent, textTransform: 'uppercase', marginBottom: 4 }}>
+                {chapter.name}
+              </div>
+            )}
+            <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 4 }}>
+              {level.is_boss ? '☠ ' : ''}{level.name}
+            </div>
+            {chapter && (
+              <div className="muted small" style={{ fontStyle: 'italic', marginBottom: 10 }}>
+                {chapter.subtitle}
+              </div>
+            )}
+            {level.story_bit && (
+              <div className="muted" style={{ fontSize: 13, lineHeight: 1.5, fontStyle: 'italic', textAlign: 'center', maxWidth: 300, margin: '0 auto 14px' }}>
+                {level.story_bit}
+              </div>
+            )}
+            <button className="btn primary block" onClick={() => setShowInfo(false)}>Close</button>
+          </div>
+        </Modal>
       )}
     </div>
   );

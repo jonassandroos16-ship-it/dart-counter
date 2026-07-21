@@ -40,7 +40,15 @@
 .coop-battle .mult button { height: 34px; border-radius: 8px; }
 .coop-battle .keypad { gap: 4px; }
 .coop-battle .key { height: 38px; font-size: 15px; border-radius: 8px; }
-.coop-battle .pc-slot { min-height: 26px; font-size: 13px; }
+/* Wider dart pills so the dart label and enemy icon badge fit on one line,
+   preventing the slot from growing taller when enemy names are long. */
+.coop-battle .pc-slot { min-height: 26px; font-size: 13px; max-width: 110px; }
+.coop-battle .pc-slot.filled { flex-direction: row; align-items: center; justify-content: space-between; padding: 4px 8px; }
+/* Floating coop power-up orb — sits to the left of the battle UI, detached
+   from the play-current header so it doesn't push content down. */
+.coop-battle .coop-orb-float {
+  position: fixed; left: 12px; bottom: 80px; z-index: 60;
+}
 .mult { display:flex; gap:6px; margin-bottom:6px; }
 .mult button { flex:1; height:40px; border-radius:10px; background: var(--bg-3); border:1px solid var(--border); font-weight:800; }
 .mult button.on { background: var(--accent); color:#04150a; border-color:transparent; }
