@@ -10,19 +10,25 @@ export function neighborsOf(base: number): number[] {
   return [left, right];
 }
 
+// Each segment's center sits at angle 90° - 18°·i on the board (20 at top,
+// clockwise). A segment belongs to a half when its center is strictly on that
+// side of the relevant diameter; the four axis segments (20, 3, 6, 11) sit
+// exactly on a diameter and belong only to the half they point toward.
 export function isTopHalf(base: number): boolean {
-  return base >= 11 && base <= 20;
+  const i = DARTBOARD_ORDER.indexOf(base);
+  return i >= 0 && (i < 5 || i > 15);
 }
 export function isBottomHalf(base: number): boolean {
-  return base >= 1 && base <= 10;
+  const i = DARTBOARD_ORDER.indexOf(base);
+  return i >= 6 && i <= 14;
 }
 export function isLeftHalf(base: number): boolean {
   const i = DARTBOARD_ORDER.indexOf(base);
-  return i % 2 === 0;
+  return i >= 11;
 }
 export function isRightHalf(base: number): boolean {
   const i = DARTBOARD_ORDER.indexOf(base);
-  return i % 2 === 1;
+  return i >= 1 && i <= 9;
 }
 
 export function dartMatchesShield(dart: CampaignDart, shield: ShieldLayer): boolean {
