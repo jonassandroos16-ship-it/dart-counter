@@ -166,6 +166,7 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
 
   return (
     <div className="view-noscroll">
+      <button className="btn danger sm quit-float" onClick={() => { if (confirm('Quit this game?')) onQuit(); }}>Quit</button>
       <div className="play-current">
         <div className="pc-header">
           <div className="row" style={{ gap: 8 }}>
@@ -269,7 +270,6 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
       <div className="play-input">
         <KeypadPad game={game} setGame={setGame as any} onAdd={addDart} onUndo={() => setGame(undoDart(game))} onEnter={enterVisit} enterLabel="Attack!" />
       </div>
-      <button className="btn danger sm" style={{ alignSelf: 'flex-end' }} onClick={() => { if (confirm('Quit this game?')) onQuit(); }}>Quit</button>
       {overlay ? (
         <BattleVisitOverlay
           attacker={overlay.attacker}
