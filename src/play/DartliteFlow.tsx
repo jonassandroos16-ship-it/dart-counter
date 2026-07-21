@@ -26,6 +26,7 @@ export function DartliteFlow({ players, settings, music, setPlayers, onExitToMen
   if (stage === 'setup') {
     return <DartliteSetup
       players={players}
+      settings={settings}
       onStart={(ids, cardMode) => {
         const party = players.filter(p => ids.includes(p.id));
         const started = startRun(party, settings, cardMode);

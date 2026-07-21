@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import type { Player } from '../types';
+import type { Player, Settings } from '../types';
 import { initials } from '../store';
 
 interface Props {
   players: Player[];
+  settings: Settings;
   onStart: (ids: string[], cardMode: boolean) => void;
   onBack: () => void;
 }
 
-export function DartliteSetup({ players, onStart, onBack }: Props) {
+export function DartliteSetup({ players, settings, onStart, onBack }: Props) {
   const [selected, setSelected] = useState<string[]>([]);
-  const [cardMode, setCardMode] = useState(false);
+  const cardMode = settings.gameMode === 'cards';
 
   const toggle = (id: string) => {
     setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -56,33 +57,10 @@ export function DartliteSetup({ players, onStart, onBack }: Props) {
           })}
         </div>
 
-        <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: 'var(--bg-3)', border: '1px solid var(--border)' }}>
-          <div className="muted small" style={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>Reward Mode</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <button className="btn block" style={{
-              padding: 10, textAlign: 'center',
-              background: !cardMode ? 'linear-gradient(135deg, color-mix(in srgb,#7c3aed 22%,var(--bg-3)) 0%, var(--bg-3) 80%)' : 'var(--bg-3)',
-              borderColor: !cardMode ? '#7c3aed' : 'var(--border)',
-            }} onClick={() => setCardMode(false)}>
-              <div style={{ fontSize: 22 }}>🔮</div>
-              <div style={{ fontWeight: 800, fontSize: 13, marginTop: 4 }}>Trinkets</div>
-              <div className="muted small" style={{ marginTop: 2 }}>Classic boons</div>
-            </button>
-            <button className="btn block" style={{
-              padding: 10, textAlign: 'center',
-              background: cardMode ? 'linear-gradient(135deg, color-mix(in srgb,#3b82f6 22%,var(--bg-3)) 0%, var(--bg-3) 80%)' : 'var(--bg-3)',
-              borderColor: cardMode ? '#3b82f6' : 'var(--border)',
-            }} onClick={() => setCardMode(true)}>
-              <div style={{ fontSize: 22 }}>🃏</div>
-              <div style={{ fontWeight: 800, fontSize: 13, marginTop: 4 }}>Cards</div>
-              <div className="muted small" style={{ marginTop: 2 }}>Collect & upgrade cards</div>
-            </button>
-          </div>
-          {cardMode && (
-            <div className="muted small" style={{ marginTop: 8, fontStyle: 'italic' }}>
-              Earn new cards and upgrade existing ones as round rewards.
-            </div>
-          )}
+        <div className="muted small" style={{ marginTop: 14, padding: 12, borderRadius: 12, background: 'var(--bg-3)', border: '1px solid var(--border)', textAlign: 'center' }}>
+          {cardMode
+            ? '🃏 Card mode — earn new cards and upgrade existing ones as round rewards.'
+            : '🔮 Trinket mode — classic boons (heal, stat, or random trinket) as round rewards.'}
         </div>
 
         <div className="row" style={{ gap: 10, marginTop: 16 }}>
