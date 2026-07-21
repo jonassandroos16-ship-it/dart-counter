@@ -36,6 +36,20 @@ export default function App() {
 
   useEffect(() => { applyTheme(db.settings); }, [db.settings]);
 
+  // Global button click sound — listens for clicks on any button element and
+  // plays the configured click sound. Respects the sound + clickSound settings.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const btn = target.closest('button') as HTMLButtonElement | null;
+      if (!btn) return;
+      Sound.playClick(db.settings);
+    };
+    document.addEventListener('pointerdown', handler);
+    return () => document.removeEventListener('pointerdown', handler);
+  }, [db.settings]);
+
   useEffect(() => { localStorage.setItem('dc_nav_open', navOpen ? '1' : '0'); }, [navOpen]);
 
   // Re-arm the audio engine whenever sound is toggled.

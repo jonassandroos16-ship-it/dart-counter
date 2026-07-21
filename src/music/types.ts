@@ -18,7 +18,7 @@ export interface Layer {
 export interface Track {
   id: string;
   name: string;
-  context: 'start' | 'setup' | 'match';
+  context: 'start' | 'setup' | 'match' | 'coop';
   bpm: number;
   layers: Layer[];
 }

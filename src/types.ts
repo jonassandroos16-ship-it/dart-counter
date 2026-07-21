@@ -207,6 +207,9 @@ export interface PowerUpScalingConfig {
   chargesNeeded: Record<string, number>;
 }
 
+export type HitSoundPackId = 'thud' | 'board' | 'punch' | 'arcade';
+export type ClickSoundId = 'none' | 'tick' | 'pop' | 'tap';
+
 export interface Settings {
   theme: 'dark' | 'light';
   accent: string;
@@ -216,8 +219,12 @@ export interface Settings {
   musicStartTrack: string;
   musicSetupTrack: string;
   musicMatchTrack: string;
+  musicCoopTrack: string;
   sfxVolume: number;
   musicVolume: number;
+  hitSoundPack: HitSoundPackId;
+  clickSound: ClickSoundId;
+  clickVolume: number;
   xpConfig: XPConfig;
   customTitles: CustomTitle[];
   popups: { scores: boolean; milestones: boolean; xp: boolean; titles: boolean };
