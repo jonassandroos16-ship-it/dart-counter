@@ -1,6 +1,7 @@
 import type { Game, GamePlayer, GameRecord, Player, Settings, Visit } from './types';
 import { MODES, CHECKOUTS, ATC_TARGETS, atcLabel, defaultSettings } from './constants';
 import { uid, todayKey } from './store';
+import { POWER_UPS } from './powerups';
 
 export function createGame(modeKey: string, playerIds: string[], players: Player[], doubleOut: boolean, legsBestOf: number, teamMode = false, teamAssignment: number[] = [], powerUpsEnabled = false, settings: Settings | null = null): Game {
   const mode = MODES[modeKey];
@@ -191,9 +192,10 @@ function numOr<T>(v: unknown, fallback: T): T | number {
 }
 
 export function defaultPowerUps(settings: Settings) {
+  const firstPowerUpId = POWER_UPS[0]?.id || null;
   return {
-    unlocked: [] as string[],
-    active: null as string | null,
+    unlocked: firstPowerUpId ? [firstPowerUpId] : ([] as string[]),
+    active: firstPowerUpId,
     pointsAvailable: settings.powerUpScaling.startingPoints,
     coopUnlocked: [] as string[],
     coopActive: null as string | null,

@@ -378,14 +378,16 @@ export interface CoopPassiveDef {
     health?: number; // flat max HP added to every party member
     armor?: number;  // flat armor added to every party member
   };
-  // XP required (Coop XP) to unlock this passive. Tier 1 is always 0 (starter).
-  xpRequired: number;
+  // Player level required to unlock this passive. Tier 1 is always 1 (starter).
+  levelRequired: number;
 }
 
 // Persisted per-player Coop progression. Stored on the Player object.
+// XP is now unified — see `Player.xp` / `Player.level`. This struct keeps
+// class selection and passive equip state only.
 export interface PlayerCoopProgress {
   classId: CoopClassId | null;          // currently selected class
-  xp: number;                          // cumulative Coop XP
+  xp?: number;                          // DEPRECATED — kept for migration; use Player.xp
   unlockedPassives: CoopPassiveId[];   // passives unlocked (incl. starter)
   equippedPassives: CoopPassiveId[];   // passives currently equipped (active)
 }
