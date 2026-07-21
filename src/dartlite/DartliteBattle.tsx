@@ -42,6 +42,8 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   const [showInfo, setShowInfo] = useState(false);
   const [showTrinketUnlock, setShowTrinketUnlock] = useState(false);
   const [mult, setMult] = useState(1);
+  const [chosenRun, setChosenRun] = useState<DartliteRun | null>(null);
+  const [showRewardReveal, setShowRewardReveal] = useState(false);
 
   useEffect(() => {
     if (run.lastUnlockedTrinket) setShowTrinketUnlock(true);
@@ -145,20 +147,9 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
           options={run.pendingChoice}
           onPick={(opt) => {
             const next = applyPlayerChoice(run, opt);
-            if (next.phase === 'reward') {
-              // All players have chosen — show the progress popup. The
-              // next round starts when the player dismisses it.
-              setShowProgress(true);
-            } else {
-              onChoice(next);
-            }
+            setChosenRun(next);
+            setShowRewardReveal(true);
           }}
-        />
-      ) : run.phase === 'reward' ? (
-        <ProgressScreen
-          run={run}
-          players={players}
-          onContinue={() => { onChoice(run); }}
         />
       ) : (
         <>
@@ -197,13 +188,15 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
               {state.players.map((p, i) => {
                 const isThrower = state.phase === 'player' && i === state.playerTurnIdx;
                 return (
-                  <div key={p.id} style={{
+                  <div key={p.id} onClick={() => setDetailPlayerId(p.id)} title="Tap for run stats"
+                    style={{
                     display: 'flex', alignItems: 'center', gap: 4,
                     padding: '4px 8px', borderRadius: 999,
                     background: isThrower ? p.color : 'var(--bg-3)',
                     color: isThrower ? '#0b0e13' : 'var(--text)',
                     border: isThrower ? '2px solid var(--accent)' : '1px solid var(--border)',
                     fontWeight: isThrower ? 800 : 600, fontSize: 12,
+                    cursor: 'pointer',
                   }}>
                     <span className="avatar" style={{ width: 18, height: 18, fontSize: 9, background: isThrower ? 'rgba(0,0,0,.25)' : p.color }}>{initials(p.name)}</span>
                     {p.name}
@@ -338,13 +331,37 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             </Modal>
           )}
 
-          {showProgress && (
+          {showProgress && chosenRun && (
             <ProgressScreen
-              run={run}
+              run={chosenRun}
               players={players}
-              onContinue={() => { setShowProgress(false); onChoice(run); }}
+              onContinue={() => { setShowProgress(false); onChoice(chosenRun); }}
             />
           )}
+
+          {showRewardReveal && chosenRun && (() => {
+            const choice = chosenRun.playerChoices[0];
+            if (!choice) return null;
+            const chooser = players.find(p => p.id === chosenRun.playerIds[0]);
+            const chooserName = chooser?.name || 'Player 1';
+            const chooserColor = chooser?.color || '#7c3aed';
+            return (
+              <div onClick={() => { setShowRewardReveal(false); setShowProgress(true); }}
+                style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.82)', cursor: 'pointer' }}>
+                <div style={{ textAlign: 'center', maxWidth: 360, padding: 24 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#c4b5fd', textTransform: 'uppercase' }}>Reward Chosen</div>
+                  <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 999, background: `color-mix(in srgb, ${chooserColor} 22%, var(--bg-3))`, border: `1px solid ${chooserColor}` }}>
+                    <span className="avatar" style={{ background: chooserColor, width: 22, height: 22, fontSize: 10 }}>{initials(chooserName)}</span>
+                    <span style={{ fontWeight: 800, fontSize: 14 }}>{chooserName}</span>
+                  </div>
+                  <div style={{ fontSize: 56, margin: '16px 0 8px' }}>{choice.icon}</div>
+                  <div style={{ fontSize: 22, fontWeight: 900 }}>{choice.label}</div>
+                  <div className="muted" style={{ fontSize: 14, marginTop: 6, lineHeight: 1.5 }}>{choice.desc}</div>
+                  <div className="muted small" style={{ marginTop: 28, fontStyle: 'italic' }}>Tap anywhere to continue</div>
+                </div>
+              </div>
+            );
+          })()}
 
           {detailPlayerId && (
             <PlayerDetailModal
@@ -368,9 +385,6 @@ function ChoiceScreen({ run, players, options, onPick }: { run: DartliteRun; pla
   const chooser = players.find(p => p.id === chooserId);
   const chooserName = chooser?.name || `Player ${chooserIdx + 1}`;
   const chooserColor = chooser?.color || '#7c3aed';
-  const alreadyChosen = run.playerIds.length > 1
-    ? run.playerIds.slice(0, chooserIdx).map(id => players.find(p => p.id === id)?.name || 'Player').join(', ')
-    : '';
 
   return (
     <div className="view-scroll" style={{ background: 'radial-gradient(ellipse at top, color-mix(in srgb,#7c3aed 15%,var(--bg)) 0%, var(--bg) 70%)', minHeight: '100%' }}>
@@ -383,7 +397,7 @@ function ChoiceScreen({ run, players, options, onPick }: { run: DartliteRun; pla
             <span style={{ fontWeight: 800, fontSize: 14 }}>{chooserName} is choosing</span>
           </div>
           <div className="muted small" style={{ marginTop: 6 }}>
-            {alreadyChosen ? `Already chosen: ${alreadyChosen}` : 'Each player picks their own personal reward.'}
+            {'Choose one boon for this round.'}
           </div>
         </div>
         <div style={{ display: 'grid', gap: 10 }}>
@@ -407,7 +421,7 @@ function ChoiceScreen({ run, players, options, onPick }: { run: DartliteRun; pla
 
 // ── Progress popup (between rounds) ─────────────────────────────────
 //
-// Shown after every player has chosen their personal reward. Lists all
+// Shown after the first player has chosen their personal reward. Lists all
 // players in the run with a quick summary. Clicking a player opens a
 // detail modal with their run stats, chosen rewards, kills, and trinkets.
 // Clicking a trinket shows the trinket's full description.

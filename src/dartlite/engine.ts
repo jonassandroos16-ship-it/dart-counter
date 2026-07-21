@@ -20,8 +20,6 @@ import {
   STARTER_POOL, availablePool, newlyUnlockedTrinket,
   type TrinketId,
 } from './trinkets';
-import { generateCardRewardOptions } from './cardRewards';
-import type { PlayerCard } from '../cards/types';
 
 // ── Round & boss schedule ──────────────────────────────────────────────
 
@@ -94,7 +92,7 @@ export interface DartliteRunPlayer {
 
 // ── Choices ───────────────────────────────────────────────────────────
 
-export type ChoiceKind = 'heal' | 'stat' | 'trinket' | 'card_new' | 'card_upgrade';
+export type ChoiceKind = 'heal' | 'stat' | 'trinket';
 
 export interface ChoiceOption {
   kind: ChoiceKind;
@@ -106,9 +104,6 @@ export interface ChoiceOption {
   amount?: number;
   // For 'trinket': the trinket id
   trinketId?: TrinketId;
-  // For 'card_new' / 'card_upgrade': the card id
-  cardId?: string;
-  cardName?: string;
 }
 
 // ── XP rewards ─────────────────────────────────────────────────────────
@@ -338,22 +333,7 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
 
 // ── Boon choices ──────────────────────────────────────────────────────
 
-export function generateChoices(run: DartliteRun, ownedCards?: PlayerCard[], cardMode?: boolean): ChoiceOption[] {
-  if (cardMode && ownedCards !== undefined) {
-    const cardOptions = generateCardRewardOptions(ownedCards, 'coop');
-    const options: ChoiceOption[] = cardOptions.map(o => ({
-      kind: o.kind,
-      label: o.label,
-      desc: o.desc,
-      icon: o.icon,
-      cardId: o.cardId,
-      cardName: o.cardName,
-    }));
-    if (!options.some(o => o.kind === 'heal')) {
-      options[options.length - 1] = { kind: 'heal', label: 'Heal 20%', desc: 'Restore 20% of max HP.', icon: '❤️‍🩹' };
-    }
-    return options;
-  }
+export function generateChoices(run: DartliteRun): ChoiceOption[] {
   const pool = run.pool.length ? run.pool : STARTER_POOL;
   const options: ChoiceOption[] = [
     {
@@ -382,9 +362,9 @@ export function generateChoices(run: DartliteRun, ownedCards?: PlayerCard[], car
   return options;
 }
 
-// Apply a single player's personal reward choice. Only that player receives
-// the benefit. When every player has chosen, the run moves to the 'reward'
-// phase so the UI can show the progress popup before the next round starts.
+// Apply the first player's reward choice. Only that player receives the
+// benefit. The run then moves to the 'reward' phase so the UI can show the
+// reward reveal and progress popup before the next round starts.
 export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): DartliteRun {
   const idx = run.choicePlayerIdx;
   let runPlayers = run.runPlayers;
@@ -420,8 +400,6 @@ export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): Dartl
   }
 
   const playerChoices = run.playerChoices.map((c, i) => i === idx ? option : c);
-  const nextIdx = idx + 1;
-  const allChosen = nextIdx >= run.playerIds.length;
 
   return {
     ...run,
@@ -430,10 +408,10 @@ export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): Dartl
     stats,
     playerStats,
     playerChoices,
-    choicePlayerIdx: allChosen ? idx : nextIdx,
-    pendingChoice: allChosen ? null : run.pendingChoice,
+    choicePlayerIdx: idx,
+    pendingChoice: null,
     lastUnlockedTrinket: run.lastUnlockedTrinket,
-    phase: allChosen ? 'reward' : 'choice',
+    phase: 'reward',
   };
 }
 
