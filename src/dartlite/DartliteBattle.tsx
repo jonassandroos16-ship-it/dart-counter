@@ -338,42 +338,6 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             </Modal>
           )}
 
-          {showProgress && chosenRun && (
-            <ProgressScreen
-              run={chosenRun}
-              players={players}
-              onContinue={() => { setShowProgress(false); onChoice(chosenRun); }}
-            />
-          )}
-
-          {showRewardReveal && chosenRun && (() => {
-            const choosers = chosenRun.playerIds.map((pid, i) => {
-              const p = players.find(pl => pl.id === pid);
-              const choice = chosenRun.playerChoices[i];
-              return { name: p?.name || `Player ${i + 1}`, color: p?.color || '#7c3aed', choice };
-            }).filter(c => c.choice);
-            if (!choosers.length) return null;
-            return (
-              <div onClick={() => { setShowRewardReveal(false); setShowProgress(true); }}
-                style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.82)', cursor: 'pointer' }}>
-                <div style={{ textAlign: 'center', maxWidth: 400, padding: 24 }}>
-                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#c4b5fd', textTransform: 'uppercase' }}>Rewards Chosen</div>
-                  <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
-                    {choosers.map((c, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderRadius: 12, background: `color-mix(in srgb, ${c.color} 18%, var(--bg-3))`, border: `1px solid ${c.color}` }}>
-                        <span className="avatar" style={{ background: c.color, width: 24, height: 24, fontSize: 11 }}>{initials(c.name)}</span>
-                        <span style={{ fontWeight: 800, fontSize: 14, minWidth: 70, textAlign: 'left' }}>{c.name}</span>
-                        <span style={{ fontSize: 28 }}>{c.choice!.icon}</span>
-                        <span style={{ fontWeight: 700, fontSize: 14, textAlign: 'left' }}>{c.choice!.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="muted small" style={{ marginTop: 28, fontStyle: 'italic' }}>Tap anywhere to continue</div>
-                </div>
-              </div>
-            );
-          })()}
-
           {detailPlayerId && (
             <PlayerDetailModal
               playerId={detailPlayerId}
@@ -384,6 +348,42 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
           )}
         </>
       )}
+
+      {showProgress && chosenRun && (
+        <ProgressScreen
+          run={chosenRun}
+          players={players}
+          onContinue={() => { setShowProgress(false); onChoice(chosenRun); }}
+        />
+      )}
+
+      {showRewardReveal && chosenRun && (() => {
+        const choosers = chosenRun.playerIds.map((pid, i) => {
+          const p = players.find(pl => pl.id === pid);
+          const choice = chosenRun.playerChoices[i];
+          return { name: p?.name || `Player ${i + 1}`, color: p?.color || '#7c3aed', choice };
+        }).filter(c => c.choice);
+        if (!choosers.length) return null;
+        return (
+          <div onClick={() => { setShowRewardReveal(false); setShowProgress(true); }}
+            style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.82)', cursor: 'pointer' }}>
+            <div style={{ textAlign: 'center', maxWidth: 400, padding: 24 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#c4b5fd', textTransform: 'uppercase' }}>Rewards Chosen</div>
+              <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
+                {choosers.map((c, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderRadius: 12, background: `color-mix(in srgb, ${c.color} 18%, var(--bg-3))`, border: `1px solid ${c.color}` }}>
+                    <span className="avatar" style={{ background: c.color, width: 24, height: 24, fontSize: 11 }}>{initials(c.name)}</span>
+                    <span style={{ fontWeight: 800, fontSize: 14, minWidth: 70, textAlign: 'left' }}>{c.name}</span>
+                    <span style={{ fontSize: 28 }}>{c.choice!.icon}</span>
+                    <span style={{ fontWeight: 700, fontSize: 14, textAlign: 'left' }}>{c.choice!.label}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="muted small" style={{ marginTop: 28, fontStyle: 'italic' }}>Tap anywhere to continue</div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
