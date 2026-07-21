@@ -257,6 +257,7 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
 
   return (
     <div className="view-noscroll">
+      <button className="btn danger sm quit-float" onClick={() => { if (confirm('Quit this game? Progress will not be saved.')) onQuit(); }}>Quit</button>
       <div className="play-current" style={game.teamMode ? { borderColor: curTeamColor, boxShadow: `0 0 0 2px ${curTeamColor}33` } : {}}>
         <div className="pc-header">
           <div className="row" style={{ gap: 8 }}>
@@ -358,7 +359,6 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
       <div className="play-input">
         <KeypadPad game={game} setGame={setGame as any} onAdd={addDart} onUndo={() => setGame(undoDart(game))} onEnter={enterVisit} />
       </div>
-      <button className="btn danger sm" style={{ alignSelf: 'flex-end' }} onClick={() => { if (confirm('Quit this game? Progress will not be saved.')) onQuit(); }}>Quit</button>
       {reroll ? (
         <RerollOverlay
           plan={reroll}
