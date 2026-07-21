@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Dart, GamePlayer, Settings } from '../types';
 import { computeBattleDartDamage } from '../logic';
 import { initials } from '../store';
+import { Sound } from '../sound';
 
 export interface BattleVisitStep {
   dart: Dart;
@@ -69,10 +70,12 @@ export function BattleVisitOverlay({ attacker, target, darts, settings, surgeAct
       const intensity = d <= 0 ? 0 : d < 20 ? 1 : d < 50 ? 2 : 3;
       setShakeIntensity(intensity);
       setShakeKey((k) => k + 1);
+      // Play a hit sound scaled to the damage of this dart.
+      Sound.playHit(d, settings);
       setStepIdx((i) => i + 1);
     }, 650);
     return () => clearTimeout(t);
-  }, [stepIdx, steps, defeated]);
+  }, [stepIdx, steps, defeated, settings]);
 
   const maxHp = target.maxHp || 1;
   const hpPct = Math.max(0, Math.min(100, (displayedHp / maxHp) * 100));
