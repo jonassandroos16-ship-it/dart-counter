@@ -476,8 +476,10 @@ function generateCardChoices(run: DartliteRun): ChoiceOption[] {
   const idx = run.choicePlayerIdx;
   const rp = run.runPlayers[idx];
   const ownedCards = rp?.cards ?? [];
-  const cardOpts = generateCardRewardOptions(ownedCards, 'coop');
-  return cardOpts.map(o => ({
+  // Card mode offers both card rewards and a trinket boon so players can
+  // still collect trinkets alongside their card builds.
+  const cardOpts = generateCardRewardOptions(ownedCards, 'coop').slice(0, 2);
+  const options: ChoiceOption[] = cardOpts.map(o => ({
     kind: o.kind,
     label: o.label,
     desc: o.desc,
@@ -485,6 +487,23 @@ function generateCardChoices(run: DartliteRun): ChoiceOption[] {
     cardId: o.cardId,
     cardName: o.cardName,
   }));
+  const pool = run.pool.length ? run.pool : STARTER_POOL;
+  if (pool.length) {
+    options.push({
+      kind: 'trinket',
+      label: 'Random Trinket',
+      desc: 'Draw a random trinket from the available pool.',
+      icon: '🔮',
+    });
+  } else {
+    options.push({
+      kind: 'heal',
+      label: 'Heal 20%',
+      desc: 'Restore 20% of max HP.',
+      icon: '❤️‍🩹',
+    });
+  }
+  return options;
 }
 
 // Apply one player's reward choice. That player receives the benefit. The
@@ -538,7 +557,7 @@ export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): Dartl
     resolved = { ...option, stat: statName, amount, label: statLabel, desc: `Gained ${statLabel}.` };
   } else if (option.kind === 'trinket') {
     const pool = run.pool.length ? run.pool : STARTER_POOL;
-    const id = pick(pool) as TrinketId;
+    const id = option.trinketId && pool.includes(option.trinketId) ? option.trinketId : pick(pool) as TrinketId;
     runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, trinkets: [...p.trinkets, id] } : p);
     trinkets = [...trinkets, id];
     stats = { ...stats, trinketsCollected: [...stats.trinketsCollected, id] };
