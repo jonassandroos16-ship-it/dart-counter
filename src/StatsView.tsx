@@ -345,7 +345,6 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
 
 function CoopStatsSection({ players }: { players: Player[] }) {
   const campaignKills = players.reduce((a, p) => a + ((p as any).campaignKills || 0), 0);
-  const levelsCleared = players.reduce((a, p) => a + (p.campaignProgress?.highest_level_beaten || 0), 0);
 
   return (
     <div className="card">
@@ -355,9 +354,16 @@ function CoopStatsSection({ players }: { players: Player[] }) {
           <div style={{ fontSize: 20, fontWeight: 900 }}>{campaignKills}</div>
           <div className="muted small">Campaign Kills</div>
         </div>
-        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
-          <div style={{ fontSize: 20, fontWeight: 900 }}>{levelsCleared}</div>
-          <div className="muted small">Levels Cleared</div>
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <div className="muted small" style={{ fontWeight: 700, marginBottom: 6 }}>Levels Cleared</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {players.map(pl => (
+            <div key={pl.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: 'var(--bg-3)', borderRadius: 8 }}>
+              <span style={{ fontWeight: 700, fontSize: 13 }}>{pl.name}</span>
+              <span style={{ fontSize: 18, fontWeight: 900 }}>{pl.campaignProgress?.highest_level_beaten || 0}</span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
