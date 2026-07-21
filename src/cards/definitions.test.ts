@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { CARD_DEFS, getCard, cardDamage, upgradedCardDef, cardsForMode, cardsForClass, cardRarityColor, cardTypeColor } from './definitions';
-import type { CardDef } from './types';
 
 describe('Card Definitions', () => {
   it('has cards with valid types', () => {

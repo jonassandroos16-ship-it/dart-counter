@@ -362,9 +362,10 @@ export function generateChoices(run: DartliteRun): ChoiceOption[] {
   return options;
 }
 
-// Apply the first player's reward choice. Only that player receives the
-// benefit. The run then moves to the 'reward' phase so the UI can show the
-// reward reveal and progress popup before the next round starts.
+// Apply one player's reward choice. That player receives the benefit. The
+// run stays in 'choice' and advances choicePlayerIdx so the next player
+// can pick; only after the last player picks does it move to 'reward' so
+// the UI can show the reveal and progress popup before the next round.
 export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): DartliteRun {
   const idx = run.choicePlayerIdx;
   let runPlayers = run.runPlayers;
@@ -400,6 +401,27 @@ export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): Dartl
   }
 
   const playerChoices = run.playerChoices.map((c, i) => i === idx ? option : c);
+
+  const nextIdx = idx + 1;
+  const allChosen = nextIdx >= run.playerIds.length;
+
+  // While players still need to pick, stay in 'choice' and offer fresh
+  // options to the next player. Only after the last player picks do we move
+  // to 'reward' so the UI can show the reveal + progress popup.
+  if (!allChosen) {
+    return {
+      ...run,
+      runPlayers,
+      trinkets,
+      stats,
+      playerStats,
+      playerChoices,
+      choicePlayerIdx: nextIdx,
+      pendingChoice: generateChoices({ ...run, runPlayers, trinkets, stats, playerStats, playerChoices, choicePlayerIdx: nextIdx }),
+      lastUnlockedTrinket: run.lastUnlockedTrinket,
+      phase: 'choice',
+    };
+  }
 
   return {
     ...run,

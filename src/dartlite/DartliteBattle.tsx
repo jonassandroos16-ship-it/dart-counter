@@ -147,8 +147,15 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
           options={run.pendingChoice}
           onPick={(opt) => {
             const next = applyPlayerChoice(run, opt);
-            setChosenRun(next);
-            setShowRewardReveal(true);
+            // Only show the reveal + progress popup after the LAST player has
+            // picked. Intermediate picks stay in 'choice' and the ChoiceScreen
+            // re-renders for the next chooser.
+            if (next.phase === 'reward') {
+              setChosenRun(next);
+              setShowRewardReveal(true);
+            } else {
+              onChoice(next);
+            }
           }}
         />
       ) : (
@@ -340,23 +347,27 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
           )}
 
           {showRewardReveal && chosenRun && (() => {
-            const choice = chosenRun.playerChoices[0];
-            if (!choice) return null;
-            const chooser = players.find(p => p.id === chosenRun.playerIds[0]);
-            const chooserName = chooser?.name || 'Player 1';
-            const chooserColor = chooser?.color || '#7c3aed';
+            const choosers = chosenRun.playerIds.map((pid, i) => {
+              const p = players.find(pl => pl.id === pid);
+              const choice = chosenRun.playerChoices[i];
+              return { name: p?.name || `Player ${i + 1}`, color: p?.color || '#7c3aed', choice };
+            }).filter(c => c.choice);
+            if (!choosers.length) return null;
             return (
               <div onClick={() => { setShowRewardReveal(false); setShowProgress(true); }}
                 style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.82)', cursor: 'pointer' }}>
-                <div style={{ textAlign: 'center', maxWidth: 360, padding: 24 }}>
-                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#c4b5fd', textTransform: 'uppercase' }}>Reward Chosen</div>
-                  <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 999, background: `color-mix(in srgb, ${chooserColor} 22%, var(--bg-3))`, border: `1px solid ${chooserColor}` }}>
-                    <span className="avatar" style={{ background: chooserColor, width: 22, height: 22, fontSize: 10 }}>{initials(chooserName)}</span>
-                    <span style={{ fontWeight: 800, fontSize: 14 }}>{chooserName}</span>
+                <div style={{ textAlign: 'center', maxWidth: 400, padding: 24 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#c4b5fd', textTransform: 'uppercase' }}>Rewards Chosen</div>
+                  <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
+                    {choosers.map((c, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderRadius: 12, background: `color-mix(in srgb, ${c.color} 18%, var(--bg-3))`, border: `1px solid ${c.color}` }}>
+                        <span className="avatar" style={{ background: c.color, width: 24, height: 24, fontSize: 11 }}>{initials(c.name)}</span>
+                        <span style={{ fontWeight: 800, fontSize: 14, minWidth: 70, textAlign: 'left' }}>{c.name}</span>
+                        <span style={{ fontSize: 28 }}>{c.choice!.icon}</span>
+                        <span style={{ fontWeight: 700, fontSize: 14, textAlign: 'left' }}>{c.choice!.label}</span>
+                      </div>
+                    ))}
                   </div>
-                  <div style={{ fontSize: 56, margin: '16px 0 8px' }}>{choice.icon}</div>
-                  <div style={{ fontSize: 22, fontWeight: 900 }}>{choice.label}</div>
-                  <div className="muted" style={{ fontSize: 14, marginTop: 6, lineHeight: 1.5 }}>{choice.desc}</div>
                   <div className="muted small" style={{ marginTop: 28, fontStyle: 'italic' }}>Tap anywhere to continue</div>
                 </div>
               </div>
@@ -421,7 +432,7 @@ function ChoiceScreen({ run, players, options, onPick }: { run: DartliteRun; pla
 
 // ── Progress popup (between rounds) ─────────────────────────────────
 //
-// Shown after the first player has chosen their personal reward. Lists all
+// Shown after all players have chosen their personal rewards. Lists all
 // players in the run with a quick summary. Clicking a player opens a
 // detail modal with their run stats, chosen rewards, kills, and trinkets.
 // Clicking a trinket shows the trinket's full description.

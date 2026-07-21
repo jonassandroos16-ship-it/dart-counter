@@ -4,9 +4,6 @@ import {
   resolveCardDef, cardsForLevelUp, randomCardReward, randomCardUpgradeReward,
   deckSize, isDeckValid,
 } from './deck';
-import { getCard } from './definitions';
-import type { PlayerCard } from './types';
-
 describe('Deck Management', () => {
   it('defaultPlayerCards returns 4 starter cards', () => {
     const cards = defaultPlayerCards();

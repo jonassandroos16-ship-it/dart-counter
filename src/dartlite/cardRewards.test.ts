@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { generateCardRewardOptions, applyCardReward } from './cardRewards';
-import { defaultPlayerCards, hasCard, upgradeCard } from '../cards/deck';
+import { defaultPlayerCards, hasCard } from '../cards/deck';
 
 describe('Dartlite Card Rewards', () => {
   it('generateCardRewardOptions returns 3 options', () => {
