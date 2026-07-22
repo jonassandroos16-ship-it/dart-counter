@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Player, Settings } from '../types';
 import { initials } from '../store';
 import { effectiveAttributes } from '../logic';
+import { getCoopClass } from '../campaign/engine/classes';
 
 interface Props {
   players: Player[];
@@ -37,6 +38,7 @@ export function DartliteSetup({ players, settings, onStart, onBack }: Props) {
           {players.map(p => {
             const isSel = selected.includes(p.id);
             const attrs = effectiveAttributes(p, settings);
+            const cls = getCoopClass(p.coopProgress?.classId);
             return (
               <button key={p.id} className="btn block" style={{
                 padding: 12, textAlign: 'left',
@@ -51,6 +53,11 @@ export function DartliteSetup({ players, settings, onStart, onBack }: Props) {
                       ❤️ {attrs?.health ?? 0} HP · 🛡 {attrs?.armor ?? 0}% · ⚡ {attrs?.power ?? 0}
                     </div>
                   </div>
+                  {cls && (
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)', whiteSpace: 'nowrap' }} title={cls.name}>
+                      {cls.icon} {cls.name}
+                    </span>
+                  )}
                   {isSel && <span style={{ color: '#c4b5fd', fontSize: 18 }}>✓</span>}
                 </div>
               </button>
