@@ -1,6 +1,6 @@
 import type { Player, Settings, ClassAttributes } from '../types';
 import { totalAttributePointsForLevel, defaultClassAttributes, classStartHealth, classStartArmor, classStartPower, classHealthMax, classArmorMax, classPowerMax } from '../logic';
-import { COOP_CLASSES, getCoopClass } from '../campaign/engine';
+import { COOP_CLASSES, getCoopClass, selectClassForPlayer } from '../campaign/engine';
 import type { CoopClassId } from '../campaign/types';
 import { spentOn, effectiveLevel } from './helpers';
 import type { SetPlayers, Toast } from './BasicTab';
@@ -31,6 +31,24 @@ export function AttributesTab({ player, settings, setPlayers, toast }: {
     + spentOn(safeArmor, startA, cfg.armorPerPoint)
     + spentOn(safePower, startP, cfg.powerPerPoint);
   const available = Math.max(0, totalPoints - spent);
+
+  const pickClass = (classId: CoopClassId) => {
+    if (activeClassId === classId) return;
+    setPlayers((prev: Player[]) => prev.map(p => {
+      if (p.id !== player.id) return p;
+      const cur = p.coopProgress || { classId: null, unlockedPassives: [], equippedPassives: [] };
+      const next = selectClassForPlayer(cur, classId);
+      const caMap = { ...(p.classAttributes || {}) };
+      if (!caMap[classId]) {
+        caMap[classId] = defaultClassAttributes(classId, settings);
+      }
+      const activeAttrs = caMap[classId];
+      return { ...p, coopProgress: next, classAttributes: caMap, attributes: { ...activeAttrs } };
+    }));
+    const cls = getCoopClass(classId);
+    toast(`${cls?.name || classId} class selected`);
+  };
+
   const healthAtCap = safeHealth >= hMax;
   const armorAtCap = safeArmor >= aMax;
   const powerAtCap = safePower >= pMax;
@@ -121,6 +139,7 @@ export function AttributesTab({ player, settings, setPlayers, toast }: {
       {/* Per-class overview */}
       <div className="card" style={{ padding: 12, marginBottom: 10 }}>
         <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>All Classes Overview</div>
+        <div className="muted small" style={{ marginBottom: 8 }}>Tap a class to switch your active class.</div>
         {COOP_CLASSES.map(cls => {
           const ca = classAttrs[cls.id] || defaultClassAttributes(cls.id, settings);
           const isCurrent = cls.id === activeClassId;
@@ -133,7 +152,15 @@ export function AttributesTab({ player, settings, setPlayers, toast }: {
           const clsSpent = spentOn(ca.health, cStartH, cfg.healthPerPoint) + spentOn(ca.armor, cStartA, cfg.armorPerPoint) + spentOn(ca.power, cStartP, cfg.powerPerPoint);
           const clsAvail = Math.max(0, clsTotal - clsSpent);
           return (
-            <div key={cls.id} style={{ padding: 10, marginBottom: 6, borderRadius: 8, background: 'var(--bg-3)', border: isCurrent ? '1px solid var(--accent)' : '1px solid transparent' }}>
+            <button key={cls.id} onClick={() => pickClass(cls.id as CoopClassId)} disabled={isCurrent}
+              style={{
+                padding: 10, marginBottom: 6, borderRadius: 8, background: 'var(--bg-3)',
+                border: isCurrent ? '1px solid var(--accent)' : '1px solid transparent',
+                cursor: isCurrent ? 'default' : 'pointer', color: 'inherit', textAlign: 'left',
+                display: 'block', width: '100%',
+                boxShadow: isCurrent ? '0 0 10px color-mix(in srgb,var(--accent) 40%,transparent)' : 'none',
+                transition: 'border-color .15s ease, box-shadow .15s ease',
+              }}>
               <div className="row between" style={{ alignItems: 'center' }}>
                 <span style={{ fontWeight: 700, fontSize: 13 }}>{cls.icon} {cls.name}{isCurrent ? ' (active)' : ''}</span>
                 <span className="muted small">Lvl {clsLv}</span>
@@ -141,7 +168,7 @@ export function AttributesTab({ player, settings, setPlayers, toast }: {
               <div className="muted small" style={{ marginTop: 4 }}>
                 ❤️ {ca.health} HP · 🛡️ {ca.armor}% · ⚡ {ca.power} · {clsAvail} pts available
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
