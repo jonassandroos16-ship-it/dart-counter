@@ -11,10 +11,10 @@ import { runMilestones, awardXP, checkTitleUnlocks, awardBadges } from '../rewar
 import { finishSimpleGame } from '../finish';
 import { GameOver } from '../GameOver';
 import type { PlayerCard, CardDef, CardPlayState } from '../../cards/types';
-import { cardDamage, cardRarityColor, cardTypeColor, resolveCardDef } from '../../cards/definitions';
+import { cardDamage, cardRarityColor, cardTypeColor } from '../../cards/definitions';
 import {
   defaultPlayerCards, initCardPlayState, startTurn,
-  playCardFromHand, endTurn, MAX_PLAYS_PER_TURN,
+  playCardFromHand, endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
 } from '../../cards/deck';
 
 const HIGH_SCORE_VISITS = 7;
