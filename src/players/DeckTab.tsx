@@ -1,7 +1,7 @@
 import type { Player, Settings } from '../types';
 import type { SetPlayers, Toast } from './BasicTab';
-import { defaultPlayerCards, addCard, removeCard, hasCard, resolveCardDef, getPlayerCards, setPlayerCards } from '../cards/deck';
-import { CARD_DEFS, getCard, cardDamage, cardTypeColor, cardRarityColor, cardsForClass, cardsByLevel } from '../cards/definitions';
+import { addCard, removeCard, resolveCardDef, getPlayerCards, setPlayerCards } from '../cards/deck';
+import { CARD_DEFS, getCard, cardDamage, cardTypeColor, cardRarityColor, cardsForClass } from '../cards/definitions';
 import type { CardDef, PlayerCard } from '../cards/types';
 import { levelFromXP } from '../logic';
 
@@ -63,10 +63,10 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
   // Cards the player doesn't own yet, filtered by class availability
   const ownedIds = new Set(cards.map(c => c.cardId));
   const availableNewCards = CARD_DEFS.filter(c => !ownedIds.has(c.id));
-  const classCards = cardsForClass(cls);
+  const classCards = cls ? cardsForClass(cls, 'competitive') : [];
   const classAvailable = classCards.filter(c => !ownedIds.has(c.id));
   const allAvailable = [...classAvailable, ...availableNewCards.filter(c => c.class === 'any')];
-  const sortedAvailable = allAvailable.sort((a, b) => (a.level || 1) - (b.level || 1));
+  const sortedAvailable = allAvailable.sort((a, b) => (a.levelRequired ?? 1) - (b.levelRequired ?? 1));
 
   return (
     <div className="view-scroll">
