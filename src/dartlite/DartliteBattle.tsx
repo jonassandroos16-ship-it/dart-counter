@@ -12,10 +12,11 @@ import { initials } from '../store';
 import { DartOverlay } from '../campaign/DartOverlay';
 import { FrozenOverlay } from '../campaign/FrozenOverlay';
 import { Modal } from '../Popups';
-import type { DartliteRun } from './engine';
+import type { DartliteRun, ChoiceOption } from './engine';
 import { isMiniBossRound, isBossRound, applyPlayerChoice, applyBossTrinketChoice } from './engine';
 import { getTrinket } from './trinkets';
 import { ChoiceScreen } from './ChoiceScreen';
+import { DeckUpgradeScreen } from './DeckUpgradeScreen';
 import { ProgressScreen } from './ProgressScreen';
 import { PlayerDetailModal } from './PlayerDetailModal';
 import { BossVictoryScreen } from './BossVictoryScreen';
@@ -48,6 +49,8 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   const [mult, setMult] = useState(1);
   const [chosenRun, setChosenRun] = useState<DartliteRun | null>(null);
   const [showRewardReveal, setShowRewardReveal] = useState(false);
+  const [showDeckUpgrade, setShowDeckUpgrade] = useState(false);
+  const [deckUpgradeOption, setDeckUpgradeOption] = useState<ChoiceOption | null>(null);
 
   // ── Card mode state ──────────────────────────────────────────────────
   // Per-player card play state (deck, hand, used, graveyard), keyed by
@@ -277,6 +280,11 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
           players={players}
           options={run.pendingChoice}
           onPick={(opt) => {
+            if (opt.kind === 'deck_upgrade') {
+              setDeckUpgradeOption(opt);
+              setShowDeckUpgrade(true);
+              return;
+            }
             const next = applyPlayerChoice(run, opt);
             if (next.phase === 'reward') {
               setChosenRun(next);
@@ -631,6 +639,37 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
           )}
         </>
       )
+      )}
+
+      {showDeckUpgrade && deckUpgradeOption && (
+        <DeckUpgradeScreen
+          run={run}
+          players={players}
+          onCancel={() => { setShowDeckUpgrade(false); setDeckUpgradeOption(null); }}
+          onComplete={(updatedCards, actionLabel) => {
+            const idx = run.choicePlayerIdx;
+            const updatedRun: DartliteRun = {
+              ...run,
+              runPlayers: run.runPlayers.map((p, i) =>
+                i === idx ? { ...p, cards: updatedCards } : p
+              ),
+            };
+            const resolvedOption: ChoiceOption = {
+              ...deckUpgradeOption,
+              label: 'Deck Upgrade',
+              desc: actionLabel,
+            };
+            const next = applyPlayerChoice(updatedRun, resolvedOption);
+            setShowDeckUpgrade(false);
+            setDeckUpgradeOption(null);
+            if (next.phase === 'reward') {
+              setChosenRun(next);
+              setShowRewardReveal(true);
+            } else {
+              onChoice(next);
+            }
+          }}
+        />
       )}
 
       {showProgress && chosenRun && (
