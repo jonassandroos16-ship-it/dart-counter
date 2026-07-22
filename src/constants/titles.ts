@@ -24,7 +24,6 @@ const dartsFromVisits = (visits: any[]) => visits.flatMap((v: any) => v.darts ||
 const countHits = (visits: any[], base: number, mult: number) =>
   dartsFromVisits(visits).filter((d: any) => d.base === base && d.mult === mult).length;
 const countBulls = (visits: any[]) => dartsFromVisits(visits).filter((d: any) => d.value === 50).length;
-const countOuterBulls = (visits: any[]) => dartsFromVisits(visits).filter((d: any) => d.value === 25).length;
 const countAnyBulls = (visits: any[]) => dartsFromVisits(visits).filter((d: any) => d.value === 25 || d.value === 50).length;
 const countTriples = (visits: any[]) => dartsFromVisits(visits).filter((d: any) => d.mult === 3).length;
 const countDoubles = (visits: any[]) => dartsFromVisits(visits).filter((d: any) => d.mult === 2 && d.value !== 50).length;
@@ -65,7 +64,7 @@ export const BUILTIN_TITLES: TitleDef[] = [
     check: (_v, gv) => countCheckouts(gv) >= 3,
     progress: (ctx) => ({ current: Math.min(countCheckouts(ctx?.lifetimeVisits || []), 3), target: 3 }) },
   { id: 'first_blood', name: 'First Blood', desc: 'Win your first game', icon: '🩸',
-    check: (_v, _gv, g, ctx) => (ctx?.gamesWon || 0) >= 1,
+    check: (_v, _gv, _g, ctx) => (ctx?.gamesWon || 0) >= 1,
     progress: (ctx) => ({ current: Math.min(ctx?.gamesWon || 0, 1), target: 1 }) },
   { id: 'untouchable', name: 'Untouchable', desc: 'Win a game without losing a leg', icon: '🛡️',
     check: (_v, gv, g) => g.finished && g.winner === (gv[0] as any) && gv.every((v: any) => v.leg === 1),
@@ -195,7 +194,7 @@ export const BUILTIN_TITLES: TitleDef[] = [
     check: (_v, _gv, g, ctx) => g.mode === 'battle' && (ctx?.gamesWon || 0) >= 10,
     progress: () => null },
   { id: 'battle_survive', name: 'Survivor', desc: 'Survive a Battle mode game with 1 HP left', icon: '❤️',
-    check: (_v, gv, g) => g.mode === 'battle' && g.finished && g.players.some((p: any) => p.id === g.winner && p.hp === 1),
+    check: (_v, _gv, g) => g.mode === 'battle' && g.finished && g.players.some((p: any) => p.id === g.winner && p.hp === 1),
     progress: () => null },
   { id: 'battle_5_kills', name: 'Slayer', desc: 'Get 5 kills in one Battle mode game', icon: '💀',
     check: (_v, gv, g) => g.mode === 'battle' && gv.some((v: any) => (v.kills?.length || 0) >= 5),
@@ -277,25 +276,29 @@ export function conditionLabel(t: CustomTitle): string {
 }
 
 export function buildTitleCheck(t: CustomTitle): (allVisits: any[], gameVisits: any[], game: any, ctx?: TitleCtx) => boolean {
-  if (!t.condition) return () => false;
-  if (t.condition.type === 'sum') {
-    const target = t.condition.value;
+  const cond = t.condition;
+  if (!cond) return () => false;
+  if (cond.type === 'sum') {
+    const target = cond.value;
     return (allVisits) => lifetimeScoreSum(allVisits) >= target;
   }
-  if (t.condition.type === 'combo') {
+  if (cond.type === 'combo') {
+    const target = cond.count;
+    const base = cond.base;
+    const mult = cond.mult;
     return (allVisits) => {
       const darts = dartsFromVisits(allVisits);
-      return darts.some((d: any, i: number) => {
-        if (i + t.condition!.count > darts.length) return false;
-        const slice = darts.slice(i, i + t.condition!.count);
-        return slice.every((d: any) => d.base === t.condition!.base && d.mult === t.condition!.mult);
+      return darts.some((_d: any, i: number) => {
+        if (i + target > darts.length) return false;
+        const slice = darts.slice(i, i + target);
+        return slice.every((d: any) => d.base === base && d.mult === mult);
       });
     };
   }
-  if (t.condition.type === 'sequence') {
+  if (cond.type === 'sequence') {
+    const seq = cond.darts;
     return (allVisits) => {
       const darts = dartsFromVisits(allVisits);
-      const seq = t.condition!.darts;
       return darts.some((_d: any, i: number) => {
         if (i + seq.length > darts.length) return false;
         return seq.every((s: any, j: number) => {

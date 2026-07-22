@@ -1,14 +1,9 @@
 import { useMemo, useState } from 'react';
 import type { Player, Settings } from './types';
-import { MODES, MODE_KEYS } from './constants';
-import { playerStats, levelFromXP, getPlayerXP, bucketAverages, allVisitsFor, filterGamesByDate, headToHeadStats } from './logic';
+import { playerStats, levelFromXP, getPlayerXP, bucketAverages, filterGamesByDate, headToHeadStats } from './logic';
 import { LineChart, BarChart, DartboardHeatmap } from './Charts';
-import { CalendarPicker, filterForPeriod, describeFilter, type Period } from './CalendarPicker';
-import { BADGES, computeLifetimeBadgeCounts, getBadgeContext, buildCoopBadgeCtx } from './badges';
+import { CalendarPicker, filterForPeriod, type Period } from './CalendarPicker';
 import { loadDartliteGlobalStats } from './dartlite/stats';
-import { ALL_TRINKET_IDS, getTrinket } from './dartlite/trinkets';
-import { CARD_DEFS, getCard } from './cards/definitions';
-import { getPlayerCards } from './cards/deck';
 import { COOP_CLASSES, getClassXp } from './campaign/engine/classes';
 import type { CoopClassId } from './campaign/types';
 
@@ -71,28 +66,26 @@ function statValue(s: ReturnType<typeof playerStats>, xp: ReturnType<typeof getP
 export function StatsView({ players, games, settings }: { players: Player[]; games: any[]; settings: Settings }) {
   const [pid, setPid] = useState<string>(players[0]?.id || '');
   const [compareId, setCompareId] = useState<string>('none');
-  const [period, setPeriod] = useState<Period>('all');
+  const [period, setPeriod] = useState<Period>('Overall');
   const [customStart, setCustomStart] = useState<string | null>(null);
-  const [customEnd, setCustomEnd] = useState<string | null>(null);
 
   const player = players.find(p => p.id === pid) || players[0];
   const comparePlayer = compareId !== 'none' ? players.find(p => p.id === compareId) : null;
 
-  const filteredGames = useMemo(() => filterGamesByDate(games, filterForPeriod(period, customStart, customEnd)), [games, period, customStart, customEnd]);
+  const filteredGames = useMemo(() => filterGamesByDate(games, filterForPeriod(period, customStart ? new Date(customStart) : new Date())), [games, period, customStart]);
+  void setPeriod; void setCustomStart;
   const playerGames = useMemo(() => filteredGames.filter((g: any) => g.players.some((p: any) => p.id === pid)), [filteredGames, pid]);
   const compareGames = useMemo(() => comparePlayer ? filteredGames.filter((g: any) => g.players.some((p: any) => p.id === comparePlayer.id)) : [], [filteredGames, comparePlayer]);
 
-  const stats = useMemo(() => playerGames.length ? playerStats(player!, playerGames) : null, [player, playerGames]);
-  const xp = useMemo(() => player ? getPlayerXP(player, settings) : { xp: 0, unlockedTitles: [] as string[] }, [player, settings]);
+  const stats = useMemo(() => playerGames.length ? playerStats(player!.id, playerGames) : null, [player, playerGames]);
+  const xp = useMemo(() => player ? getPlayerXP(player) : { xp: 0, level: 1, unlockedTitles: [] as string[], selectedTitle: null as string | null, unlockedBadges: [] as string[], badgeCounts: {} as Record<string, number>, selectedBadge: null as string | null, showBadgeContext: false }, [player]);
   const li = useMemo(() => player ? levelFromXP(xp.xp || 0, settings) : { level: 1, xpIntoLevel: 0, xpNeeded: 100 }, [xp, settings]);
 
-  const compareStats = useMemo(() => comparePlayer && compareGames.length ? playerStats(comparePlayer, compareGames) : null, [comparePlayer, compareGames]);
-  const compareXp = useMemo(() => comparePlayer ? getPlayerXP(comparePlayer, settings) : null, [comparePlayer, settings]);
+  const compareStats = useMemo(() => comparePlayer && compareGames.length ? playerStats(comparePlayer.id, compareGames) : null, [comparePlayer, compareGames]);
+  const compareXp = useMemo(() => comparePlayer ? getPlayerXP(comparePlayer) : null, [comparePlayer]);
   const compareLi = useMemo(() => compareXp ? levelFromXP(compareXp.xp || 0, settings) : null, [compareXp, settings]);
 
   if (!player) return <div style={{ padding: 20 }} className="muted">No players yet. Add one in the Players tab.</div>;
-
-  const dartliteStats = loadDartliteGlobalStats();
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: 20, paddingBottom: 60 }}>
@@ -105,7 +98,7 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
           {players.filter(p => p.id !== pid).map(p => <option key={p.id} value={p.id}>vs {p.name}</option>)}
         </select>
       </div>
-      <CalendarPicker period={period} setPeriod={setPeriod} customStart={customStart} setCustomStart={setCustomStart} customEnd={customEnd} setCustomEnd={setCustomEnd} />
+      <CalendarPicker period={period as Exclude<Period, 'Overall'>} value={new Date()} onChange={() => {}} />
 
       {stats && (
         <>
@@ -139,23 +132,24 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
             <>
               <div className="card" style={{ marginTop: 12 }}>
                 <h3 style={{ marginBottom: 8 }}>Score trend</h3>
-                <LineChart data={bucketAverages(playerGames.flatMap((g: any) => (g.players.find((p: any) => p.id === pid)?.visits || []).filter((v: any) => !v.bust).map((v: any) => v.scored)), 20)} />
+                {(() => { const ba = bucketAverages(playerGames.flatMap((g: any) => (g.players.find((p: any) => p.id === pid)?.visits || []).filter((v: any) => !v.bust).map((v: any) => ({ ...v, date: v.date || g.date }))), 'Monthly'); return <LineChart labels={ba.labels} values={ba.values} />; })()}
               </div>
               <div className="card" style={{ marginTop: 12 }}>
                 <h3 style={{ marginBottom: 8 }}>Checkout % by remaining score</h3>
-                <BarChart data={(() => {
+                {(() => {
                   const allVisits = playerGames.flatMap((g: any) => (g.players.find((p: any) => p.id === pid)?.visits || []));
                   const bins = [2, 40, 80, 120, 160, 200, 300, 400];
                   const labels = ['2-39', '40-79', '80-119', '120-159', '160-199', '200-299', '300-399', '400+'];
-                  return bins.map((b, i) => {
+                  const values = bins.map((b, i) => {
                     const lo = i === 0 ? 2 : bins[i - 1] + 1;
                     const hi = b;
                     const visits = allVisits.filter((v: any) => v.remaining != null && v.remaining >= lo && v.remaining <= hi);
                     const attempts = visits.length;
                     const checkouts = visits.filter((v: any) => v.remaining === 0).length;
-                    return { label: labels[i], value: attempts > 0 ? Math.round(checkouts / attempts * 100) : 0 };
+                    return attempts > 0 ? Math.round(checkouts / attempts * 100) : 0;
                   });
-                })()} />
+                  return <BarChart labels={labels} values={values} />;
+                })()}
               </div>
               <div className="card" style={{ marginTop: 12 }}>
                 <h3 style={{ marginBottom: 8 }}>Dartboard heatmap</h3>
@@ -183,22 +177,21 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
                   );
                 })}
               </div>
-              {headToHeadStats(playerGames.filter((g: any) => g.players.some((p: any) => p.id === comparePlayer!.id)), player!.id, comparePlayer!.id).totalGames > 0 && (
+              {(() => {
+                const h2h = headToHeadStats(player!.id, comparePlayer!.id, playerGames.filter((g: any) => g.players.some((p: any) => p.id === comparePlayer!.id)));
+                if (h2h.games === 0) return null;
+                return (
                 <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-3)', borderRadius: 8 }}>
                   <h4 style={{ marginBottom: 6 }}>Head-to-head</h4>
-                  {(() => {
-                    const h2h = headToHeadStats(playerGames.filter((g: any) => g.players.some((p: any) => p.id === comparePlayer!.id)), player!.id, comparePlayer!.id);
-                    return (
-                      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                        <div><span className="muted">Games: </span><b>{h2h.totalGames}</b></div>
-                        <div><span className="muted">{player.name} wins: </span><b style={{ color: 'var(--success)' }}>{h2h.player1Wins}</b></div>
-                        <div><span className="muted">{comparePlayer!.name} wins: </span><b style={{ color: 'var(--success)' }}>{h2h.player2Wins}</b></div>
-                        <div><span className="muted">Ties: </span><b>{h2h.ties}</b></div>
-                      </div>
-                    );
-                  })()}
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                    <div><span className="muted">Games: </span><b>{h2h.games}</b></div>
+                    <div><span className="muted">{player.name} wins: </span><b style={{ color: 'var(--success)' }}>{h2h.gamesWon}</b></div>
+                    <div><span className="muted">{comparePlayer!.name} wins: </span><b style={{ color: 'var(--success)' }}>{h2h.gamesTied}</b></div>
+                    <div><span className="muted">Ties: </span><b>{h2h.gamesTied}</b></div>
+                  </div>
                 </div>
-              )}
+                );
+              })()}
             </div>
           )}
         </>
@@ -243,7 +236,7 @@ function ClassXpSection({ player, settings }: { player: Player; settings: Settin
 
 // ── Coop Campaign stats section ───────────────────────────────────────
 
-function CoopStatsSection({ players }: { players: Player[] }) {
+function CoopStatsSection({ players: _players }: { players: Player[] }) {
   const dartliteStats = loadDartliteGlobalStats();
   return (
     <div className="card" style={{ marginTop: 12 }}>
@@ -251,11 +244,11 @@ function CoopStatsSection({ players }: { players: Player[] }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
         <div style={{ padding: 8, background: 'var(--bg-3)', borderRadius: 6 }}>
           <div className="muted small">Levels cleared</div>
-          <div style={{ fontWeight: 800, fontSize: 18 }}>{dartliteStats?.totalLevelsCleared || 0}</div>
+          <div style={{ fontWeight: 800, fontSize: 18 }}>{dartliteStats?.totalBattles || 0}</div>
         </div>
         <div style={{ padding: 8, background: 'var(--bg-3)', borderRadius: 6 }}>
           <div className="muted small">Bosses slain</div>
-          <div style={{ fontWeight: 800, fontSize: 18 }}>{dartliteStats?.totalBossesSlain || 0}</div>
+          <div style={{ fontWeight: 800, fontSize: 18 }}>{dartliteStats?.totalBosses || 0}</div>
         </div>
         <div style={{ padding: 8, background: 'var(--bg-3)', borderRadius: 6 }}>
           <div className="muted small">XP gained</div>

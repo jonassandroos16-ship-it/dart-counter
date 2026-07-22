@@ -52,7 +52,6 @@ export function PostGameOverlay({
 }) {
   const theme = chapter?.theme;
   const accent = theme?.accent || 'var(--accent)';
-  const bg = theme?.background || 'var(--bg)';
   const storyBit = isBoss
     ? chapter?.story.outro
     : chapter?.levels.find(l => l.name === levelName)?.story_bit;

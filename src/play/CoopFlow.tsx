@@ -11,7 +11,6 @@ import {
   getCoopPowerUp,
   coopXpForBattle,
   defaultCoopProgress,
-  recordLevelClearForPlayer,
   reconcileCoopPassivesForPlayer,
   addClassXp,
   classLevelFromXp,
@@ -38,7 +37,7 @@ export function CoopFlow({ players, settings, music, setPlayers, toast, onExitTo
   const [chapterId, setChapterId] = useState<string | null>(null);
   const [levelId, setLevelId] = useState<number | null>(null);
   const [postGame, setPostGame] = useState<PostGameInfo | null>(null);
-  const { progress, setProgress } = useCampaignProgress();
+  const { progress } = useCampaignProgress();
 
   if (stage === 'battle' && levelId != null && chapterId) {
     const coopPlayers = playerIds.map(id => players.find(p => p.id === id)).filter(Boolean) as Player[];
@@ -48,8 +47,9 @@ export function CoopFlow({ players, settings, music, setPlayers, toast, onExitTo
       progress={progress}
       settings={settings}
       players={coopPlayers}
-      onWin={(stats) => {
-        const unlockedPowerUpId = recordLevelClearForPlayer(progress, chapterId, levelId, setProgress, stats);
+      music={music}
+      onWin={(newHighest, unlockedPowerUpId, stats) => {
+        void newHighest;
         const xpGained = coopXpForBattle(stats, true);
         const ids = (coopPlayers || []).map(p => p.id);
         const levelUps: LevelUpInfo[] = [];

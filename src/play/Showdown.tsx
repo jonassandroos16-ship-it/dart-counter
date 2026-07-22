@@ -68,7 +68,7 @@ export function Showdown({ game, players, games, settings, onClose }: {
         const p = players.find(pp => pp.id === pl.id);
         const xp = getPlayerXPById(pl.id, players);
         const li = levelFromXP(xp.xp, settings);
-        const ti = getTitleInfo(xp.selectedTitle, settings.customTitles);
+        const ti = getTitleInfo(xp.selectedTitle ?? '', settings.customTitles);
         const bi = getBadgeInfo(xp.selectedBadge);
         const ctx = xp.showBadgeContext ? getBadgeContext(xp.selectedBadge, pl.id, games as any, buildCoopBadgeCtx()) : null;
         const pu = getPowerUpInfo(p?.powerUps?.active);
@@ -86,7 +86,7 @@ export function Showdown({ game, players, games, settings, onClose }: {
         const p = players.find(pp => pp.id === pl.id);
         const xp = getPlayerXPById(pl.id, players);
         const li = levelFromXP(xp.xp, settings);
-        const tinfo = getTitleInfo(xp.selectedTitle, settings.customTitles);
+        const tinfo = getTitleInfo(xp.selectedTitle ?? '', settings.customTitles);
         const binfo = getBadgeInfo(xp.selectedBadge);
         const bctx = xp.showBadgeContext ? getBadgeContext(xp.selectedBadge, pl.id, games as any, buildCoopBadgeCtx()) : null;
         const pu = getPowerUpInfo(p?.powerUps?.active);
