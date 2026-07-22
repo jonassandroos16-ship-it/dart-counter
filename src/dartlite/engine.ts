@@ -23,7 +23,7 @@ import {
 } from './trinkets';
 import type { EnemyDef } from '../campaign/types';
 import type { PlayerCard } from '../cards/types';
-import { defaultPlayerCards } from '../cards/deck';
+import { getPlayerCards } from '../cards/deck';
 import {
   generateCardRewardOptions, applyCardReward, type CardRewardChoice,
 } from './cardRewards';
@@ -159,7 +159,7 @@ export function startRun(players: Player[], settings: Settings, cardMode: boolea
       bonusHealth: 0,
       bonusArmor: 0,
       bonusPower: 0,
-      cards: cardMode ? defaultPlayerCards(p.coopProgress?.classId) : [],
+      cards: cardMode ? getPlayerCards(p) : [],
     };
   });
   return {
