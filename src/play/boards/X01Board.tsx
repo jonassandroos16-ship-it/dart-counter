@@ -309,7 +309,7 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
           {Array.from({ length: (game.powerUpsEnabled && (p as any)._fourthDart) ? 4 : (game.powerUpsEnabled && (p as any)._oneDartNext ? 1 : 3) }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`} style={i === 3 ? { borderColor: 'var(--accent)' } : {}}>{d ? d.label : (i === 3 ? '🎯' : '–')}</div>; })}
         </div>
         <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{buffScored}</b> · Darts thrown: <b style={{ color: 'var(--text)' }}>{(p.visits.reduce((a, v) => a + v.darts.length, 0)) + game.darts.length}</b></div>
-        <AttributeStrip playerId={p.id} players={players} mode={game.mode} />
+        <AttributeStrip playerId={p.id} players={players} mode={game.mode} settings={settings} />
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
           <PowerUpOrb game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
             activatePowerUp(game, game.turn, settings, toast, {
@@ -350,7 +350,7 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
                 </div>
                 <div className="po-score">{pl.score}</div>
                 <div className="po-sub">avg {visitAvg(pl).toFixed(1)} · {pl.visits.reduce((a, v) => a + v.darts.length, 0)} 🎯 · L{li.level}{ti ? ` · ${ti.icon || ''} ${ti.name}` : ''}</div>
-                <AttributeStrip playerId={pl.id} players={players} mode={game.mode} />
+                <AttributeStrip playerId={pl.id} players={players} mode={game.mode} settings={settings} />
               </div>
             );
           })}

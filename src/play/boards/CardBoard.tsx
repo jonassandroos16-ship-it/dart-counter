@@ -562,7 +562,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
             </div>
           </div>
         )}
-        <AttributeStrip playerId={p.id} players={players} mode={game.mode} />
+        <AttributeStrip playerId={p.id} players={players} mode={game.mode} settings={settings} />
       </div>
 
       {game.players.length > 1 && (
@@ -618,7 +618,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
                   <>
                     <div className="po-score">{pl.score}</div>
                     <div className="po-sub">avg {visitAvg(pl).toFixed(1)} · {pl.visits.reduce((a, v) => a + v.darts.length, 0)} {'\u{1F3AF}'} · L{li.level}{ti ? ` · ${ti.icon || ''} ${ti.name}` : ''}</div>
-                    <AttributeStrip playerId={pl.id} players={players} mode={game.mode} />
+                    <AttributeStrip playerId={pl.id} players={players} mode={game.mode} settings={settings} />
                   </>
                 )}
               </div>
