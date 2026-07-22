@@ -40,8 +40,8 @@ jobs:
       - name: Inject commit SHA
         run: echo "VITE_COMMIT_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
       - env:
-          VITE_SUPABASE_URL: https://ulgwamsiuumwkgpolubj.supabase.co
-          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVsZ3dhbXNpdXVtd2tncG9sdWJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzNjAyMzgsImV4cCI6MjA5OTkzNjIzOH0.8L01K0TCh9HnOWYEO2qLhQKoc6bsDciiLZLzbEqdFVs
+          VITE_SUPABASE_URL: https://ifxqfuibvjqueoamltmd.supabase.co
+          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlmeHFmdWlidmpxdWVvYW1sdG1kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2Nzk5ODUsImV4cCI6MjEwMDI1NTk4NX0.KttL56sd5VBzALzbRFUxmwRGBx4bhdvwOYxiNZVxH24
         run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:
