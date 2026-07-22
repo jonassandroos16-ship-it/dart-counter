@@ -1,8 +1,8 @@
 import type { Game, GamePlayer, GameRecord, Player, Settings } from '../types';
-import { recordFromGame } from './logic';
-import { Sound } from './sound';
-import type { MusicEngine } from './music';
-import type { PopupControls } from './Popups';
+import { recordFromGame } from '../logic';
+import { Sound } from '../sound';
+import type { MusicEngine } from '../music';
+import type { PopupControls } from '../Popups';
 import { awardXP, checkTitleUnlocks, awardBadges } from './rewards';
 
 // Shared end-game helper used by the Killer, High Score and Battle boards
