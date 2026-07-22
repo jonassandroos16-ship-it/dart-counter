@@ -95,21 +95,22 @@ export default function App() {
       return;
     }
     if (view !== 'play') { musicRef.current.stop(); return; }
-    musicRef.current.startContext('setup', db.settings);
+    if (db.activeGame && !db.activeGame.finished) musicRef.current.startContext('match', db.settings);
+    else musicRef.current.startContext('setup', db.settings);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, welcomeDone, db.settings.music, db.settings.musicStartTrack, db.settings.musicSetupTrack, db.settings.musicVolume]);
 
   return (
     <div className="app-shell">
       <WelcomeOverlay onDone={() => setWelcomeDone(true)} />
-      {view === 'play' && (
+      <div style={{ flex: 1, display: view === 'play' ? 'flex' : 'none', flexDirection: 'column', minHeight: 0 }}>
         <PlayView players={db.players} games={db.games} settings={db.settings}
           activeGame={db.activeGame} setActiveGame={db.setActiveGame}
           setGames={db.setGames} setPlayers={db.setPlayers} toast={show} music={musicRef.current}
           onQuit={() => { musicRef.current.startContext('setup', db.settings); }}
           onGameOver={() => {}}
           popups={popups} />
-      )}
+      </div>
       {view === 'players' && <div className="view-scroll"><PlayersView players={db.players} games={db.games} settings={db.settings} setPlayers={db.setPlayers} toast={show} /></div>}
       {view === 'stats' && <StatsView players={db.players} games={db.games} settings={db.settings} />}
       {view === 'history' && <HistoryView players={db.players} games={db.games} settings={db.settings} setGames={db.setGames} toast={show} />}
