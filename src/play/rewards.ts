@@ -44,7 +44,7 @@ export function awardXP(playerId: string, amount: number, reason: string, settin
     let next: Player = { ...p, xp: newXp, level: li.level };
     if (li.level > oldLevel) {
       if (settings.gameMode === 'cards') {
-        const curCards = next.cards && next.cards.length > 0 ? next.cards : defaultPlayerCards();
+        const curCards = next.cards && next.cards.length > 0 ? next.cards : defaultPlayerCards(next.coopProgress?.classId);
         const newCards = cardsForLevelUpCompetitive(next.coopProgress?.classId || null, li.level, curCards);
         if (newCards.length > 0) {
           let updatedCards = curCards;

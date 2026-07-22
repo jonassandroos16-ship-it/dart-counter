@@ -5,7 +5,7 @@ import { initials } from '../store';
 
 export function SetupView({ players, settings, onStart, onOpenCampaign, onBackToModeSelect }: { players: Player[]; settings: Settings; onStart: (mode: string, ids: string[], dbl: boolean, legs: number, teamMode: boolean, teamAssignment: number[], powerUps: boolean) => void; onOpenCampaign?: () => void; onBackToModeSelect?: () => void }) {
   const cardMode = settings.gameMode === 'cards';
-  const [mode, setMode] = useState(cardMode ? '501' : '301');
+  const [mode, setMode] = useState(cardMode ? 'battle' : '301');
   const [doubleOut, setDoubleOut] = useState(false);
   const [legs, setLegs] = useState(1);
   const [picked, setPicked] = useState<string[]>(players.length ? [players[0].id] : []);
@@ -52,14 +52,14 @@ export function SetupView({ players, settings, onStart, onOpenCampaign, onBackTo
         )}
         <label className="field"><span>Game Mode</span>
           <select value={mode} onChange={e => setMode(e.target.value)}>
-            <option value="501">501</option>
-            <option value="301">301</option>
-            <option value="701">701</option>
-            <option value="101">101</option>
+            <option value="501" disabled={cardMode}>501{cardMode ? ' (disabled)' : ''}</option>
+            <option value="301" disabled={cardMode}>301{cardMode ? ' (disabled)' : ''}</option>
+            <option value="701" disabled={cardMode}>701{cardMode ? ' (disabled)' : ''}</option>
+            <option value="101" disabled={cardMode}>101{cardMode ? ' (disabled)' : ''}</option>
             <option value="atc" disabled={cardMode}>Around the Clock{cardMode ? ' (disabled)' : ''}</option>
             <option value="practice">Practice (free scoring)</option>
             <option value="killer">Killer (elimination)</option>
-            <option value="speed101">Speed 101 (party)</option>
+            <option value="speed101" disabled={cardMode}>Speed 101 (party){cardMode ? ' (disabled)' : ''}</option>
             <option value="highscore">High Score (party)</option>
             <option value="battle">Battle (attributes)</option>
           </select>
