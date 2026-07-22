@@ -80,16 +80,15 @@ export function MultiplayerFlow({
     toast(`Lobby created! Code: ${newLobby.code}`);
   }, [subscribe, toast]);
 
-  const handleJoin = useCallback(async (targetLobby: Lobby) => {
-    if (!players.length) { toast('Add a player first'); return; }
+  const handleJoin = useCallback(async (targetLobby: Lobby, joinPlayer: Player) => {
     setLobby(targetLobby);
     setStage('room');
     subscribe(targetLobby.id);
-    const ok = await joinLobby(targetLobby.id, players[0]);
+    const ok = await joinLobby(targetLobby.id, joinPlayer);
     if (!ok) { toast('Could not join lobby'); return; }
     const lp = await fetchLobbyPlayers(targetLobby.id);
     setLobbyPlayers(lp);
-  }, [players, subscribe, toast]);
+  }, [subscribe, toast]);
 
   const handleAddLocalPlayer = useCallback(async (player: Player) => {
     if (!lobby) return;

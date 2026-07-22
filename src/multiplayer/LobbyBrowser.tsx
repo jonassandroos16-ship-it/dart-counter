@@ -8,7 +8,7 @@ import { initials } from '../store';
 interface Props {
   players: Player[];
   onCreate: () => void;
-  onJoin: (lobby: Lobby) => void;
+  onJoin: (lobby: Lobby, player: Player) => void;
   onBack: () => void;
 }
 
@@ -17,6 +17,7 @@ export function LobbyBrowser({ players, onCreate, onJoin, onBack }: Props) {
   const [loading, setLoading] = useState(true);
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState('');
+  const [selectedPlayerId, setSelectedPlayerId] = useState(players.length ? players[0].id : '');
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -39,8 +40,24 @@ export function LobbyBrowser({ players, onCreate, onJoin, onBack }: Props) {
       setCodeError('No open lobby with that code');
       return;
     }
-    onJoin(lobby);
+    onJoin(lobby, selectedPlayer);
   };
+
+  if (!players.length) {
+    return (
+      <div className="view-scroll">
+        <div className="card">
+          <h2 style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Globe size={22} /> Multiplayer
+          </h2>
+          <div className="card empty">Add a player before joining a lobby.</div>
+          <button className="btn ghost block" style={{ marginTop: 12 }} onClick={onBack}>← Back</button>
+        </div>
+      </div>
+    );
+  }
+
+  const selectedPlayer = players.find(p => p.id === selectedPlayerId) || players[0];
 
   return (
     <div className="view-scroll">
@@ -50,6 +67,19 @@ export function LobbyBrowser({ players, onCreate, onJoin, onBack }: Props) {
             <Globe size={22} /> Multiplayer
           </h2>
           <button className="btn ghost sm" onClick={onBack}>← Back</button>
+        </div>
+
+        <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Join As</span>
+        <div className="row wrap" style={{ gap: 8, marginBottom: 16 }}>
+          {players.map(p => {
+            const on = p.id === selectedPlayerId;
+            return (
+              <button key={p.id} className="pill" style={{ background: on ? p.color : 'var(--bg-3)', color: on ? '#0b0e13' : 'var(--text)' }}
+                onClick={() => setSelectedPlayerId(p.id)}>
+                <span className="avatar" style={{ width: 20, height: 20, fontSize: 10, background: on ? 'rgba(0,0,0,.2)' : p.color }}>{initials(p.name)}</span>{p.name}
+              </button>
+            );
+          })}
         </div>
 
         <button className="btn primary block" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
@@ -86,7 +116,7 @@ export function LobbyBrowser({ players, onCreate, onJoin, onBack }: Props) {
           <div style={{ display: 'grid', gap: 8 }}>
             {lobbies.map(l => (
               <button key={l.id} className="btn block" style={{ padding: 14, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12 }}
-                onClick={() => onJoin(l)}>
+                onClick={() => onJoin(l, selectedPlayer)}>
                 <div style={{
                   width: 44, height: 44, borderRadius: 10, background: 'color-mix(in srgb, var(--accent) 15%, var(--bg-3))',
                   border: '1px solid color-mix(in srgb, var(--accent) 40%, var(--border))',
@@ -105,11 +135,7 @@ export function LobbyBrowser({ players, onCreate, onJoin, onBack }: Props) {
           </div>
         )}
 
-        {players.length > 0 && (
-          <div className="muted small" style={{ marginTop: 14 }}>
-            You have {players.length} player{players.length === 1 ? '' : 's'} on this device: {players.slice(0, 6).map(p => initials(p.name)).join(' · ')}
-          </div>
-        )}
+
       </div>
     </div>
   );
