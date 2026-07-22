@@ -280,7 +280,7 @@ export function buildTitleCheck(t: CustomTitle): (allVisits: any[], gameVisits: 
   if (!cond) return () => false;
   if (cond.type === 'sum') {
     const target = cond.value;
-    return (allVisits) => lifetimeScoreSum(allVisits) >= target;
+    return (allVisits) => scoringVisits(allVisits).some((v: any) => (v.scored || 0) >= target);
   }
   if (cond.type === 'combo') {
     const target = cond.count;
