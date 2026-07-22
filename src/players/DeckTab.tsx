@@ -1,9 +1,9 @@
 import type { Player, Settings } from '../types';
 import type { SetPlayers, Toast } from './BasicTab';
 import { addCard, removeCard, upgradeCard, resolveCardDef, getPlayerCards, setPlayerCards } from '../cards/deck';
-import { CARD_DEFS, getCard, cardDamage, cardTypeColor, cardRarityColor, cardsForClass } from '../cards/definitions';
+import { CARD_DEFS, getCard, cardDamage, cardTypeColor, cardRarityColor, cardsForClass, splitStarterAndLeveled } from '../cards/definitions';
 import type { CardDef, PlayerCard } from '../cards/types';
-import { levelFromXP } from '../logic';
+import { effectiveLevel } from './helpers';
 
 const CLASS_ICONS: Record<string, string> = {
   warrior: '⚔️',
@@ -24,13 +24,47 @@ function ClassBadge({ def, cls }: { def: CardDef; cls: string | null }) {
   );
 }
 
+function CardTile({ pc, def, cls, onUpgrade, onRemove }: {
+  pc: PlayerCard; def: CardDef; cls: string | null;
+  onUpgrade: () => void; onRemove: () => void;
+}) {
+  return (
+    <div className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))`, position: 'relative' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <span style={{ fontSize: 22 }}>{def.icon}</span>
+        {pc.upgradeLevel > 0 && <span style={{ fontSize: 10, fontWeight: 800, color: '#fbbf24' }}>{'★'.repeat(pc.upgradeLevel)}</span>}
+      </div>
+      <div style={{ fontSize: 11, fontWeight: 800, marginTop: 2 }}>{def.name}{pc.upgradeLevel > 0 ? ` +${pc.upgradeLevel}` : ''}</div>
+      <div className="muted" style={{ fontSize: 9, lineHeight: 1.2 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</div>
+      <ClassBadge def={def} cls={cls} />
+      <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+        {pc.upgradeLevel < 5 && <button className="btn sm" style={{ fontSize: 10, padding: '2px 6px' }} onClick={onUpgrade}>Upgrade</button>}
+        <button className="btn sm danger" style={{ fontSize: 11, padding: '4px 8px' }} onClick={onRemove}>Remove</button>
+      </div>
+    </div>
+  );
+}
+
+function AvailableCardTile({ def, cls, onAdd }: {
+  def: CardDef; cls: string | null; onAdd: () => void;
+}) {
+  return (
+    <div className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))` }}>
+      <span style={{ fontSize: 22 }}>{def.icon}</span>
+      <div style={{ fontSize: 11, fontWeight: 800, marginTop: 2 }}>{def.name}</div>
+      <div className="muted" style={{ fontSize: 9, lineHeight: 1.2 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</div>
+      <ClassBadge def={def} cls={cls} />
+      <button className="btn sm primary" style={{ fontSize: 11, padding: '4px 8px', marginTop: 4 }} onClick={onAdd}>Add</button>
+    </div>
+  );
+}
+
 export function DeckTab({ player, setPlayers, toast, settings }: {
   player: Player; setPlayers: SetPlayers; toast: Toast; settings: Settings;
 }) {
   const cards: PlayerCard[] = getPlayerCards(player);
   const cls = player.coopProgress?.classId || null;
-  const xpInfo = levelFromXP(player.xp ?? 0, settings);
-  const playerLevel = xpInfo.level;
+  const playerLevel = effectiveLevel(player, settings);
 
   const addCardToPlayer = (cardId: string) => {
     setPlayers((prev: Player[]) => prev.map(p => {
@@ -60,66 +94,108 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
     toast('Card upgraded');
   };
 
-  // Cards the player doesn't own yet, filtered by class availability
+  // Split owned cards into starter and leveled groups
+  const ownedWithDefs = cards.map(pc => ({ pc, def: resolveCardDef(pc) })).filter(x => x.def) as { pc: PlayerCard; def: CardDef }[];
+  const ownedStarter = ownedWithDefs.filter(x => (x.def.levelRequired ?? 1) === 1);
+  const ownedLeveled = new Map<number, { pc: PlayerCard; def: CardDef }[]>();
+  for (const x of ownedWithDefs) {
+    const lvl = x.def.levelRequired ?? 1;
+    if (lvl <= 1) continue;
+    if (!ownedLeveled.has(lvl)) ownedLeveled.set(lvl, []);
+    ownedLeveled.get(lvl)!.push(x);
+  }
+
+  // Available cards filtered by class and level
   const ownedIds = new Set(cards.map(c => c.cardId));
-  const availableNewCards = CARD_DEFS.filter(c => !ownedIds.has(c.id));
   const classCards = cls ? cardsForClass(cls, 'competitive') : [];
   const classAvailable = classCards.filter(c => !ownedIds.has(c.id));
-  const allAvailable = [...classAvailable, ...availableNewCards.filter(c => c.class === 'any')];
+  const allAvailable = [...classAvailable, ...CARD_DEFS.filter(c => c.class === 'any' && !ownedIds.has(c.id))];
   const sortedAvailable = allAvailable.sort((a, b) => (a.levelRequired ?? 1) - (b.levelRequired ?? 1));
+  const { starter: availStarter, leveled: availLeveled } = splitStarterAndLeveled(sortedAvailable);
+
+  const gridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 };
+  const sectionStyle: React.CSSProperties = { marginTop: 12 };
 
   return (
     <div className="view-scroll">
+      {/* Owned deck — split by starter and levels */}
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="row between" style={{ marginBottom: 8 }}>
           <h3 style={{ margin: 0 }}>Your Deck</h3>
-          <span className="muted small">{cards.length} cards · Class: {cls || 'None'}</span>
+          <span className="muted small">{cards.length} cards · Class: {cls || 'None'} · Level {playerLevel}</span>
         </div>
-        <div className="muted small" style={{ marginBottom: 8 }}>Cards are saved per class. Switching classes keeps each deck separate.</div>
-        {cards.length === 0 ? (
-          <div className="muted small" style={{ padding: 20, textAlign: 'center' }}>No cards in your deck yet. Add cards below.</div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
-            {cards.map(pc => {
-              const def = resolveCardDef(pc);
-              if (!def) return null;
-              return (
-                <div key={pc.cardId} className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))`, position: 'relative' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <span style={{ fontSize: 22 }}>{def.icon}</span>
-                    {pc.upgradeLevel > 0 && <span style={{ fontSize: 10, fontWeight: 800, color: '#fbbf24' }}>{'★'.repeat(pc.upgradeLevel)}</span>}
-                  </div>
-                  <div style={{ fontSize: 11, fontWeight: 800, marginTop: 2 }}>{def.name}{pc.upgradeLevel > 0 ? ` +${pc.upgradeLevel}` : ''}</div>
-                  <div className="muted" style={{ fontSize: 9, lineHeight: 1.2 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</div>
-                  <ClassBadge def={def} cls={cls} />
-                  <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                    {pc.upgradeLevel < 5 && <button className="btn sm" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => upgradeCardForPlayer(pc.cardId)}>Upgrade</button>}
-                    <button className="btn sm danger" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => removeCardFromPlayer(pc.cardId)}>Remove</button>
-                  </div>
-                </div>
-              );
-            })}
+        <div className="muted small" style={{ marginBottom:8 }}>Cards are saved per class. XP is tracked per class — switching classes keeps each deck and level separate.</div>
+
+        {/* Starter cards */}
+        <div style={{ marginTop: 8 }}>
+          <div className="muted small" style={{ fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em', fontSize: 10 }}>Starter Cards ({ownedStarter.length})</div>
+          {ownedStarter.length === 0 ? (
+            <div className="muted small" style={{ padding: 12, textAlign: 'center' }}>No starter cards yet.</div>
+          ) : (
+            <div style={gridStyle}>
+              {ownedStarter.map(({ pc, def }) => (
+                <CardTile key={pc.cardId} pc={pc} def={def} cls={cls}
+                  onUpgrade={() => upgradeCardForPlayer(pc.cardId)}
+                  onRemove={() => removeCardFromPlayer(pc.cardId)} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Leveled cards — split by level */}
+        {Array.from(ownedLeveled.keys()).sort((a, b) => a - b).map(lvl => (
+          <div key={lvl} style={sectionStyle}>
+            <div className="muted small" style={{ fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em', fontSize: 10 }}>
+              Level {lvl} Cards ({ownedLeveled.get(lvl)!.length})
+              {lvl > playerLevel ? ' · 🔒 Locked' : ''}
+            </div>
+            <div style={gridStyle}>
+              {ownedLeveled.get(lvl)!.map(({ pc, def }) => (
+                <CardTile key={pc.cardId} pc={pc} def={def} cls={cls}
+                  onUpgrade={() => upgradeCardForPlayer(pc.cardId)}
+                  onRemove={() => removeCardFromPlayer(pc.cardId)} />
+              ))}
+            </div>
           </div>
-        )}
+        ))}
       </div>
 
+      {/* Available cards — split by starter and levels */}
       <div className="card">
         <h3 style={{ marginBottom: 8 }}>Available Cards</h3>
         <div className="muted small" style={{ marginBottom: 8 }}>Level {playerLevel} · Add cards to your deck</div>
+
         {sortedAvailable.length === 0 ? (
           <div className="muted small" style={{ padding: 20, textAlign: 'center' }}>All available cards are already in your deck.</div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
-            {sortedAvailable.map(def => (
-              <div key={def.id} className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))` }}>
-                <span style={{ fontSize: 22 }}>{def.icon}</span>
-                <div style={{ fontSize: 11, fontWeight: 800, marginTop: 2 }}>{def.name}</div>
-                <div className="muted" style={{ fontSize: 9, lineHeight: 1.2 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</div>
-                <ClassBadge def={def} cls={cls} />
-                <button className="btn sm primary" style={{ fontSize: 11, padding: '4px 8px', marginTop: 4 }} onClick={() => addCardToPlayer(def.id)}>Add</button>
+          <>
+            {/* Available starter cards */}
+            {availStarter.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div className="muted small" style={{ fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em', fontSize: 10 }}>Starter Cards ({availStarter.length})</div>
+                <div style={gridStyle}>
+                  {availStarter.map(def => (
+                    <AvailableCardTile key={def.id} def={def} cls={cls} onAdd={() => addCardToPlayer(def.id)} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Available leveled cards — split by level */}
+            {Array.from(availLeveled.keys()).sort((a, b) => a - b).map(lvl => (
+              <div key={lvl} style={sectionStyle}>
+                <div className="muted small" style={{ fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em', fontSize: 10 }}>
+                  Level {lvl} Cards ({availLeveled.get(lvl)!.length})
+                  {lvl > playerLevel ? ' · 🔒 Locked' : ''}
+                </div>
+                <div style={gridStyle}>
+                  {availLeveled.get(lvl)!.map(def => (
+                    <AvailableCardTile key={def.id} def={def} cls={cls} onAdd={() => addCardToPlayer(def.id)} />
+                  ))}
+                </div>
               </div>
             ))}
-          </div>
+          </>
         )}
       </div>
     </div>

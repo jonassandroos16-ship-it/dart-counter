@@ -169,8 +169,13 @@ export function levelFromXP(totalXP: number, settings: Settings) {
 
 export function getPlayerXP(player: Player | undefined) {
   if (!player) return { xp: 0, level: 1, unlockedTitles: [] as string[], selectedTitle: null as string | null, unlockedBadges: [] as string[], badgeCounts: {} as Record<string, number>, selectedBadge: null as string | null, showBadgeContext: false };
+  // Use class-specific XP if available, fall back to legacy player.xp for migration
+  const classId = player.coopProgress?.classId;
+  const classXp = classId ? (player.coopProgress?.classXp?.[classId] ?? 0) : 0;
+  const xp = classXp || player.xp || 0;
   return {
-    xp: player.xp ?? 0, level: player.level ?? 1,
+    xp,
+    level: player.level ?? 1,
     unlockedTitles: player.unlockedTitles ?? [], selectedTitle: player.selectedTitle ?? null,
     unlockedBadges: player.unlockedBadges ?? [], badgeCounts: player.badgeCounts ?? {}, selectedBadge: player.selectedBadge ?? null,
     showBadgeContext: player.showBadgeContext ?? false,
@@ -211,10 +216,11 @@ export function totalPowerUpPointsForLevel(level: number, settings: Settings): n
 }
 
 export function reconcilePlayerPoints(player: Player, settings: Settings): Player {
-  // Derive level from XP so the reconciler never relies on a stale cached
-  // `player.level` (e.g. older saves or imported players where level wasn't
-  // persisted). `levelFromXP` is the source of truth for level progression.
-  const level = levelFromXP(player.xp ?? 0, settings).level;
+  // Derive level from class-specific XP so the reconciler never relies on a
+  // stale cached `player.level`. Uses the currently selected class's XP.
+  const classId = player.coopProgress?.classId;
+  const classXp = classId ? (player.coopProgress?.classXp?.[classId] ?? 0) : 0;
+  const level = levelFromXP(classXp || player.xp || 0, settings).level;
   const cfg = settings.powerUpScaling;
   const attrs = player.attributes || defaultAttributes(settings);
   const pwr = player.powerUps || defaultPowerUps(settings);
