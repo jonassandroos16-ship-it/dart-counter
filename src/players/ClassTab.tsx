@@ -4,9 +4,10 @@ import {
   passivesForClass, unlockedPassivesForPlayer,
   selectClassForPlayer, equipPassiveForPlayer,
   defaultCoopProgress,
+  classLevelFromXp, getClassXp,
 } from '../campaign/engine';
 import type { CoopClassId, CoopPassiveId, PlayerCoopProgress } from '../campaign/types';
-import { levelFromXP } from '../logic';
+import { effectiveLevel } from './helpers';
 import type { SetPlayers, Toast } from './BasicTab';
 
 export function ClassTab({ player, setPlayers, toast, settings }: {
@@ -18,7 +19,9 @@ export function ClassTab({ player, setPlayers, toast, settings }: {
   const prog: PlayerCoopProgress = player.coopProgress || defaultCoopProgress();
   const selectedClass = getCoopClass(prog.classId);
   const classPassives = selectedClass ? passivesForClass(selectedClass.id) : [];
-  const playerLevel = levelFromXP(player.xp ?? 0, settings).level;
+  const playerLevel = effectiveLevel(player, settings);
+  const classXp = getClassXp(prog, prog.classId);
+  const xpInfo = classLevelFromXp(prog, prog.classId, settings);
   const unlockedIds = unlockedPassivesForPlayer(prog, playerLevel);
 
   const pickClass = (classId: CoopClassId) => {
@@ -80,10 +83,16 @@ export function ClassTab({ player, setPlayers, toast, settings }: {
               </div>
             </div>
             <div className="row between" style={{ marginTop: 10 }}>
-              <span className="muted small">Player Level</span>
+              <span className="muted small">{selectedClass ? `${selectedClass.name} Level` : 'Player Level'}</span>
               <span className="xp-pill">Level {playerLevel}</span>
             </div>
-            <div className="muted small" style={{ marginTop: 4 }}>Earn XP by playing any mode — competitive or coop. Level up to unlock new passives and cards.</div>
+            {selectedClass && (
+              <>
+                <div className="muted small" style={{ marginTop: 4 }}>{classXp} XP in {selectedClass.name}</div>
+                <div className="xp-bar" style={{ width: '100%', maxWidth: 240, marginTop: 4 }}><div style={{ width: `${Math.round(xpInfo.xpIntoLevel / xpInfo.xpNeeded * 100)}%` }} /></div>
+              </>
+            )}
+            <div className="muted small" style={{ marginTop: 4 }}>Earn XP by playing — it goes to your currently selected class. Level up to unlock new passives and cards.</div>
           </div>
 
           <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Passives</div>

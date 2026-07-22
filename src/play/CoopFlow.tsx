@@ -13,9 +13,10 @@ import {
   defaultCoopProgress,
   recordLevelClearForPlayer,
   reconcileCoopPassivesForPlayer,
+  addClassXp,
+  classLevelFromXp,
 } from '../campaign/engine';
 import { getChapter, isChapterComplete } from '../campaign/campaignLevels';
-import { levelFromXP } from '../logic';
 import { cardsForLevelUp, addCard, getPlayerCards, setPlayerCards } from '../cards/deck';
 import { PostGameOverlay, type PostGameInfo, type LevelUpInfo } from './PostGameOverlay';
 
@@ -66,13 +67,14 @@ export function CoopFlow({ players, settings, music, setPlayers, toast, onExitTo
         const levelUps: LevelUpInfo[] = [];
         setPlayers((prev: Player[]) => prev.map(p => {
           if (!ids.includes(p.id)) return p;
-          const oldLevel = p.level || 1;
-          const newXp = (p.xp || 0) + xpGained;
-          const li = levelFromXP(newXp, settings);
+          const classId = p.coopProgress?.classId || null;
           const cur = p.coopProgress || defaultCoopProgress();
-          const { progress: nextProg, newlyUnlocked } = reconcileCoopPassivesForPlayer(cur, li.level);
+          const oldLevel = classLevelFromXp(cur, classId, settings).level;
+          const updatedProg = addClassXp(cur, classId, xpGained);
+          const li = classLevelFromXp(updatedProg, classId, settings);
+          const { progress: nextProg, newlyUnlocked } = reconcileCoopPassivesForPlayer(updatedProg, li.level);
           const nextCampaign = recordLevelClearForPlayer(p, chapterId, clearedIdx, levelId, unlockedPowerUpId);
-          let next: Player = { ...p, xp: newXp, level: li.level, coopProgress: nextProg, campaignProgress: nextCampaign };
+          let next: Player = { ...p, coopProgress: nextProg, campaignProgress: nextCampaign };
           if (li.level > oldLevel && settings.gameMode === 'cards') {
             const curCards = getPlayerCards(next);
             const newCardDefs = cardsForLevelUp(next.coopProgress?.classId || null, li.level, 'coop', curCards);
@@ -99,12 +101,13 @@ export function CoopFlow({ players, settings, music, setPlayers, toast, onExitTo
         const ids = coopPlayersLocal.map(p => p.id);
         setPlayers((prev: Player[]) => prev.map(p => {
           if (!ids.includes(p.id)) return p;
-          const oldLevel = p.level || 1;
-          const newXp = (p.xp || 0) + xpGained;
-          const li = levelFromXP(newXp, settings);
+          const classId = p.coopProgress?.classId || null;
           const cur = p.coopProgress || defaultCoopProgress();
-          const { progress: nextProg } = reconcileCoopPassivesForPlayer(cur, li.level);
-          let next: Player = { ...p, xp: newXp, level: li.level, coopProgress: nextProg };
+          const oldLevel = classLevelFromXp(cur, classId, settings).level;
+          const updatedProg = addClassXp(cur, classId, xpGained);
+          const li = classLevelFromXp(updatedProg, classId, settings);
+          const { progress: nextProg } = reconcileCoopPassivesForPlayer(updatedProg, li.level);
+          let next: Player = { ...p, coopProgress: nextProg };
           if (li.level > oldLevel && settings.gameMode === 'cards') {
             const curCards = getPlayerCards(next);
             const newCardDefs = cardsForLevelUp(next.coopProgress?.classId || null, li.level, 'coop', curCards);

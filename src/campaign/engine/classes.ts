@@ -5,7 +5,8 @@ import type {
   CoopPassiveId,
   PlayerCoopProgress,
 } from '../types';
-import type { Player } from '../../types';
+import type { Player, Settings } from '../../types';
+import { levelFromXP } from '../../logic';
 import { COOP_POWER_UPS } from './powerUps';
 
 // ── Coop classes & passives ────────────────────────────────────────────
@@ -72,7 +73,7 @@ export const COOP_PASSIVES: CoopPassiveDef[] = [
   { id: 'rog_thorns_2', classId: 'rogue', tier: 2, name: 'Razor Edge', icon: '🔪', desc: 'Party +3 armor and +6 power (flat).', bonus: { armor: 3, power: 6 }, levelRequired: 2 },
   // Rogue — tier 3
   { id: 'rog_armor_3', classId: 'rogue', tier: 3, name: 'Phantom Guard', icon: '👻', desc: 'Party +10 armor (flat per enemy dart).', bonus: { armor: 10 }, levelRequired: 3 },
-  { id: 'rog_dodge_3', classId: 'rogue', tier: 3, name: 'Afterimage', icon: '🌀', desc: 'Party +7 armor and +180 max HP.', bonus: { armor: 7, health: 180 }, levelRequired: 3 },
+  { id: 'rog_dodge_3', classId: 'rogue', tier: 3, name: 'Afterimage', icon: '🌀', desc: 'Party +11 armor and +180 max HP.', bonus: { armor: 7, health: 180 }, levelRequired: 3 },
   { id: 'rog_thorns_3', classId: 'rogue', tier: 3, name: 'Spike Mail', icon: '🦔', desc: 'Party +7 armor and +12 power (flat).', bonus: { armor: 7, power: 12 }, levelRequired: 3 },
   // Rogue — tier 4
   { id: 'rog_armor_4', classId: 'rogue', tier: 4, name: 'Umbral Bulwark', icon: '🌑', desc: 'Party +15 armor (flat per enemy dart).', bonus: { armor: 15 }, levelRequired: 4 },
@@ -138,12 +139,33 @@ export function computePartyPassiveBonus(players: Player[]): PartyPassiveBonus {
 }
 
 // XP granted per Coop battle. Scaled by outcome (win = more) and darts thrown.
-// This XP is now added to the unified `Player.xp` via `awardXP`.
+// This XP is added to the player's currently selected class via `awardClassXp`.
 export function coopXpForBattle(stats: { dartsThrown: number; enemiesDefeated: number }, won: boolean): number {
   const base = won ? 20 : 5;
   const dartBonus = Math.min(20, Math.floor(stats.dartsThrown / 3));
   const defeatBonus = Math.min(15, stats.enemiesDefeated * 3);
   return base + dartBonus + defeatBonus;
+}
+
+// Get the XP for a specific class from a player's coop progress.
+export function getClassXp(prog: PlayerCoopProgress | undefined | null, classId: CoopClassId | null | undefined): number {
+  if (!prog || !classId) return 0;
+  return prog.classXp?.[classId] ?? 0;
+}
+
+// Add XP to a specific class. Returns the updated progress.
+export function addClassXp(prog: PlayerCoopProgress | undefined | null, classId: CoopClassId | null | undefined, xp: number): PlayerCoopProgress {
+  const cur = prog || defaultCoopProgress();
+  if (!classId) return cur;
+  const classXp = { ...(cur.classXp || {}) };
+  classXp[classId] = (classXp[classId] || 0) + xp;
+  return { ...cur, classXp };
+}
+
+// Get the level for a specific class from XP, using the same curve as levelFromXP.
+export function classLevelFromXp(prog: PlayerCoopProgress | undefined | null, classId: CoopClassId | null | undefined, settings: Settings): { level: number; xpIntoLevel: number; xpNeeded: number } {
+  const xp = getClassXp(prog, classId);
+  return levelFromXP(xp, settings);
 }
 
 // Returns the list of passives a player can unlock/equip given their player level.
