@@ -11,6 +11,16 @@ export interface PlayerAttributes {
   pointsAvailable: number; // unspent attribute points
 }
 
+// Per-class attribute allocation. Each class tracks its own health, armor,
+// power and unspent points independently. The active class's attributes are
+// used in battle; switching classes swaps the active attribute set.
+export interface ClassAttributes {
+  health: number;
+  armor: number;
+  power: number;
+  pointsAvailable: number;
+}
+
 export interface PlayerPowerUps {
   unlocked: string[];          // competitive power up ids the player has unlocked
   active: string | null;      // equipped competitive power up id (single slot)
@@ -33,6 +43,9 @@ export interface Player {
   showBadgeContext?: boolean;
   sound?: PlayerSoundId;
   attributes?: PlayerAttributes;
+  // Per-class attribute allocations, keyed by class id. Each class has its
+  // own independent attribute pool tied to that class's level.
+  classAttributes?: Record<string, ClassAttributes>;
   powerUps?: PlayerPowerUps;
   developerMode?: boolean;
   showdownBg?: string;
@@ -205,6 +218,16 @@ export interface PowerUpScalingConfig {
   powerMax: number;          // hard cap for power (flat bonus per dart)
   healthMax: number;          // hard cap for HP at max level progression
   battleMinDamage: number;    // minimum damage on a successful hit (default 1)
+  // Per-class starting stats. Each class begins with different base health,
+  // armor and power, making classes feel distinct from level 1.
+  classStartHealth: Record<string, number>;
+  classStartArmor: Record<string, number>;
+  classStartPower: Record<string, number>;
+  // Per-class stat caps. Higher caps for the class's primary stat lets them
+  // specialize further as they level.
+  classHealthMax: Record<string, number>;
+  classArmorMax: Record<string, number>;
+  classPowerMax: Record<string, number>;
   // Starting charge (0..chargeMax) for specific power-ups at the start of a
   // match. Lets early-game power-ups like Surge begin partially charged.
   startingCharge: Record<string, number>;
