@@ -71,7 +71,7 @@ export function HighScoreBoard({ game, setGame, settings, players, games, toast,
       const maxScore = Math.max(...newPlayers.map(pl => pl.score));
       const winners = newPlayers.filter(pl => pl.score === maxScore);
       const winner = winners.length === 1 ? winners[0] : null;
-      finishSimpleGame(finishedState, winner, settings, setGame, setGames, setPlayers, popups, music, [], []);
+      finishSimpleGame(finishedState, winner, settings, setGame, setGames, setPlayers, popups, music, players, games, winners.length > 1 ? winners : null);
       return;
     }
     let nextTurn = (game.turn + 1) % game.players.length;
@@ -133,7 +133,7 @@ export function HighScoreBoard({ game, setGame, settings, players, games, toast,
           </div>
         )}
         {game.powerUpsEnabled && (p as any)._hotStreak && (
-          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#f97316 18%,var(--bg-3))', border: '1px solid #f97316', color: '#fb923c' }}>
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#f97316 18%,var(--bg-3))', border: '1px solid #f97316', color: '#fb9234' }}>
             🔥 Hot Streak! Each dart this visit earns +5 bonus per dart before it.
           </div>
         )}

@@ -184,12 +184,13 @@ export function availablePool(miniBossesDefeated: number, bossesDefeated: number
 // Returns the trinket id that was newly added to the pool by the most recent
 // mini-boss or boss defeat, or null if the pool is exhausted.
 export function newlyUnlockedTrinket(miniBossesDefeated: number, bossesDefeated: number): TrinketId | null {
-  // Mini-boss unlocks come first (tier 2), then boss unlocks (tier 3 & 4).
-  if (miniBossesDefeated > 0 && miniBossesDefeated <= MINIBOSS_POOL.length) {
-    return MINIBOSS_POOL[miniBossesDefeated - 1];
-  }
+  // Boss unlocks take priority — a boss victory should show the newly
+  // unlocked boss trinket, not a stale mini-boss one from a prior round.
   if (bossesDefeated > 0 && bossesDefeated <= BOSS_POOL.length) {
     return BOSS_POOL[bossesDefeated - 1];
+  }
+  if (miniBossesDefeated > 0 && miniBossesDefeated <= MINIBOSS_POOL.length) {
+    return MINIBOSS_POOL[miniBossesDefeated - 1];
   }
   return null;
 }

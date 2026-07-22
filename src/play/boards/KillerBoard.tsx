@@ -68,7 +68,7 @@ export function KillerBoard({ game, setGame, settings, players, games, toast, mu
     if (remainingAlive.length <= 1) {
       const winner = remainingAlive[0] || null;
       if (killedThisVisit) popups.setKill(killedThisVisit);
-      setTimeout(() => finishSimpleGame(finishedState, winner, settings, setGame, setGames, setPlayers, popups, music, [], []), killedThisVisit ? 2200 : 0);
+      setTimeout(() => finishSimpleGame(finishedState, winner, settings, setGame, setGames, setPlayers, popups, music, players, games), killedThisVisit ? 2200 : 0);
       return;
     }
     Sound.play('enter', {}, settings);
@@ -137,7 +137,7 @@ export function KillerBoard({ game, setGame, settings, players, games, toast, mu
           </div>
         )}
         {game.powerUpsEnabled && (p as any)._hotStreak && (
-          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#f97316 18%,var(--bg-3))', border: '1px solid #f97316', color: '#fb923c' }}>
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#f97316 18%,var(--bg-3))', border: '1px solid #f97316', color: '#fb9234' }}>
             🔥 Hot Streak! Each dart this visit earns +5 bonus per dart before it.
           </div>
         )}

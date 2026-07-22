@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Player, Settings } from '../types';
 import { MODES, TEAM_COLORS } from '../constants';
 import { initials } from '../store';
@@ -13,23 +13,21 @@ export function SetupView({ players, settings, onStart, onOpenCampaign, onBackTo
   const [powerUps, setPowerUps] = useState(false);
   const [teams, setTeams] = useState<number[]>([]);
   const [teamCount, setTeamCount] = useState(2);
+  const teamByPlayer = useRef<Record<string, number>>({});
 
   useEffect(() => {
-    setTeams(prev => {
-      const next = picked.map((_, i) => {
-        const t = prev[i];
-        if (t == null || t >= teamCount) return i % teamCount;
-        return t;
-      });
-      return next;
-    });
+    setTeams(picked.map((id, i) => {
+      const t = teamByPlayer.current[id];
+      if (t == null || t >= teamCount) return i % teamCount;
+      return t;
+    }));
   }, [picked, teamCount]);
 
   if (!players.length) return <div className="view-scroll"><div className="card empty">Add a player before starting a game.</div></div>;
   const m = MODES[mode];
   const noX01 = !!(m.practice || m.atc || m.killer || m.party);
 
-  const teamValid = !teamMode || (picked.length >= teamCount && teams.every(t => t != null && t < teamCount) && new Set(teams).size >= 1);
+  const teamValid = !teamMode || (picked.length >= teamCount && teams.every(t => t != null && t < teamCount) && new Set(teams).size === teamCount);
 
   return (
     <div className="view-scroll">
@@ -112,7 +110,11 @@ export function SetupView({ players, settings, onStart, onOpenCampaign, onBackTo
                 const color = TEAM_COLORS[t % TEAM_COLORS.length];
                 return (
                   <button key={id} className="pill" style={{ background: color, color: '#04150a', borderColor: 'transparent' }}
-                    onClick={() => setTeams(prev => prev.map((x, j) => j === i ? (x + 1) % teamCount : x))}>
+                    onClick={() => setTeams(prev => prev.map((x, j) => {
+                      const nv = (x + 1) % teamCount;
+                      teamByPlayer.current[id] = nv;
+                      return j === i ? nv : x;
+                    }))}>
                     <span className="avatar" style={{ width: 18, height: 18, fontSize: 9, background: 'rgba(0,0,0,.25)' }}>{initials(p.name)}</span>
                     {p.name} · T{t + 1}
                   </button>

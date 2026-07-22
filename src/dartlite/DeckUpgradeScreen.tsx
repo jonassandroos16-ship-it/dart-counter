@@ -5,7 +5,7 @@ import type { PlayerCard, CardDef } from '../cards/types';
 import { cardDamage, cardRarityColor, cardTypeColor } from '../cards/definitions';
 import {
   resolveCardDef, upgradeCard, removeCard, addCardAtLevel,
-  maxUpgradeLevelInDeck, MAX_UPGRADE_LEVEL, cardsForClass, hasCard,
+  maxUpgradeLevelInDeck, MAX_UPGRADE_LEVEL,
 } from '../cards/deck';
 import {
   generateAddCardChoices, autoUpgradeLevel, upgradePreview,
@@ -31,7 +31,7 @@ export function DeckUpgradeScreen({ run, players, onComplete, onCancel }: Props)
 
   const rp = run.runPlayers[chooserIdx];
   const ownedCards: PlayerCard[] = rp?.cards ?? [];
-  const cls = chooser?.coopClassId ?? 'warrior';
+  const cls = chooser?.coopProgress?.classId ?? 'warrior';
 
   const [screen, setScreen] = useState<Screen>('main');
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
