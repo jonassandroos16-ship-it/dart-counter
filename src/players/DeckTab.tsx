@@ -5,6 +5,9 @@ import { addCard, removeCard, resolveCardDef, getPlayerCards, setPlayerCards } f
 import { CARD_DEFS, getCard, cardDamage, cardTypeColor, cardRarityColor, cardsForClass, splitStarterAndLeveled } from '../cards/definitions';
 import type { CardDef, PlayerCard } from '../cards/types';
 import { effectiveLevel } from './helpers';
+import { COOP_CLASSES, getCoopClass, selectClassForPlayer, defaultCoopProgress } from '../campaign/engine';
+import type { CoopClassId } from '../campaign/types';
+import { defaultClassAttributes } from '../logic';
 
 const CLASS_ICONS: Record<string, string> = {
   warrior: '⚔️',
@@ -134,8 +137,44 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
   const gridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 };
   const sectionStyle: React.CSSProperties = { marginTop: 12 };
 
+  const pickClass = (classId: CoopClassId) => {
+    setPlayers((prev: Player[]) => prev.map(p => {
+      if (p.id !== player.id) return p;
+      const cur = p.coopProgress || defaultCoopProgress();
+      const next = selectClassForPlayer(cur, classId);
+      const caMap = { ...(p.classAttributes || {}) };
+      if (!caMap[classId]) {
+        caMap[classId] = defaultClassAttributes(classId, settings);
+      }
+      const activeAttrs = caMap[classId];
+      return { ...p, coopProgress: next, classAttributes: caMap, attributes: { ...activeAttrs } };
+    }));
+    const clsDef = getCoopClass(classId);
+    toast(`${clsDef?.name || classId} class selected — deck switched`);
+  };
+
   return (
     <div className="view-scroll">
+      {/* Class switcher */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        {COOP_CLASSES.map(c => {
+          const isSelected = cls === c.id;
+          return (
+            <button key={c.id} onClick={() => pickClass(c.id)} title={c.desc}
+              style={{
+                flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '10px 6px', borderRadius: 10,
+                background: isSelected ? 'color-mix(in srgb,var(--accent) 22%,var(--bg-3))' : 'var(--bg-3)',
+                border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
+                boxShadow: isSelected ? '0 0 10px color-mix(in srgb,var(--accent) 40%,transparent)' : 'none',
+                cursor: 'pointer', color: 'inherit', textAlign: 'center',
+              }}>
+              <span style={{ fontSize: 24 }}>{c.icon}</span>
+              <span style={{ fontSize: 11, fontWeight: 800 }}>{c.name}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Owned deck — split by starter and levels */}
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="row between" style={{ marginBottom: 8 }}>
