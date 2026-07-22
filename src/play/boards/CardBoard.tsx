@@ -15,7 +15,7 @@ import { cardDamage, cardRarityColor, cardTypeColor } from '../../cards/definiti
 import {
   initCardPlayState, startTurn,
   playCardFromHand, endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
-  getPlayerCards,
+  getPlayerCards, defaultPlayerCards,
 } from '../../cards/deck';
 
 const HIGH_SCORE_VISITS = 7;
@@ -38,7 +38,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     const cardState: Record<string, CardPlayState> = {};
     for (const gp of game.players) {
       const playerData = players.find(pl => pl.id === gp.id);
-      const collection: PlayerCard[] = getPlayerCards(playerData);
+      const collection: PlayerCard[] = playerData ? getPlayerCards(playerData) : defaultPlayerCards(undefined);
       cardState[gp.id] = initCardPlayState(collection);
     }
     setGame({ ...game, cardState });
@@ -60,7 +60,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
 
   const p = game.players[game.turn];
   const playerData = players.find(pl => pl.id === p.id);
-  const collection: PlayerCard[] = getPlayerCards(playerData);
+  const collection: PlayerCard[] = playerData ? getPlayerCards(playerData) : defaultPlayerCards(undefined);
   const state: CardPlayState = game.cardState?.[p.id] ?? initCardPlayState(collection);
   const handDefs = state.hand.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
   const usedDefs = state.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
