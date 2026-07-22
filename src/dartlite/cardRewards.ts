@@ -16,7 +16,7 @@ import {
 //   3. Add a new card — 3 random cards from the class pool, auto-upgraded to
 //      the highest upgrade level in the deck to scale with rounds.
 
-export type CardRewardKind = 'deck_upgrade' | 'heal';
+export type CardRewardKind = 'deck_upgrade' | 'heal' | 'stat';
 
 export interface CardRewardChoice {
   kind: CardRewardKind;
@@ -43,10 +43,10 @@ export function generateCardRewardOptions(
       icon: '❤️‍🩹',
     },
     {
-      kind: 'heal',
-      label: 'Heal 20%',
-      desc: 'Restore 20% of max HP.',
-      icon: '❤️‍🩹',
+      kind: 'stat',
+      label: 'Gain a Stat',
+      desc: '+20 HP, +3% armor, or +4 power (random).',
+      icon: '📊',
     },
   ];
 }
