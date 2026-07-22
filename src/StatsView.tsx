@@ -4,7 +4,7 @@ import { MODES, MODE_KEYS } from './constants';
 import { playerStats, levelFromXP, getPlayerXP, bucketAverages, allVisitsFor, filterGamesByDate, headToHeadStats } from './logic';
 import { LineChart, BarChart, DartboardHeatmap } from './Charts';
 import { CalendarPicker, filterForPeriod, describeFilter, type Period } from './CalendarPicker';
-import { BADGES, computeLifetimeBadgeCounts, get, getBadgeContext, buildCoopBadgeCtx } from './badges';
+import { BADGES, computeLifetimeBadgeCounts, getBadgeContext, buildCoopBadgeCtx } from './badges';
 import { loadDartliteGlobalStats } from './dartlite/stats';
 import { ALL_TRINKET_IDS, getTrinket } from './dartlite/trinkets';
 import { CARD_DEFS, getCard } from './cards/definitions';
