@@ -105,6 +105,7 @@ export function cardMatchesMode(card: CardDef, mode: 'competitive' | 'coop'): bo
 // ── Upgrades ──────────────────────────────────────────────────────────
 
 export function upgradedCardDef(card: CardDef): CardDef {
+  const stripPlus = (name: string) => name.replace(/\+*$/, '');
   if (card.type === 'damage') {
     const base = card.base ?? 0;
     const mult = card.mult ?? 1;
@@ -113,7 +114,7 @@ export function upgradedCardDef(card: CardDef): CardDef {
     return {
       ...card,
       upgraded: true,
-      name: card.name + '+',
+      name: stripPlus(card.name) + '+',
       desc: card.desc.replace(/Deal (\d+) damage/, (_, n) => `Deal ${Math.round(+n * 1.5)} damage`),
       base: mult > 1 ? Math.round(base * 1.5) : upgradedDmg,
       mult: mult > 1 ? mult : 1,
@@ -123,12 +124,12 @@ export function upgradedCardDef(card: CardDef): CardDef {
     return {
       ...card,
       upgraded: true,
-      name: card.name + '+',
+      name: stripPlus(card.name) + '+',
       desc: card.desc,
       magnitude: card.magnitude ? Math.round(card.magnitude * 1.5) : card.magnitude,
     };
   }
-  return { ...card, upgraded: true, name: card.name + '+' };
+  return { ...card, upgraded: true, name: stripPlus(card.name) + '+' };
 }
 
 export function cardDamage(card: CardDef): number {

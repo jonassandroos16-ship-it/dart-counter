@@ -43,18 +43,18 @@ const STARTER_NO_CLASS_FALLBACK: string[] = [
 export function defaultPlayerCards(classId?: string | null): PlayerCard[] {
   const cls = STARTER_CLASS_CARDS[classId || ''];
   if (!cls) {
-    return STARTER_NO_CLASS_FALLBACK.map(cardId => ({ cardId, upgraded: false }));
+    return STARTER_NO_CLASS_FALLBACK.map(cardId => ({ cardId, upgradeLevel: 0, upgraded: false }));
   }
   return [
-    ...cls.specific.map(cardId => ({ cardId, upgraded: false })),
-    ...STARTER_SHARED_ATTACK.map(cardId => ({ cardId, upgraded: false })),
-    ...STARTER_SHARED_UTILITY.map(cardId => ({ cardId, upgraded: false })),
-    { cardId: cls.utility, upgraded: false },
+    ...cls.specific.map(cardId => ({ cardId, upgradeLevel: 0, upgraded: false })),
+    ...STARTER_SHARED_ATTACK.map(cardId => ({ cardId, upgradeLevel: 0, upgraded: false })),
+    ...STARTER_SHARED_UTILITY.map(cardId => ({ cardId, upgradeLevel: 0, upgraded: false })),
+    { cardId: cls.utility, upgradeLevel: 0, upgraded: false },
   ];
 }
 
 export function cardFromDef(def: CardDef): PlayerCard {
-  return { cardId: def.id, upgraded: false };
+  return { cardId: def.id, upgradeLevel: 0, upgraded: false };
 }
 
 // ── Per-class deck storage ────────────────────────────────────────────
@@ -100,26 +100,32 @@ export function hasCard(cards: PlayerCard[], cardId: string): boolean {
 
 export function addCard(cards: PlayerCard[], cardId: string): PlayerCard[] {
   if (hasCard(cards, cardId)) return cards;
-  return [...cards, { cardId, upgraded: false }];
+  return [...cards, { cardId, upgradeLevel: 0, upgraded: false }];
 }
 
 export function removeCard(cards: PlayerCard[], cardId: string): PlayerCard[] {
   return cards.filter(c => c.cardId !== cardId);
 }
 
+export const MAX_UPGRADE_LEVEL = 5;
+
 export function upgradeCard(cards: PlayerCard[], cardId: string): PlayerCard[] {
-  return cards.map(c => c.cardId === cardId ? { ...c, upgraded: true } : c);
+  return cards.map(c => c.cardId === cardId ? { ...c, upgradeLevel: c.upgradeLevel + 1, upgraded: true } : c);
 }
 
 export function canUpgradeCard(cards: PlayerCard[], cardId: string): boolean {
   const pc = cards.find(c => c.cardId === cardId);
-  return !!pc && !pc.upgraded;
+  return !!pc && pc.upgradeLevel < MAX_UPGRADE_LEVEL;
 }
 
 export function resolveCardDef(pc: PlayerCard): CardDef | undefined {
   const def = getCard(pc.cardId);
   if (!def) return undefined;
-  return pc.upgraded ? upgradedCardDef(def) : def;
+  let result = def;
+  for (let i = 0; i < pc.upgradeLevel; i++) {
+    result = upgradedCardDef(result);
+  }
+  return result;
 }
 
 // ── Level-up card rewards ──────────────────────────────────────────────
@@ -136,6 +142,16 @@ export function cardsForLevelUp(
   const classId = cls || 'any';
   const pool = cardsForClass(classId as 'warrior' | 'priest' | 'rogue' | 'any', mode);
   return pool.filter(c => (c.levelRequired ?? 1) <= level && !hasCard(ownedCards, c.id));
+}
+
+export function maxUpgradeLevelInDeck(cards: PlayerCard[]): number {
+  if (cards.length === 0) return 0;
+  return Math.max(...cards.map(c => c.upgradeLevel));
+}
+
+export function addCardAtLevel(cards: PlayerCard[], cardId: string, upgradeLevel: number): PlayerCard[] {
+  if (hasCard(cards, cardId)) return cards;
+  return [...cards, { cardId, upgradeLevel, upgraded: upgradeLevel > 0 }];
 }
 
 export function cardsForLevelUpCoop(
@@ -174,7 +190,7 @@ export function randomCardUpgradeReward(
   ownedCards: PlayerCard[],
   count: number = 3,
 ): { cardId: string; name: string; icon: string }[] {
-  const upgradeable = ownedCards.filter(c => !c.upgraded);
+  const upgradeable = ownedCards.filter(c => c.upgradeLevel < MAX_UPGRADE_LEVEL);
   if (upgradeable.length === 0) return [];
   const shuffled = [...upgradeable].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, Math.min(count, upgradeable.length)).map(c => {

@@ -4,7 +4,7 @@ import {
   resolveCardDef, cardsForLevelUp, randomCardReward, randomCardUpgradeReward,
   deckSize, isDeckValid,
 } from './deck';
-import { CARD_DEFS } from './definitions';
+import { CARD_DEFS, cardDamage } from './definitions';
 
 describe('Deck Management', () => {
   it('defaultPlayerCards returns 10 starter cards for a class', () => {
@@ -69,18 +69,36 @@ describe('Deck Management', () => {
     expect(updated).toHaveLength(9);
   });
 
-  it('upgradeCard marks a card as upgraded', () => {
+  it('upgradeCard marks a card as upgraded (level 1)', () => {
     const cards = defaultPlayerCards('warrior');
     const updated = upgradeCard(cards, 'dmg_s20');
     const s20 = updated.find(c => c.cardId === 'dmg_s20');
+    expect(s20?.upgradeLevel).toBe(1);
     expect(s20?.upgraded).toBe(true);
+  });
+
+  it('upgradeCard can upgrade multiple times', () => {
+    const cards = defaultPlayerCards('warrior');
+    let updated = upgradeCard(cards, 'dmg_s20');
+    updated = upgradeCard(updated, 'dmg_s20');
+    const s20 = updated.find(c => c.cardId === 'dmg_s20');
+    expect(s20?.upgradeLevel).toBe(2);
   });
 
   it('canUpgradeCard returns true for non-upgraded cards', () => {
     const cards = defaultPlayerCards('warrior');
     expect(canUpgradeCard(cards, 'dmg_s20')).toBe(true);
     const upgraded = upgradeCard(cards, 'dmg_s20');
-    expect(canUpgradeCard(upgraded, 'dmg_s20')).toBe(false);
+    expect(canUpgradeCard(upgraded, 'dmg_s20')).toBe(true);
+  });
+
+  it('canUpgradeCard returns false at max upgrade level', () => {
+    const cards = defaultPlayerCards('warrior');
+    let updated = cards;
+    for (let i = 0; i < 5; i++) {
+      updated = upgradeCard(updated, 'dmg_s20');
+    }
+    expect(canUpgradeCard(updated, 'dmg_s20')).toBe(false);
   });
 
   it('resolveCardDef returns upgraded def when upgraded', () => {
@@ -89,6 +107,16 @@ describe('Deck Management', () => {
     const def = resolveCardDef(upgraded.find(c => c.cardId === 'dmg_t20')!);
     expect(def?.upgraded).toBe(true);
     expect(def?.name).toBe('Triple 20+');
+  });
+
+  it('resolveCardDef returns double-upgraded def when upgradeLevel is 2', () => {
+    const withT20 = addCard(defaultPlayerCards('warrior'), 'dmg_t20');
+    let upgraded = upgradeCard(withT20, 'dmg_t20');
+    upgraded = upgradeCard(upgraded, 'dmg_t20');
+    const def = resolveCardDef(upgraded.find(c => c.cardId === 'dmg_t20')!);
+    expect(def?.upgraded).toBe(true);
+    // Double upgrade: 60 * 1.5 = 90, then 90 * 1.5 = 135
+    expect(cardDamage(def!)).toBe(135);
   });
 
   it('resolveCardDef returns base def when not upgraded', () => {
@@ -120,7 +148,7 @@ describe('Deck Management', () => {
   });
 
   it('randomCardReward returns empty when all cards owned', () => {
-    const allOwned = CARD_DEFS.map(c => ({ cardId: c.id, upgraded: false }));
+    const allOwned = CARD_DEFS.map(c => ({ cardId: c.id, upgradeLevel: 0, upgraded: false }));
     const rewards = randomCardReward(allOwned, 'competitive', 3);
     expect(rewards).toHaveLength(0);
   });
@@ -133,7 +161,7 @@ describe('Deck Management', () => {
   });
 
   it('randomCardUpgradeReward returns empty when all upgraded', () => {
-    const owned = defaultPlayerCards('warrior').map(c => ({ ...c, upgraded: true }));
+    const owned = defaultPlayerCards('warrior').map(c => ({ ...c, upgradeLevel: 5, upgraded: true }));
     const upgrades = randomCardUpgradeReward(owned, 3);
     expect(upgrades).toHaveLength(0);
   });
