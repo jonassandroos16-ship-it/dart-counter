@@ -15,6 +15,9 @@ import { COOP_POWER_UPS } from './powerUps';
 // distinct passives to choose from (15 per class total). Each tier is strictly
 // stronger than the one before. Passives grant team-wide stat bonuses while
 // the player is in the party. A player equips one passive at a time per class.
+//
+// Tier unlock levels: 1, 2, 4, 6, 8 — spread across the full level range
+// so players always have something to look forward to.
 
 export const COOP_CLASSES: CoopClassDef[] = [
   { id: 'warrior', name: 'Warrior', icon: '⚔️', desc: 'A frontline striker. Grants the party flat POWER bonuses, making every dart hit harder.', starterPassive: 'war_power_1' },
@@ -32,17 +35,17 @@ export const COOP_PASSIVES: CoopPassiveDef[] = [
   { id: 'war_crit_2', classId: 'warrior', tier: 2, name: 'Bloodlust', icon: '🩸', desc: 'Party +6 power and +2 armor (flat).', bonus: { power: 6, armor: 2 }, levelRequired: 2 },
   { id: 'war_fury_2', classId: 'warrior', tier: 2, name: 'Raging Roar', icon: '🦁', desc: 'Party +6 power and +80 max HP.', bonus: { power: 6, health: 80 }, levelRequired: 2 },
   // Warrior — tier 3
-  { id: 'war_power_3', classId: 'warrior', tier: 3, name: 'Berserker Aura', icon: '🔥', desc: 'Party +15 power (flat per dart).', bonus: { power: 15 }, levelRequired: 3 },
-  { id: 'war_crit_3', classId: 'warrior', tier: 3, name: 'Executioner', icon: '🪓', desc: 'Party +12 power and +4 armor (flat).', bonus: { power: 12, armor: 4 }, levelRequired: 3 },
-  { id: 'war_fury_3', classId: 'warrior', tier: 3, name: 'Unbreakable', icon: '🛡️', desc: 'Party +12 power and +180 max HP.', bonus: { power: 12, health: 180 }, levelRequired: 3 },
+  { id: 'war_power_3', classId: 'warrior', tier: 3, name: 'Berserker Aura', icon: '🔥', desc: 'Party +15 power (flat per dart).', bonus: { power: 15 }, levelRequired: 4 },
+  { id: 'war_crit_3', classId: 'warrior', tier: 3, name: 'Executioner', icon: '🪓', desc: 'Party +12 power and +4 armor (flat).', bonus: { power: 12, armor: 4 }, levelRequired: 4 },
+  { id: 'war_fury_3', classId: 'warrior', tier: 3, name: 'Unbreakable', icon: '🛡️', desc: 'Party +12 power and +180 max HP.', bonus: { power: 12, health: 180 }, levelRequired: 4 },
   // Warrior — tier 4
-  { id: 'war_power_4', classId: 'warrior', tier: 4, name: 'Warlord\'s Roar', icon: '🐉', desc: 'Party +22 power (flat per dart).', bonus: { power: 22 }, levelRequired: 4 },
-  { id: 'war_crit_4', classId: 'warrior', tier: 4, name: 'Crimson Reaper', icon: '🩸', desc: 'Party +18 power and +6 armor (flat).', bonus: { power: 18, armor: 6 }, levelRequired: 4 },
-  { id: 'war_fury_4', classId: 'warrior', tier: 4, name: 'Iron Tide', icon: '🌊', desc: 'Party +18 power and +260 max HP.', bonus: { power: 18, health: 260 }, levelRequired: 4 },
+  { id: 'war_power_4', classId: 'warrior', tier: 4, name: 'Warlord\'s Roar', icon: '🐉', desc: 'Party +22 power (flat per dart).', bonus: { power: 22 }, levelRequired: 6 },
+  { id: 'war_crit_4', classId: 'warrior', tier: 4, name: 'Crimson Reaper', icon: '🩸', desc: 'Party +18 power and +6 armor (flat).', bonus: { power: 18, armor: 6 }, levelRequired: 6 },
+  { id: 'war_fury_4', classId: 'warrior', tier: 4, name: 'Iron Tide', icon: '🌊', desc: 'Party +18 power and +260 max HP.', bonus: { power: 18, health: 260 }, levelRequired: 6 },
   // Warrior — tier 5
-  { id: 'war_power_5', classId: 'warrior', tier: 5, name: 'Apex Predator', icon: '🦖', desc: 'Party +32 power (flat per dart).', bonus: { power: 32 }, levelRequired: 5 },
-  { id: 'war_crit_5', classId: 'warrior', tier: 5, name: 'Doombringer', icon: '☠️', desc: 'Party +26 power and +9 armor (flat).', bonus: { power: 26, armor: 9 }, levelRequired: 5 },
-  { id: 'war_fury_5', classId: 'warrior', tier: 5, name: 'Titan\'s Vigor', icon: '🗿', desc: 'Party +26 power and +380 max HP.', bonus: { power: 26, health: 380 }, levelRequired: 5 },
+  { id: 'war_power_5', classId: 'warrior', tier: 5, name: 'Apex Predator', icon: '🦖', desc: 'Party +32 power (flat per dart).', bonus: { power: 32 }, levelRequired: 8 },
+  { id: 'war_crit_5', classId: 'warrior', tier: 5, name: 'Doombringer', icon: '☠️', desc: 'Party +26 power and +9 armor (flat).', bonus: { power: 26, armor: 9 }, levelRequired: 8 },
+  { id: 'war_fury_5', classId: 'warrior', tier: 5, name: 'Titan\'s Vigor', icon: '🗿', desc: 'Party +26 power and +380 max HP.', bonus: { power: 26, health: 380 }, levelRequired: 8 },
   // Priest — tier 1 (starter)
   { id: 'pri_hp_1', classId: 'priest', tier: 1, name: 'Blessing', icon: '✨', desc: 'Party +60 max HP.', bonus: { health: 60 }, levelRequired: 1 },
   { id: 'pri_regen_1', classId: 'priest', tier: 1, name: 'Mending', icon: '💧', desc: 'Party +40 max HP and +1 armor (flat).', bonus: { health: 40, armor: 1 }, levelRequired: 1 },
@@ -52,17 +55,17 @@ export const COOP_PASSIVES: CoopPassiveDef[] = [
   { id: 'pri_regen_2', classId: 'priest', tier: 2, name: 'Holy Renewal', icon: '🌿', desc: 'Party +110 max HP and +3 armor (flat).', bonus: { health: 110, armor: 3 }, levelRequired: 2 },
   { id: 'pri_shield_2', classId: 'priest', tier: 2, name: 'Sacred Barrier', icon: '🔰', desc: 'Party +110 max HP and +5 power (flat).', bonus: { health: 110, power: 5 }, levelRequired: 2 },
   // Priest — tier 3
-  { id: 'pri_hp_3', classId: 'priest', tier: 3, name: 'Divine Aegis', icon: '😇', desc: 'Party +300 max HP.', bonus: { health: 300 }, levelRequired: 3 },
-  { id: 'pri_regen_3', classId: 'priest', tier: 3, name: 'Eternal Spring', icon: '⛲', desc: 'Party +240 max HP and +6 armor (flat).', bonus: { health: 240, armor: 6 }, levelRequired: 3 },
-  { id: 'pri_shield_3', classId: 'priest', tier: 3, name: 'Celestial Bulwark', icon: '🌟', desc: 'Party +240 max HP and +10 power (flat).', bonus: { health: 240, power: 10 }, levelRequired: 3 },
+  { id: 'pri_hp_3', classId: 'priest', tier: 3, name: 'Divine Aegis', icon: '😇', desc: 'Party +300 max HP.', bonus: { health: 300 }, levelRequired: 4 },
+  { id: 'pri_regen_3', classId: 'priest', tier: 3, name: 'Eternal Spring', icon: '⛲', desc: 'Party +240 max HP and +6 armor (flat).', bonus: { health: 240, armor: 6 }, levelRequired: 4 },
+  { id: 'pri_shield_3', classId: 'priest', tier: 3, name: 'Celestial Bulwark', icon: '🌟', desc: 'Party +240 max HP and +10 power (flat).', bonus: { health: 240, power: 10 }, levelRequired: 4 },
   // Priest — tier 4
-  { id: 'pri_hp_4', classId: 'priest', tier: 4, name: 'Heaven\'s Embrace', icon: '🙏', desc: 'Party +440 max HP.', bonus: { health: 440 }, levelRequired: 4 },
-  { id: 'pri_regen_4', classId: 'priest', tier: 4, name: 'Lifewell Spring', icon: '💧', desc: 'Party +340 max HP and +9 armor (flat).', bonus: { health: 340, armor: 9 }, levelRequired: 4 },
-  { id: 'pri_shield_4', classId: 'priest', tier: 4, name: 'Seraphic Aegis', icon: '🛡️', desc: 'Party +340 max HP and +15 power (flat).', bonus: { health: 340, power: 15 }, levelRequired: 4 },
+  { id: 'pri_hp_4', classId: 'priest', tier: 4, name: 'Heaven\'s Embrace', icon: '🙏', desc: 'Party +440 max HP.', bonus: { health: 440 }, levelRequired: 6 },
+  { id: 'pri_regen_4', classId: 'priest', tier: 4, name: 'Lifewell Spring', icon: '💧', desc: 'Party +340 max HP and +9 armor (flat).', bonus: { health: 340, armor: 9 }, levelRequired: 6 },
+  { id: 'pri_shield_4', classId: 'priest', tier: 4, name: 'Seraphic Aegis', icon: '🛡️', desc: 'Party +340 max HP and +15 power (flat).', bonus: { health: 340, power: 15 }, levelRequired: 6 },
   // Priest — tier 5
-  { id: 'pri_hp_5', classId: 'priest', tier: 5, name: 'Eternal Covenant', icon: '✨', desc: 'Party +640 max HP.', bonus: { health: 640 }, levelRequired: 5 },
-  { id: 'pri_regen_5', classId: 'priest', tier: 5, name: 'Font of Life', icon: '⛲', desc: 'Party +500 max HP and +13 armor (flat).', bonus: { health: 500, armor: 13 }, levelRequired: 5 },
-  { id: 'pri_shield_5', classId: 'priest', tier: 5, name: 'Radiant Bastion', icon: '🌟', desc: 'Party +500 max HP and +22 power (flat).', bonus: { health: 500, power: 22 }, levelRequired: 5 },
+  { id: 'pri_hp_5', classId: 'priest', tier: 5, name: 'Eternal Covenant', icon: '✨', desc: 'Party +640 max HP.', bonus: { health: 640 }, levelRequired: 8 },
+  { id: 'pri_regen_5', classId: 'priest', tier: 5, name: 'Font of Life', icon: '⛲', desc: 'Party +500 max HP and +13 armor (flat).', bonus: { health: 500, armor: 13 }, levelRequired: 8 },
+  { id: 'pri_shield_5', classId: 'priest', tier: 5, name: 'Radiant Bastion', icon: '🌟', desc: 'Party +500 max HP and +22 power (flat).', bonus: { health: 500, power: 22 }, levelRequired: 8 },
   // Rogue — tier 1 (starter)
   { id: 'rog_armor_1', classId: 'rogue', tier: 1, name: 'Light Steps', icon: '🗡️', desc: 'Party +2 armor (flat per enemy dart).', bonus: { armor: 2 }, levelRequired: 1 },
   { id: 'rog_dodge_1', classId: 'rogue', tier: 1, name: 'Nimble', icon: '💨', desc: 'Party +1 armor and +30 max HP.', bonus: { armor: 1, health: 30 }, levelRequired: 1 },
@@ -72,17 +75,17 @@ export const COOP_PASSIVES: CoopPassiveDef[] = [
   { id: 'rog_dodge_2', classId: 'rogue', tier: 2, name: 'Flicker', icon: '⚡', desc: 'Party +3 armor and +80 max HP.', bonus: { armor: 3, health: 80 }, levelRequired: 2 },
   { id: 'rog_thorns_2', classId: 'rogue', tier: 2, name: 'Razor Edge', icon: '🔪', desc: 'Party +3 armor and +6 power (flat).', bonus: { armor: 3, power: 6 }, levelRequired: 2 },
   // Rogue — tier 3
-  { id: 'rog_armor_3', classId: 'rogue', tier: 3, name: 'Phantom Guard', icon: '👻', desc: 'Party +10 armor (flat per enemy dart).', bonus: { armor: 10 }, levelRequired: 3 },
-  { id: 'rog_dodge_3', classId: 'rogue', tier: 3, name: 'Afterimage', icon: '🌀', desc: 'Party +11 armor and +180 max HP.', bonus: { armor: 7, health: 180 }, levelRequired: 3 },
-  { id: 'rog_thorns_3', classId: 'rogue', tier: 3, name: 'Spike Mail', icon: '🦔', desc: 'Party +7 armor and +12 power (flat).', bonus: { armor: 7, power: 12 }, levelRequired: 3 },
+  { id: 'rog_armor_3', classId: 'rogue', tier: 3, name: 'Phantom Guard', icon: '👻', desc: 'Party +10 armor (flat per enemy dart).', bonus: { armor: 10 }, levelRequired: 4 },
+  { id: 'rog_dodge_3', classId: 'rogue', tier: 3, name: 'Afterimage', icon: '🌀', desc: 'Party +7 armor and +180 max HP.', bonus: { armor: 7, health: 180 }, levelRequired: 4 },
+  { id: 'rog_thorns_3', classId: 'rogue', tier: 3, name: 'Spike Mail', icon: '🦔', desc: 'Party +7 armor and +12 power (flat).', bonus: { armor: 7, power: 12 }, levelRequired: 4 },
   // Rogue — tier 4
-  { id: 'rog_armor_4', classId: 'rogue', tier: 4, name: 'Umbral Bulwark', icon: '🌑', desc: 'Party +15 armor (flat per enemy dart).', bonus: { armor: 15 }, levelRequired: 4 },
-  { id: 'rog_dodge_4', classId: 'rogue', tier: 4, name: 'Mirror Step', icon: '🪞', desc: 'Party +11 armor and +260 max HP.', bonus: { armor: 11, health: 260 }, levelRequired: 4 },
-  { id: 'rog_thorns_4', classId: 'rogue', tier: 4, name: 'Razor Barb', icon: '🔪', desc: 'Party +11 armor and +18 power (flat).', bonus: { armor: 11, power: 18 }, levelRequired: 4 },
+  { id: 'rog_armor_4', classId: 'rogue', tier: 4, name: 'Umbral Bulwark', icon: '🌑', desc: 'Party +15 armor (flat per enemy dart).', bonus: { armor: 15 }, levelRequired: 6 },
+  { id: 'rog_dodge_4', classId: 'rogue', tier: 4, name: 'Mirror Step', icon: '🪞', desc: 'Party +11 armor and +260 max HP.', bonus: { armor: 11, health: 260 }, levelRequired: 6 },
+  { id: 'rog_thorns_4', classId: 'rogue', tier: 4, name: 'Razor Barb', icon: '🔪', desc: 'Party +11 armor and +18 power (flat).', bonus: { armor: 11, power: 18 }, levelRequired: 6 },
   // Rogue — tier 5
-  { id: 'rog_armor_5', classId: 'rogue', tier: 5, name: 'Eclipse Aegis', icon: '🌑', desc: 'Party +22 armor (flat per enemy dart).', bonus: { armor: 22 }, levelRequired: 5 },
-  { id: 'rog_dodge_5', classId: 'rogue', tier: 5, name: 'Phantasm', icon: '🌫️', desc: 'Party +16 armor and +380 max HP.', bonus: { armor: 16, health: 380 }, levelRequired: 5 },
-  { id: 'rog_thorns_5', classId: 'rogue', tier: 5, name: 'Maw of Thorns', icon: '🐉', desc: 'Party +16 armor and +26 power (flat).', bonus: { armor: 16, power: 26 }, levelRequired: 5 },
+  { id: 'rog_armor_5', classId: 'rogue', tier: 5, name: 'Eclipse Aegis', icon: '🌑', desc: 'Party +22 armor (flat per enemy dart).', bonus: { armor: 22 }, levelRequired: 8 },
+  { id: 'rog_dodge_5', classId: 'rogue', tier: 5, name: 'Phantasm', icon: '🌫️', desc: 'Party +16 armor and +380 max HP.', bonus: { armor: 16, health: 380 }, levelRequired: 8 },
+  { id: 'rog_thorns_5', classId: 'rogue', tier: 5, name: 'Maw of Thorns', icon: '🐉', desc: 'Party +16 armor and +26 power (flat).', bonus: { armor: 16, power: 26 }, levelRequired: 8 },
 ];
 
 export function getCoopClass(id: CoopClassId | null | undefined): CoopClassDef | undefined {
