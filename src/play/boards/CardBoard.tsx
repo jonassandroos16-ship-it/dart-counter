@@ -101,7 +101,42 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     const card = handDefs[handIdx];
     if (!card) return;
     if (card.type !== 'damage') {
-      toast(`${card.name}: ${card.desc}`);
+      // Spell/utility cards: provide themed UI feedback based on effect type
+      const effectMsg: Record<string, string> = {
+        heal: `✨ ${card.name} — Party healed!`,
+        heal_over_time: `💚 ${card.name} — Party regenerating HP!`,
+        party_shield_flat: `🛡️ ${card.name} — Party shielded from flat damage!`,
+        party_shield: `🛡️ ${card.name} — Party takes less damage!`,
+        enemy_curse: `🔮 ${card.name} — Enemies cursed!`,
+        enemy_debuff: `💀 ${card.name} — Enemies weakened!`,
+        enemy_miss: `🌀 ${card.name} — Enemies debuffed, may miss!`,
+        bleed: `🩸 ${card.name} — Enemies bleeding!`,
+        freeze: `❄️ ${card.name} — Enemies frozen!`,
+        surge: `⚡ ${card.name} — Next visit scores double!`,
+        hot_streak: `🔥 ${card.name} — Cumulative bonus active!`,
+        power_buff: `💪 ${card.name} — Party power increased!`,
+        accuracy_buff: `🦅 ${card.name} — Party accuracy boosted!`,
+        armor_buff: `🏰 ${card.name} — Party armor fortified!`,
+        reflect: `🪞 ${card.name} — Damage reflection active!`,
+        draw: `🃏 ${card.name} — Extra cards drawn!`,
+        reroll: `🎲 ${card.name} — Reroll available!`,
+        shadowstep: `🌑 ${card.name} — Shadowstep active!`,
+        blessing: `🙏 ${card.name} — Blessed!`,
+        bust_protect: `🛡️ ${card.name} — Bust protection active!`,
+        double_up: `🔁 ${card.name} — Opponent's double negated!`,
+        extra_dart: `➕ ${card.name} — Extra throw granted!`,
+        reserve: `📥 ${card.name} — Card reserved!`,
+        revive: `❤️ ${card.name} — Party revived!`,
+      };
+      const msg = effectMsg[card.effect || ''] || `${card.name}: ${card.desc}`;
+      toast(msg);
+      Sound.play('powerup', {}, settings);
+      // Move the card to used pile so it's consumed
+      const updated = playCardFromHand(state, handIdx);
+      if (updated) {
+        setGame({ ...game, cardState: { ...game.cardState, [p.id]: updated } });
+        force(n => n + 1);
+      }
       return;
     }
     if (game.darts.length >= MAX_PLAYS_PER_TURN) { toast(`Only ${MAX_PLAYS_PER_TURN} cards per visit`); return; }
@@ -686,20 +721,52 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
               <h3>{'\u{1F0A0}'} Deck ({state.deck.length})</h3>
               <button className="btn sm ghost" onClick={() => setShowDeck(false)}>Close</button>
             </div>
-            <div className="card-pile-popup-grid">
-              {state.deck.length === 0 && <div className="muted small" style={{ padding: 20 }}>Deck is empty. Graveyard will be shuffled in on next draw.</div>}
-              {state.deck.map((pc, idx) => {
-                const def = resolveCardDef(pc);
-                if (!def) return null;
-                return (
-                  <div key={idx} className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))` }}>
-                    <span style={{ fontSize: 20 }}>{def.icon}</span>
-                    <span style={{ fontSize: 10, fontWeight: 800 }}>{def.name}</span>
-                    <span className="muted" style={{ fontSize: 9 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</span>
+            {state.deck.length === 0 ? (
+              <div className="muted small" style={{ padding: 20 }}>Deck is empty. Graveyard will be shuffled in on next draw.</div>
+            ) : (
+              <>
+                {/* Starter cards */}
+                <div style={{ marginBottom: 12 }}>
+                  <div className="muted small" style={{ fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em', fontSize: 10 }}>Starter Cards</div>
+                  <div className="card-pile-popup-grid">
+                    {state.deck.filter(pc => { const def = resolveCardDef(pc); return def && (def.levelRequired ?? 1) === 1; }).map((pc, idx) => {
+                      const def = resolveCardDef(pc);
+                      if (!def) return null;
+                      return (
+                        <div key={idx} className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))` }}>
+                          <span style={{ fontSize: 20 }}>{def.icon}</span>
+                          <span style={{ fontSize: 10, fontWeight: 800 }}>{def.name}</span>
+                          <span className="muted" style={{ fontSize: 9 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</span>
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
+                </div>
+                {/* Leveled cards — split by level */}
+                {Array.from(new Set(state.deck.map(pc => resolveCardDef(pc)?.levelRequired ?? 1).filter(lvl => lvl > 1))).sort((a, b) => a - b).map(lvl => {
+                  const levelCards = state.deck.filter(pc => { const def = resolveCardDef(pc); return def && (def.levelRequired ?? 1) === lvl; });
+                  if (levelCards.length === 0) return null;
+                  return (
+                    <div key={lvl} style={{ marginBottom: 12 }}>
+                      <div className="muted small" style={{ fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em', fontSize: 10 }}>Level {lvl} Cards</div>
+                      <div className="card-pile-popup-grid">
+                        {levelCards.map((pc, idx) => {
+                          const def = resolveCardDef(pc);
+                          if (!def) return null;
+                          return (
+                            <div key={idx} className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))` }}>
+                              <span style={{ fontSize: 20 }}>{def.icon}</span>
+                              <span style={{ fontSize: 10, fontWeight: 800 }}>{def.name}</span>
+                              <span className="muted" style={{ fontSize: 9 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
           </div>
         </div>
       )}
