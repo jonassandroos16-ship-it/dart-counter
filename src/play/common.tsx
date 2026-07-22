@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { Game, GameRecord, Player, Settings } from '../types';
 import { getPowerUpInfo } from '../powerups';
 import { getBadgeInfo, getBadgeContext, buildCoopBadgeCtx } from '../badges';
-import { getPlayerXPById } from '../logic';
+import { getPlayerXPById, effectiveAttributes } from '../logic';
 import { initials } from '../store';
 import { Modal } from '../Popups';
 import { chargesNeededFor } from './powerups';
@@ -104,11 +104,11 @@ export function PowerUpOrb({ game, curIdx, settings, onActivate }: { game: Game;
   );
 }
 
-export function AttributeStrip({ playerId, players, mode }: { playerId: string; players: Player[]; mode: string }) {
+export function AttributeStrip({ playerId, players, mode, settings }: { playerId: string; players: Player[]; mode: string; settings: Settings }) {
   if (mode !== 'battle') return null;
   const player = players.find(p => p.id === playerId);
   if (!player) return null;
-  const attrs = player.attributes;
+  const attrs = effectiveAttributes(player, settings);
   if (!attrs) return null;
   return (
     <div className="row wrap" style={{ gap: 4, marginTop: 2 }}>

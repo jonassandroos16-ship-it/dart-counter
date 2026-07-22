@@ -1,5 +1,5 @@
 import type { GameRecord, Player, Settings, CustomTitle } from '../types';
-import { levelFromXP, getPlayerXP, playerStats, defaultAttributes, defaultPowerUps } from '../logic';
+import { levelFromXP, getPlayerXP, playerStats, defaultPowerUps, effectiveAttributes } from '../logic';
 import { getTitleInfo } from '../constants';
 import { initials } from '../store';
 import { getBadgeInfo, getBadgeContext, buildCoopBadgeCtx } from '../badges';
@@ -29,7 +29,7 @@ export function PlayerCard({ player, games, settings, customTitles, onEdit, onDe
   const avatarContent = bi ? bi.icon : initials(p.name);
   const totalBadgeEarns = Object.values(xp.badgeCounts || {}).reduce((a: number, b: number) => a + b, 0);
   const ctx = xp.showBadgeContext ? getBadgeContext(xp.selectedBadge, p.id, games, buildCoopBadgeCtx()) : null;
-  const attrs = p.attributes || defaultAttributes(settings);
+  const attrs = effectiveAttributes(p, settings);
   const pwr = p.powerUps || defaultPowerUps(settings);
   const activePu = getPowerUpInfo(pwr.active);
   const coopClass = getCoopClass((p.coopProgress || defaultCoopProgress()).classId);

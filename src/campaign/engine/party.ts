@@ -1,6 +1,7 @@
 import type { CoopPlayer } from '../types';
 import type { Player, Settings } from '../../types';
 import { computePartyPassiveBonus, type PartyPassiveBonus } from './classes';
+import { effectiveAttributes, classStartHealth, classStartArmor, classStartPower, classHealthMax, classArmorMax, classPowerMax } from '../../logic';
 
 // ── Party attribute aggregation ──────────────────────────────────────
 //
@@ -14,57 +15,51 @@ import { computePartyPassiveBonus, type PartyPassiveBonus } from './classes';
 // output but not more survivability.
 
 export function partyMaxHpFor(players: Player[], settings: Settings): number {
-  const cfg = settings.powerUpScaling;
   if (!players.length) return 1;
-  const healthMax = Number.isFinite(cfg.healthMax) ? cfg.healthMax : Number.MAX_SAFE_INTEGER;
-  const startHealth = Number.isFinite(cfg.attributeStartHealth) ? cfg.attributeStartHealth : 0;
   const sum = players.reduce((acc, p) => {
-    const h = p.attributes?.health;
-    return acc + (typeof h === 'number' && Number.isFinite(h) ? Math.max(1, h) : startHealth);
+    const attrs = effectiveAttributes(p, settings);
+    const h = attrs.health;
+    return acc + (typeof h === 'number' && Number.isFinite(h) ? Math.max(1, h) : 1);
   }, 0);
   const avg = sum / players.length;
-  return Math.max(1, Math.min(healthMax, Math.round(avg)));
+  return Math.max(1, Math.round(avg));
 }
 
 export function partyArmorFor(players: Player[], settings: Settings): number {
-  const cfg = settings.powerUpScaling;
   if (!players.length) return 0;
-  const armorMax = Number.isFinite(cfg.armorMax) ? cfg.armorMax : Number.MAX_SAFE_INTEGER;
-  const startArmor = Number.isFinite(cfg.attributeStartArmor) ? cfg.attributeStartArmor : 0;
   const sum = players.reduce((acc, p) => {
-    const a = p.attributes?.armor;
-    return acc + (typeof a === 'number' && Number.isFinite(a) ? a : startArmor);
+    const attrs = effectiveAttributes(p, settings);
+    const a = attrs.armor;
+    return acc + (typeof a === 'number' && Number.isFinite(a) ? a : 0);
   }, 0);
-  // Divide by player count so the combined armor never exceeds the cap.
   const avg = sum / players.length;
-  return Math.max(0, Math.min(armorMax, avg));
+  return Math.max(0, avg);
 }
 
 export function partyPowerFor(players: Player[], settings: Settings): number {
-  const cfg = settings.powerUpScaling;
   if (!players.length) return 0;
-  const powerMax = Number.isFinite(cfg.powerMax) ? cfg.powerMax : Number.MAX_SAFE_INTEGER;
-  const startPower = Number.isFinite(cfg.attributeStartPower) ? cfg.attributeStartPower : 0;
   const sum = players.reduce((acc, p) => {
-    const pw = p.attributes?.power;
-    return acc + (typeof pw === 'number' && Number.isFinite(pw) ? pw : startPower);
+    const attrs = effectiveAttributes(p, settings);
+    const pw = attrs.power;
+    return acc + (typeof pw === 'number' && Number.isFinite(pw) ? pw : 0);
   }, 0);
   const avg = sum / players.length;
-  return Math.max(0, Math.min(powerMax, avg));
+  return Math.max(0, avg);
 }
 
 // Per-player snapshot used during a battle.
 export function toCoopPlayer(p: Player, settings: Settings, startCharge: number): CoopPlayer {
-  const cfg = settings.powerUpScaling;
-  const healthMax = Number.isFinite(cfg.healthMax) ? cfg.healthMax : Number.MAX_SAFE_INTEGER;
-  const armorMax = Number.isFinite(cfg.armorMax) ? cfg.armorMax : Number.MAX_SAFE_INTEGER;
-  const powerMax = Number.isFinite(cfg.powerMax) ? cfg.powerMax : Number.MAX_SAFE_INTEGER;
-  const startHealth = Number.isFinite(cfg.attributeStartHealth) ? cfg.attributeStartHealth : 0;
-  const startArmor = Number.isFinite(cfg.attributeStartArmor) ? cfg.attributeStartArmor : 0;
-  const startPower = Number.isFinite(cfg.attributeStartPower) ? cfg.attributeStartPower : 0;
-  const h = Number.isFinite(p.attributes?.health) ? p.attributes!.health : startHealth;
-  const a = Number.isFinite(p.attributes?.armor) ? p.attributes!.armor : startArmor;
-  const pw = Number.isFinite(p.attributes?.power) ? p.attributes!.power : startPower;
+  const cid = p.coopProgress?.classId;
+  const healthMax = classHealthMax(cid, settings);
+  const armorMax = classArmorMax(cid, settings);
+  const powerMax = classPowerMax(cid, settings);
+  const startHealth = classStartHealth(cid, settings);
+  const startArmor = classStartArmor(cid, settings);
+  const startPower = classStartPower(cid, settings);
+  const attrs = effectiveAttributes(p, settings);
+  const h = Number.isFinite(attrs.health) ? attrs.health : startHealth;
+  const a = Number.isFinite(attrs.armor) ? attrs.armor : startArmor;
+  const pw = Number.isFinite(attrs.power) ? attrs.power : startPower;
   return {
     id: p.id,
     name: p.name,

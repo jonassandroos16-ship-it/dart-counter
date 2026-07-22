@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Player, Settings } from '../types';
 import { initials } from '../store';
+import { effectiveAttributes } from '../logic';
 
 interface Props {
   players: Player[];
@@ -35,7 +36,7 @@ export function DartliteSetup({ players, settings, onStart, onBack }: Props) {
         <div style={{ display: 'grid', gap: 8 }}>
           {players.map(p => {
             const isSel = selected.includes(p.id);
-            const attrs = p.attributes;
+            const attrs = effectiveAttributes(p, settings);
             return (
               <button key={p.id} className="btn block" style={{
                 padding: 12, textAlign: 'left',
