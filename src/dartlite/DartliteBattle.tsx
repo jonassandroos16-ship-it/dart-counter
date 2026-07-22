@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import type { Settings, Player } from '../types';
 import type { CampaignBattleState } from '../campaign/types';
 import {
@@ -19,6 +19,13 @@ import { ChoiceScreen } from './ChoiceScreen';
 import { ProgressScreen } from './ProgressScreen';
 import { PlayerDetailModal } from './PlayerDetailModal';
 import { BossVictoryScreen } from './BossVictoryScreen';
+import type { PlayerCard, CardDef, CardPlayState } from '../cards/types';
+import { cardDamage, cardRarityColor, cardTypeColor } from '../cards/definitions';
+import {
+  initCardPlayState, startTurn,
+  playCardFromHand, endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
+  getPlayerCards,
+} from '../cards/deck';
 
 interface Props {
   run: DartliteRun;
@@ -41,6 +48,61 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   const [mult, setMult] = useState(1);
   const [chosenRun, setChosenRun] = useState<DartliteRun | null>(null);
   const [showRewardReveal, setShowRewardReveal] = useState(false);
+
+  // ── Card mode state ──────────────────────────────────────────────────
+  // Per-player card play state (deck, hand, used, graveyard), keyed by
+  // player ID. Only used when run.cardMode is true.
+  const [cardStates, setCardStates] = useState<Record<string, CardPlayState>>({});
+  const [selectedCardIdx, setSelectedCardIdx] = useState<number | null>(null);
+  const [showDeck, setShowDeck] = useState(false);
+  const [showGraveyard, setShowGraveyard] = useState(false);
+  const [animatingOut, setAnimatingOut] = useState<number | null>(null);
+  const prevHandLen = useRef<number>(0);
+  const prevHandRef = useRef<number | null>(null);
+  const cardMode = run.cardMode;
+
+  // Initialize card play state for all players when a new battle starts.
+  useEffect(() => {
+    if (!cardMode || !battle) return;
+    const cs: Record<string, CardPlayState> = {};
+    for (const rp of run.runPlayers) {
+      const playerData = players.find(p => p.id === rp.id);
+      const collection: PlayerCard[] = playerData ? getPlayerCards(playerData) : [];
+      cs[rp.id] = initCardPlayState(collection);
+    }
+    setCardStates(cs);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [battle, cardMode]);
+
+  // Ensure the current thrower has a hand drawn for their turn.
+  useEffect(() => {
+    if (!cardMode || !state || state.phase !== 'player') return;
+    const thrower = state.players[state.playerTurnIdx];
+    if (!thrower) return;
+    const cs = cardStates[thrower.id];
+    if (!cs) return;
+    if (cs.hand.length === 0 && cs.used.length === 0) {
+      const next = startTurn(cs);
+      setCardStates(prev => ({ ...prev, [thrower.id]: next }));
+    }
+  }, [state?.phase, state?.playerTurnIdx, cardMode, cardStates]);
+
+  // Track hand length changes for enter/exit animations.
+  useEffect(() => {
+    if (!cardMode || !state || state.phase !== 'player') return;
+    const thrower = state.players[state.playerTurnIdx];
+    if (!thrower) return;
+    const cs = cardStates[thrower.id];
+    if (!cs) return;
+    const curLen = cs.hand.length;
+    if (curLen < prevHandLen.current && prevHandRef.current !== null) {
+      setAnimatingOut(prevHandRef.current);
+      const t = setTimeout(() => setAnimatingOut(null), 300);
+      prevHandRef.current = null;
+      return () => clearTimeout(t);
+    }
+    prevHandLen.current = curLen;
+  }, [cardStates, state?.phase, state?.playerTurnIdx, cardMode]);
 
   useEffect(() => {
     if (run.lastUnlockedTrinket) setShowTrinketUnlock(true);
@@ -88,10 +150,70 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     if (base > 0) Sound.play('impact', {}, settings);
     setMult(1);
   };
-  const onUndo = () => setState(prev => prev ? undoDart(prev, settings) : prev);
+  const onUndo = () => {
+    if (cardMode && state && state.phase === 'player') {
+      const thrower = state.players[state.playerTurnIdx];
+      if (thrower) {
+        const cs = cardStates[thrower.id];
+        if (cs && state.darts.length > 0) {
+          const lastDart = state.darts[state.darts.length - 1];
+          const usedIdx = [...cs.used].reverse().findIndex(pc => {
+            const def = resolveCardDef(pc);
+            return def?.name === lastDart.label;
+          });
+          if (usedIdx !== -1) {
+            const realIdx = cs.used.length - 1 - usedIdx;
+            const card = cs.used[realIdx];
+            const updated: CardPlayState = {
+              deck: cs.deck,
+              hand: [...cs.hand, card],
+              used: cs.used.filter((_, i) => i !== realIdx),
+              graveyard: cs.graveyard,
+            };
+            setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
+          }
+        }
+      }
+    }
+    setState(prev => prev ? undoDart(prev, settings) : prev);
+  };
   const onEnter = () => {
     if (!state.darts.length) return;
+    if (cardMode) {
+      const thrower = state.players[state.playerTurnIdx];
+      if (thrower) {
+        const cs = cardStates[thrower.id];
+        if (cs) {
+          const endedState = endTurn(cs);
+          setCardStates(prev => ({ ...prev, [thrower.id]: endedState }));
+        }
+      }
+    }
     setState(prev => prev ? resolvePlayerVisit(prev) : prev);
+  };
+
+  // ── Card mode helpers ───────────────────────────────────────────────
+  const playCard = (handIdx: number) => {
+    if (!state || !cardMode) return;
+    const thrower = state.players[state.playerTurnIdx];
+    if (!thrower) return;
+    const cs = cardStates[thrower.id];
+    if (!cs) return;
+    const handDefs = cs.hand.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
+    const card = handDefs[handIdx];
+    if (!card) return;
+    if (card.type !== 'damage') return;
+    if (state.darts.length >= MAX_PLAYS_PER_TURN) return;
+    const updated = playCardFromHand(cs, handIdx);
+    if (!updated) return;
+    const base = card.base ?? 0;
+    const cardMult = card.mult ?? 1;
+    const isBull = base === 50;
+    const label = card.name;
+    prevHandRef.current = handIdx;
+    setSelectedCardIdx(null);
+    setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
+    onAdd(base, isBull ? 2 : (base === 25 && cardMult === 2 ? 2 : cardMult), label, isBull);
   };
   const onContinue = () => {
     if (state.pendingEnemyAttacks.length) {
@@ -105,7 +227,8 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   };
 
   const partyHpPct = Math.max(0, Math.min(100, (state.partyHp / state.partyMaxHp) * 100));
-  const playerVisitDone = state.phase === 'player' && state.darts.length >= 3 && state.outcome === 'ongoing';
+  const maxDartsPerVisit = cardMode ? MAX_PLAYS_PER_TURN : 3;
+  const playerVisitDone = state.phase === 'player' && state.darts.length >= maxDartsPerVisit && state.outcome === 'ongoing';
   const showingFrozen = state.phase === 'enemy'
     && state.pendingEnemyAttacks.length === 0
     && state.appliedEnemyAttacks.length === 0
@@ -260,7 +383,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             {state.enemies.map((e, i) => {
               const hpPct = Math.max(0, Math.min(100, (e.hp / e.maxHp) * 100));
               const isTarget = i === state.targetIdx && !e.defeated;
-              const canTarget = state.phase === 'player' && !e.defeated && state.darts.length < 3 && state.outcome === 'ongoing';
+              const canTarget = state.phase === 'player' && !e.defeated && state.darts.length < maxDartsPerVisit && state.outcome === 'ongoing';
               return (
                 <div key={e.id} className="play-other" onClick={() => canTarget && setState(prev => prev ? setTarget(prev, e.id) : prev)}
                   style={{ cursor: canTarget ? 'pointer' : 'default', opacity: e.defeated ? 0.4 : 1, borderColor: isTarget ? 'var(--accent)' : 'var(--border)', boxShadow: isTarget ? '0 0 0 2px var(--accent)' : 'none', background: e.defeated ? 'var(--bg-3)' : 'var(--bg-2)' }}>
@@ -281,7 +404,161 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             })}
           </div>
 
-          {state.phase === 'player' && state.outcome === 'ongoing' && state.darts.length < 3 && (
+          {state.phase === 'player' && state.outcome === 'ongoing' && state.darts.length < (cardMode ? MAX_PLAYS_PER_TURN : 3) && (
+            cardMode && thrower ? (() => {
+              const cs = cardStates[thrower.id];
+              if (!cs) return null;
+              const handDefs = cs.hand.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
+              const usedDefs = cs.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
+              const selectedCard = selectedCardIdx !== null ? handDefs[selectedCardIdx] : null;
+              const canPlayMore = state.darts.length < MAX_PLAYS_PER_TURN;
+              return (
+                <>
+                <div className="play-input">
+                  <div className="pad-card card-board-pad">
+                    <div className="card-pile-row">
+                      <button className="card-pile-btn" onClick={() => setShowDeck(true)} title="View deck">
+                        <span className="card-pile-icon">{'\u{1F0A0}'}</span>
+                        <span className="card-pile-label">Deck</span>
+                        <span className="card-pile-count">{cs.deck.length}</span>
+                      </button>
+                      <div className="card-hand-label">Your Hand — {thrower.name}</div>
+                      <button className="card-pile-btn" onClick={() => setShowGraveyard(true)} title="View graveyard">
+                        <span className="card-pile-icon">{'\u26B0\uFE0F'}</span>
+                        <span className="card-pile-label">Graveyard</span>
+                        <span className="card-pile-count">{cs.graveyard.length}</span>
+                      </button>
+                    </div>
+                    <div className="card-hand-fan">
+                      {handDefs.length === 0 && (
+                        <div className="muted small" style={{ padding: '20px 0', textAlign: 'center' }}>No cards in hand. End turn to draw new cards.</div>
+                      )}
+                      {handDefs.map((card, idx) => {
+                        const tColor = cardTypeColor(card.type);
+                        const rColor = cardRarityColor(card.rarity);
+                        const isAnimatingOut = animatingOut === idx;
+                        return (
+                          <div
+                            key={`${idx}-${card.id}`}
+                            className={`card-tile ${isAnimatingOut ? 'card-anim-out' : 'card-anim-in'}`}
+                            style={{
+                              '--card-color': tColor,
+                              '--card-rarity': rColor,
+                              '--card-rot': `${(idx - (handDefs.length - 1) / 2) * 4}deg`,
+                              '--card-offset': `${Math.abs(idx - (handDefs.length - 1) / 2) * 6}px`,
+                            } as React.CSSProperties}
+                            onClick={() => setSelectedCardIdx(idx)}
+                          >
+                            <div className="card-tile-inner">
+                              <div className="card-tile-top">
+                                <span className="card-tile-icon">{card.icon}</span>
+                              </div>
+                              <div className="card-tile-name">{card.name}</div>
+                              <div className="card-tile-type">{card.type === 'damage' ? `${cardDamage(card)} dmg` : card.type}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {usedDefs.length > 0 && (
+                      <div className="card-used-row">
+                        <span className="muted small" style={{ fontWeight: 600 }}>Used:</span>
+                        {usedDefs.map((card, idx) => (
+                          <div key={idx} className="card-used-tile" style={{ borderColor: cardRarityColor(card.rarity) }}>
+                            <span style={{ fontSize: 16 }}>{card.icon}</span>
+                            <span style={{ fontSize: 10, fontWeight: 800 }}>{card.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="row" style={{ gap: 8, marginTop: 8 }}>
+                      <button className="btn block ghost" onClick={onUndo} disabled={!state.darts.length}>{'\u21B6'} Undo card</button>
+                      <button className="btn block primary" onClick={onEnter} disabled={!state.darts.length}>End visit</button>
+                    </div>
+                  </div>
+                </div>
+
+                {selectedCard && (
+                  <div className="card-popup-overlay" onClick={() => setSelectedCardIdx(null)}>
+                    <div className="card-popup" onClick={e => e.stopPropagation()} style={{ '--card-color': cardTypeColor(selectedCard.type), '--card-rarity': cardRarityColor(selectedCard.rarity) } as React.CSSProperties}>
+                      <div className="card-popup-header">
+                        <span className="card-popup-icon">{selectedCard.icon}</span>
+                        <span className="card-popup-name">{selectedCard.name}</span>
+                        <span className="card-popup-rarity" style={{ color: cardRarityColor(selectedCard.rarity) }}>{selectedCard.rarity}</span>
+                      </div>
+                      <div className="card-popup-body">
+                        <div className="card-popup-type" style={{ color: cardTypeColor(selectedCard.type) }}>
+                          {selectedCard.type === 'damage' ? `Damage — ${cardDamage(selectedCard)} points` : selectedCard.type === 'spell' ? 'Spell' : 'Utility'}
+                        </div>
+                        <div className="card-popup-desc">{selectedCard.desc}</div>
+                        {selectedCard.class !== 'any' && <div className="card-popup-class">Class: {selectedCard.class}</div>}
+                      </div>
+                      <div className="card-popup-actions">
+                        <button className="btn block ghost" onClick={() => setSelectedCardIdx(null)}>Cancel</button>
+                        <button
+                          className="btn block primary"
+                          disabled={selectedCard.type === 'damage' && !canPlayMore}
+                          onClick={() => playCard(selectedCardIdx!)}
+                        >
+                          {selectedCard.type === 'damage' ? 'Play' : 'Use'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {showDeck && cs && (
+                  <div className="card-popup-overlay" onClick={() => setShowDeck(false)}>
+                    <div className="card-pile-popup" onClick={e => e.stopPropagation()}>
+                      <div className="card-pile-popup-header">
+                        <h3>{'\u{1F0A0}'} Deck ({cs.deck.length})</h3>
+                        <button className="btn sm ghost" onClick={() => setShowDeck(false)}>Close</button>
+                      </div>
+                      <div className="card-pile-popup-grid">
+                        {cs.deck.length === 0 && <div className="muted small" style={{ padding: 20 }}>Deck is empty. Graveyard will be shuffled in on next draw.</div>}
+                        {cs.deck.map((pc, idx) => {
+                          const def = resolveCardDef(pc);
+                          if (!def) return null;
+                          return (
+                            <div key={idx} className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))` }}>
+                              <span style={{ fontSize: 20 }}>{def.icon}</span>
+                              <span style={{ fontSize: 10, fontWeight: 800 }}>{def.name}</span>
+                              <span className="muted" style={{ fontSize: 9 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {showGraveyard && cs && (
+                  <div className="card-popup-overlay" onClick={() => setShowGraveyard(false)}>
+                    <div className="card-pile-popup" onClick={e => e.stopPropagation()}>
+                      <div className="card-pile-popup-header">
+                        <h3>{'\u26B0\uFE0F'} Graveyard ({cs.graveyard.length})</h3>
+                        <button className="btn sm ghost" onClick={() => setShowGraveyard(false)}>Close</button>
+                      </div>
+                      <div className="card-pile-popup-grid">
+                        {cs.graveyard.length === 0 && <div className="muted small" style={{ padding: 20 }}>Graveyard is empty.</div>}
+                        {cs.graveyard.map((pc, idx) => {
+                          const def = resolveCardDef(pc);
+                          if (!def) return null;
+                          return (
+                            <div key={idx} className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))` }}>
+                              <span style={{ fontSize: 20 }}>{def.icon}</span>
+                              <span style={{ fontSize: 10, fontWeight: 800 }}>{def.name}</span>
+                              <span className="muted" style={{ fontSize: 9 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                </>
+              );
+            })() : (
             <div className="play-input">
               <div className="pad-card">
                 <div className="mult">
@@ -303,6 +580,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
                 </div>
               </div>
             </div>
+            )
           )}
 
           {showingFrozen && <FrozenOverlay state={state} onContinue={onContinue} />}
