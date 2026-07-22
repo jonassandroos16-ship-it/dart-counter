@@ -68,7 +68,7 @@ export const BUILTIN_TITLES: TitleDef[] = [
     check: (_v, _gv, g, ctx) => (ctx?.gamesWon || 0) >= 1,
     progress: (ctx) => ({ current: Math.min(ctx?.gamesWon || 0, 1), target: 1 }) },
   { id: 'untouchable', name: 'Untouchable', desc: 'Win a game without losing a leg', icon: '🛡️',
-    check: (_v, gv, g) => g.finished && g.winner === (gv[0]?. as any) && gv.every((v: any) => v.leg === 1),
+    check: (_v, gv, g) => g.finished && g.winner === (gv[0] as any) && gv.every((v: any) => v.leg === 1),
     progress: () => null },
   { id: 'comeback_kid', name: 'Comeback Kid', desc: 'Win after being down 2+ legs', icon: '🔄',
     check: (_v, gv, g) => g.finished && g.winner && gv.some((v: any) => v.leg === 1 && v.scored === 0),
@@ -257,6 +257,24 @@ export const BUILTIN_TITLES: TitleDef[] = [
     check: (_v, _gv, _g, ctx) => (ctx?.classLevels?.rogue || 0) >= 10,
     progress: (ctx) => ({ current: Math.min(ctx?.classLevels?.rogue || 0, 10), target: 10 }) },
 ];
+
+export function conditionLabel(t: CustomTitle): string {
+  if (!t.condition) return 'No condition';
+  if (t.condition.type === 'sum') return `Turn total ≥ ${t.condition.value}`;
+  if (t.condition.type === 'combo') {
+    const multLabel = t.condition.mult === 3 ? 'Triple' : t.condition.mult === 2 ? 'Double' : 'Single';
+    const baseLabel = t.condition.base === 50 ? 'Bull' : t.condition.base === 25 ? '25' : `${t.condition.base}`;
+    return `${multLabel} ${baseLabel} ×${t.condition.count}`;
+  }
+  if (t.condition.type === 'sequence') {
+    return `Sequence: ${t.condition.darts.map((d) => {
+      const m = d.mult === 3 ? 'T' : d.mult === 2 ? 'D' : 'S';
+      const b = d.base === 50 ? 'Bull' : d.base === 25 ? '25' : `${d.base}`;
+      return `${m}${b}`;
+    }).join(', ')}`;
+  }
+  return 'Unknown condition';
+}
 
 export function buildTitleCheck(t: CustomTitle): (allVisits: any[], gameVisits: any[], game: any, ctx?: TitleCtx) => boolean {
   if (!t.condition) return () => false;
