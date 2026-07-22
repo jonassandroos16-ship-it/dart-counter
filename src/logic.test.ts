@@ -452,7 +452,7 @@ describe('reconcilePlayerPoints — health recalculation from base stats', () =>
       attributes: { health: NaN, armor: 0, power: 0, pointsAvailable: 0 },
     };
     const out = reconcilePlayerPoints(player, settings);
-    expect(out.attributes?.health).toBe(settings.powerUpScaling.attributeStartHealth);
+    expect(out.attributes?.health).toBe(settings.powerUpScaling.classStartHealth.warrior);
     expect(Number.isFinite(out.attributes?.health as number)).toBe(true);
   });
 
@@ -465,7 +465,7 @@ describe('reconcilePlayerPoints — health recalculation from base stats', () =>
       attributes: { health: 400, armor: 0, power: 0, pointsAvailable: 0 },
     };
     const out = reconcilePlayerPoints(player, settings);
-    expect(out.attributes?.health).toBe(settings.powerUpScaling.attributeStartHealth);
+    expect(out.attributes?.health).toBe(settings.powerUpScaling.classStartHealth.warrior);
     expect(out.attributes?.pointsAvailable).toBe(0);
   });
 
@@ -474,10 +474,10 @@ describe('reconcilePlayerPoints — health recalculation from base stats', () =>
     // XP 250 → level 3 (baseLevelXp=100, levelMult=1.5 → 100 + 150 = 250).
     const player: Player = {
       id: 'p1', name: 'P1', color: '#000', level: 3, xp: 250,
-      attributes: { health: 350, armor: 0, power: 0, pointsAvailable: 8 },
+      attributes: { health: 450, armor: 0, power: 0, pointsAvailable: 8 },
     };
     const out = reconcilePlayerPoints(player, settings);
-    expect(out.attributes?.health).toBe(350);
+    expect(out.attributes?.health).toBe(450);
     expect(out.attributes?.pointsAvailable).toBe(8);
   });
 
@@ -502,18 +502,18 @@ describe('reconcilePlayerPoints — health recalculation from base stats', () =>
     // (500-300)/25, but the player only has 5. Reconcile should clamp.
     const player: Player = {
       id: 'p1', name: 'P1', color: '#000', level: 2, xp: 100,
-      attributes: { health: 500, armor: 0, power: 0, pointsAvailable: 0 },
+      attributes: { health: 525, armor: 0, power: 0, pointsAvailable: 0 },
     };
     const out = reconcilePlayerPoints(player, settings);
     const cfg = settings.powerUpScaling;
-    // Level 2 → 5 attribute points. All 5 go to health (since armor/power are 0).
-    expect(out.attributes?.health).toBe(cfg.attributeStartHealth + 5 * cfg.healthPerPoint);
+    // Level 2 → 5 attribute points. Warrior starts at 400, all 5 go to health → 400 + 5*25 = 525.
+    expect(out.attributes?.health).toBe(cfg.classStartHealth.warrior + 5 * cfg.healthPerPoint);
     expect(out.attributes?.pointsAvailable).toBe(0);
   });
 });
 
 // Regression: a real backup had a `powerUpScaling` block that predated the
-// `healthMax` and `battleMinDamage` fields. Loading that backup produced
+// `healthMax` and `battleMinDamage` fields, loading that backup produced
 // `undefined` for those fields, and `Math.min(undefined, hp)` → NaN, which
 // corrupted battle-mode HP (showed as NaN, became 0 after spending a point).
 describe('battle mode — missing powerUpScaling fields (NaN regression)', () => {

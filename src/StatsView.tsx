@@ -7,6 +7,7 @@ import { loadDartliteGlobalStats } from './dartlite/stats';
 import { ALL_TRINKET_IDS, getTrinket } from './dartlite/trinkets';
 import { COOP_CLASSES, getClassXp } from './campaign/engine/classes';
 import type { CoopClassId } from './campaign/types';
+import { classStartHealth, classStartArmor, classStartPower, defaultClassAttributes } from './logic';
 
 // For each stat: which direction is "better"? higher = bigger is better, lower = smaller is better.
 // null = neutral (no comparison). Used to color the comparison value red/green.
@@ -220,14 +221,22 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
 function ClassXpSection({ player, settings }: { player: Player; settings: Settings }) {
   const prog = player.coopProgress;
   if (!prog) return null;
+  const cfg = settings.powerUpScaling;
   return (
     <div className="card">
-      <h3 style={{ marginBottom: 10 }}>✨ Class XP</h3>
+      <h3 style={{ marginBottom: 10 }}>✨ Class XP & Attributes</h3>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {COOP_CLASSES.map(cls => {
           const xp = getClassXp(prog, cls.id as CoopClassId);
           const li = levelFromXP(xp, settings);
           const isCurrent = prog.classId === cls.id;
+          const ca = (player.classAttributes || {})[cls.id] || defaultClassAttributes(cls.id, settings);
+          const sH = classStartHealth(cls.id, settings);
+          const sA = classStartArmor(cls.id, settings);
+          const sP = classStartPower(cls.id, settings);
+          const spent = Math.max(0, Math.round((ca.health - sH) / (cfg.healthPerPoint || 1)))
+            + Math.max(0, Math.round((ca.armor - sA) / (cfg.armorPerPoint || 1)))
+            + Math.max(0, Math.round((ca.power - sP) / (cfg.powerPerPoint || 1)));
           return (
             <div key={cls.id} style={{ padding: 12, background: 'var(--bg-3)', borderRadius: 8, border: isCurrent ? '1px solid var(--accent)' : '1px solid transparent' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
@@ -240,6 +249,12 @@ function ClassXpSection({ player, settings }: { player: Player; settings: Settin
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
                 <span className="muted small">{xp} XP</span>
                 <span className="muted small">{li.xpIntoLevel}/{li.xpNeeded}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
+                <span className="small"><b>❤️ {ca.health}</b> HP</span>
+                <span className="small"><b>🛡️ {ca.armor}%</b> armor</span>
+                <span className="small"><b>⚡ {ca.power}</b> power</span>
+                <span className="muted small">{spent} pts spent</span>
               </div>
             </div>
           );
