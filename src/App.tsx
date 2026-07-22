@@ -112,7 +112,7 @@ export default function App() {
           popups={popups} />
       </div>
       {view === 'players' && <div className="view-scroll"><PlayersView players={db.players} games={db.games} settings={db.settings} setPlayers={db.setPlayers} toast={show} /></div>}
-      {view === 'stats' && <StatsView players={db.players} games={db.games} settings={db.settings} />}
+      {view === 'stats' && <StatsView players={db.players} games={db.games} settings={db.settings} setPlayers={db.setPlayers} toast={show} />}
       {view === 'history' && <HistoryView players={db.players} games={db.games} settings={db.settings} setGames={db.setGames} toast={show} />}
       {view === 'settings' && <SettingsView players={db.players} games={db.games} settings={db.settings} setSettings={db.setSettings} setPlayers={db.setPlayers} setGames={db.setGames} toast={show} hasDatabase={db.hasDatabase} connected={db.connected} upToDate={db.upToDate} lastSync={db.lastSync} syncing={db.syncing} onSync={db.manualSync} />}
 

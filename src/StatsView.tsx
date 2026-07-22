@@ -6,8 +6,10 @@ import { CalendarPicker, filterForPeriod, describeFilter, type Period } from './
 import { loadDartliteGlobalStats } from './dartlite/stats';
 import { ALL_TRINKET_IDS, getTrinket } from './dartlite/trinkets';
 import { COOP_CLASSES, getClassXp } from './campaign/engine/classes';
+import { selectClassForPlayer, getCoopClass } from './campaign/engine';
 import type { CoopClassId } from './campaign/types';
 import { classStartHealth, classStartArmor, classStartPower, defaultClassAttributes } from './logic';
+import type { SetPlayers, Toast } from './players/BasicTab';
 
 // For each stat: which direction is "better"? higher = bigger is better, lower = smaller is better.
 // null = neutral (no comparison). Used to color the comparison value red/green.
@@ -65,7 +67,7 @@ function statValue(s: ReturnType<typeof playerStats>, xp: ReturnType<typeof getP
   }
 }
 
-export function StatsView({ players, games, settings }: { players: Player[]; games: any[]; settings: Settings }) {
+export function StatsView({ players, games, settings, setPlayers, toast }: { players: Player[]; games: any[]; settings: Settings; setPlayers: SetPlayers; toast: Toast }) {
   const [pid, setPid] = useState<string>(players[0]?.id || '');
   const [compareId, setCompareId] = useState<string>('none');
   const [period, setPeriod] = useState<Period>('Overall');
@@ -140,7 +142,7 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
             </div>
           </div>
 
-          <ClassXpSection player={player} settings={settings} />
+          <ClassXpSection player={player} settings={settings} setPlayers={setPlayers} toast={toast} />
           <CoopStatsSection players={players} />
           <DartliteStatsSection players={players} />
 
@@ -218,13 +220,32 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
 
 // ── Per-class XP section ───────────────────────────────────────────────
 
-function ClassXpSection({ player, settings }: { player: Player; settings: Settings }) {
+function ClassXpSection({ player, settings, setPlayers, toast }: { player: Player; settings: Settings; setPlayers: SetPlayers; toast: Toast }) {
   const prog = player.coopProgress;
   if (!prog) return null;
   const cfg = settings.powerUpScaling;
+
+  const pickClass = (classId: CoopClassId) => {
+    if (prog.classId === classId) return;
+    setPlayers((prev: Player[]) => prev.map(p => {
+      if (p.id !== player.id) return p;
+      const cur = p.coopProgress || { classId: null, unlockedPassives: [], equippedPassives: [] };
+      const next = selectClassForPlayer(cur, classId);
+      const caMap = { ...(p.classAttributes || {}) };
+      if (!caMap[classId]) {
+        caMap[classId] = defaultClassAttributes(classId, settings);
+      }
+      const activeAttrs = caMap[classId];
+      return { ...p, coopProgress: next, classAttributes: caMap, attributes: { ...activeAttrs } };
+    }));
+    const cls = getCoopClass(classId);
+    toast(`${cls?.name || classId} class selected`);
+  };
+
   return (
     <div className="card">
       <h3 style={{ marginBottom: 10 }}>✨ Class XP & Attributes</h3>
+      <div className="muted small" style={{ marginBottom: 10 }}>Tap a class to switch your active class.</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {COOP_CLASSES.map(cls => {
           const xp = getClassXp(prog, cls.id as CoopClassId);
@@ -238,7 +259,15 @@ function ClassXpSection({ player, settings }: { player: Player; settings: Settin
             + Math.max(0, Math.round((ca.armor - sA) / (cfg.armorPerPoint || 1)))
             + Math.max(0, Math.round((ca.power - sP) / (cfg.powerPerPoint || 1)));
           return (
-            <div key={cls.id} style={{ padding: 12, background: 'var(--bg-3)', borderRadius: 8, border: isCurrent ? '1px solid var(--accent)' : '1px solid transparent' }}>
+            <button key={cls.id} onClick={() => pickClass(cls.id as CoopClassId)} disabled={isCurrent}
+              style={{
+                padding: 12, background: 'var(--bg-3)', borderRadius: 8,
+                border: isCurrent ? '1px solid var(--accent)' : '1px solid transparent',
+                cursor: isCurrent ? 'default' : 'pointer', color: 'inherit', textAlign: 'left',
+                display: 'block', width: '100%',
+                boxShadow: isCurrent ? '0 0 10px color-mix(in srgb,var(--accent) 40%,transparent)' : 'none',
+                transition: 'border-color .15s ease, box-shadow .15s ease',
+              }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                 <span style={{ fontWeight: 800, fontSize: 14 }}>{cls.icon} {cls.name}{isCurrent ? ' (active)' : ''}</span>
                 <span style={{ fontWeight: 900, fontSize: 16 }}>Lv {li.level}</span>
@@ -256,7 +285,7 @@ function ClassXpSection({ player, settings }: { player: Player; settings: Settin
                 <span className="small"><b>⚡ {ca.power}</b> power</span>
                 <span className="muted small">{spent} pts spent</span>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
