@@ -14,6 +14,7 @@
 
 import type { CampaignBattleState, CampaignLevel } from '../campaign/types';
 import type { Player, Settings } from '../types';
+import { effectiveAttributes } from '../logic';
 import { ENEMY_DATABASE } from '../campaign/enemyDatabase';
 import { startBattle } from '../campaign/engine/playerTurn';
 import {
@@ -142,9 +143,10 @@ export function startRun(players: Player[], settings: Settings, cardMode: boolea
     const startHealth = Number.isFinite(cfg.attributeStartHealth) ? cfg.attributeStartHealth : 400;
     const startArmor = Number.isFinite(cfg.attributeStartArmor) ? cfg.attributeStartArmor : 0;
     const startPower = Number.isFinite(cfg.attributeStartPower) ? cfg.attributeStartPower : 0;
-    const h = Number.isFinite(p.attributes?.health) ? p.attributes!.health : startHealth;
-    const a = Number.isFinite(p.attributes?.armor) ? p.attributes!.armor : startArmor;
-    const pw = Number.isFinite(p.attributes?.power) ? p.attributes!.power : startPower;
+    const attrs = effectiveAttributes(p, settings);
+    const h = Number.isFinite(attrs.health) ? attrs.health : startHealth;
+    const a = Number.isFinite(attrs.armor) ? attrs.armor : startArmor;
+    const pw = Number.isFinite(attrs.power) ? attrs.power : startPower;
     return {
       id: p.id,
       name: p.name,

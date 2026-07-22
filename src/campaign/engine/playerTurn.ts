@@ -15,6 +15,7 @@ import { computePartyPassiveBonus, type PartyPassiveBonus } from './classes';
 import { toCoopPlayer } from './party';
 import { dartMatchesShield, describeShield } from './shields';
 import { finishEnemyTurn } from './enemyAi';
+import { effectiveAttributes } from '../../logic';
 
 // ── Battle initialization ─────────────────────────────────────────────
 
@@ -48,13 +49,11 @@ export function startBattle(
   const healthMax = Number.isFinite(cfg?.healthMax) ? (cfg?.healthMax as number) : Number.MAX_SAFE_INTEGER;
   const armorMax = Number.isFinite(cfg?.armorMax) ? (cfg?.armorMax as number) : Number.MAX_SAFE_INTEGER;
   const powerMax = Number.isFinite(cfg?.powerMax) ? (cfg?.powerMax as number) : Number.MAX_SAFE_INTEGER;
-  // Average of per-player BASE health (before passive bonus), capped at
-  // healthMax. Computed from the original player attributes so the cap
-  // can't eat the bonus before averaging.
   const startHealth = Number.isFinite(cfg?.attributeStartHealth) ? (cfg?.attributeStartHealth as number) : 0;
   const baseAvg = party.length
     ? Math.max(1, Math.min(healthMax, Math.round(players.reduce((acc, p) => {
-        const h = p.attributes?.health;
+        const attrs = effectiveAttributes(p, settings);
+        const h = attrs.health;
         return acc + (typeof h === 'number' && Number.isFinite(h) ? Math.max(1, Math.min(healthMax, h)) : startHealth);
       }, 0) / players.length)))
     : 1;
