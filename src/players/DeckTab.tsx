@@ -45,16 +45,27 @@ function CardTile({ pc, def, cls, onUpgrade, onRemove }: {
   );
 }
 
-function AvailableCardTile({ def, cls, onAdd }: {
-  def: CardDef; cls: string | null; onAdd: () => void;
+function AvailableCardTile({ def, cls, onAdd, locked, requiredLevel }: {
+  def: CardDef; cls: string | null; onAdd: () => void; locked?: boolean; requiredLevel?: number;
 }) {
   return (
-    <div className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))` }}>
-      <span style={{ fontSize: 22 }}>{def.icon}</span>
+    <div className="card-mini-tile" style={{
+      borderColor: locked ? 'var(--border)' : cardRarityColor(def.rarity),
+      background: locked ? 'var(--bg-2)' : `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))`,
+      opacity: locked ? 0.55 : 1,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <span style={{ fontSize: 22 }}>{locked ? '🔒' : def.icon}</span>
+        {locked && requiredLevel != null && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--muted)' }}>Lv {requiredLevel}</span>}
+      </div>
       <div style={{ fontSize: 11, fontWeight: 800, marginTop: 2 }}>{def.name}</div>
       <div className="muted" style={{ fontSize: 9, lineHeight: 1.2 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</div>
       <ClassBadge def={def} cls={cls} />
-      <button className="btn sm primary" style={{ fontSize: 11, padding: '4px 8px', marginTop: 4 }} onClick={onAdd}>Add</button>
+      {locked ? (
+        <button className="btn sm" style={{ fontSize: 11, padding: '4px 8px', marginTop: 4, cursor: 'not-allowed', opacity: 0.6 }} disabled title={`Reach level ${requiredLevel} to unlock this card`}>Locked</button>
+      ) : (
+        <button className="btn sm primary" style={{ fontSize: 11, padding: '4px 8px', marginTop: 4 }} onClick={onAdd}>Add</button>
+      )}
     </div>
   );
 }
@@ -124,7 +135,7 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
           <h3 style={{ margin: 0 }}>Your Deck</h3>
           <span className="muted small">{cards.length} cards · Class: {cls || 'None'} · Level {playerLevel}</span>
         </div>
-        <div className="muted small" style={{ marginBottom:8 }}>Cards are saved per class. XP is tracked per class — switching classes keeps each deck and level separate.</div>
+        <div className="muted small" style={{ marginBottom: 8 }}>Cards are saved per class. XP is tracked per class — switching classes keeps each deck and level separate.</div>
 
         {/* Starter cards */}
         <div style={{ marginTop: 8 }}>
@@ -190,7 +201,7 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
                 </div>
                 <div style={gridStyle}>
                   {availLeveled.get(lvl)!.map(def => (
-                    <AvailableCardTile key={def.id} def={def} cls={cls} onAdd={() => addCardToPlayer(def.id)} />
+                    <AvailableCardTile key={def.id} def={def} cls={cls} locked={lvl > playerLevel} requiredLevel={lvl} onAdd={() => addCardToPlayer(def.id)} />
                   ))}
                 </div>
               </div>
