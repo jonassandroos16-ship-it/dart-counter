@@ -219,9 +219,9 @@ function pickN<T>(arr: T[], n: number, rng: () => number = Math.random): T[] {
 // scale linearly so a normal party can reach at least round 11 (the second boss
 // at round 10 must be beatable with accumulated trinkets/stats).
 export function enemyHpScale(round: number): number {
-  // +8% HP per round past round 1. Capped at +200% so late rounds don't become
-  // unkillable.
-  return Math.min(3.0, 1 + Math.max(0, round - 1) * 0.08);
+  // +10% HP per round past round 1. Capped at +400% so late rounds stay
+  // challenging but beatable with accumulated trinkets/stats.
+  return Math.min(5.0, 1 + Math.max(0, round - 1) * 0.10);
 }
 export function enemyAccScale(round: number): number {
   // +1.5% accuracy per round past round 1, capped at +40%.
@@ -253,35 +253,16 @@ export function scaledEnemyDb(round: number): typeof ENEMY_DATABASE {
 // Build a CampaignLevel-shaped object for a given round number.
 export function levelForRound(round: number): CampaignLevel {
   if (isBossRound(round)) {
-    // Bosses: pick from harder bosses as rounds progress.
     const bossPool = round <= 10 ? ['warlord_malakar'] : round <= 20 ? ['ice_queen', 'warlord_malakar'] : BOSS_IDS;
-    return {
-      level_id: round,
-      name: `Boss — Round ${round}`,
-      is_boss: true,
-      enemies: [pick(bossPool)],
-    };
+    return { level_id: round, name: `Boss — Round ${round}`, is_boss: true, enemies: [pick(bossPool)] };
   }
   if (isMiniBossRound(round)) {
-    // Mini-bosses: use harder mini-bosses as rounds progress.
     const miniPool = round <= 5 ? ['warlord_malakar'] : round <= 15 ? MINIBOSS_IDS : ['frost_knight', 'bloom_warden'];
-    return {
-      level_id: round,
-      name: `Mini-Boss — Round ${round}`,
-      is_boss: false,
-      enemies: [pick(miniPool)],
-    };
+    return { level_id: round, name: `Mini-Boss — Round ${round}`, is_boss: false, enemies: [pick(miniPool)] };
   }
-  // Normal rounds: 1-3 enemies scaling with round depth. Use harder enemies
-  // as rounds progress so early rounds are easy and later rounds are tough.
   const count = Math.min(3, 1 + Math.floor(round / 3));
   const pool = round <= 4 ? EASY_IDS : round <= 9 ? [...EASY_IDS, ...HARD_IDS] : HARD_IDS;
-  return {
-    level_id: round,
-    name: `Round ${round}`,
-    is_boss: false,
-    enemies: pickN(pool, count),
-  };
+  return { level_id: round, name: `Round ${round}`, is_boss: false, enemies: pickN(pool, count) };
 }
 
 // ── Start a battle for the current round ───────────────────────────────
@@ -289,8 +270,6 @@ export function levelForRound(round: number): CampaignLevel {
 export function beginRound(run: DartliteRun, players: Player[], settings: Settings): DartliteRun {
   const round = run.round + 1;
   const level = levelForRound(round);
-  // Build pseudo-Player objects from run state so startBattle reads the
-  // run-modified attributes (not the saved ones).
   const pseudoPlayers: Player[] = run.runPlayers.map(rp => {
     const orig = players.find(p => p.id === rp.id) || ({} as Player);
     return {
@@ -298,16 +277,10 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
       id: rp.id,
       name: rp.name,
       color: rp.color,
-      attributes: {
-        health: rp.hp,
-        armor: rp.armor,
-        power: rp.power,
-        pointsAvailable: 0,
-      },
+      attributes: { health: rp.hp, armor: rp.armor, power: rp.power, pointsAvailable: 0 },
     } as Player;
   });
   const battle = startBattle(level, pseudoPlayers, settings, scaledEnemyDb(round), 'dartlite');
-  // Apply overcharge trinket: start with bonus charge.
   for (const rp of run.runPlayers) {
     if (rp.trinkets.includes('trk_overcharge')) {
       const idx = battle.players.findIndex(p => p.id === rp.id);
@@ -338,14 +311,11 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
       unlocked = newlyUnlockedTrinket(miniBosses, bosses);
     }
     const newPool = availablePool(miniBosses, bosses);
-    // Carry HP forward from the battle (party shares one HP pool).
     const partyHpAfter = Math.max(0, battle.partyHp);
     let runPlayers = run.runPlayers.map(rp => ({
       ...rp,
       hp: partyHpAfter > 0 ? Math.max(1, Math.round(partyHpAfter)) : rp.hp,
     }));
-    // After a boss victory: heal party to 100% and enter boss_victory phase
-    // so the UI can show the boss victory screen with trinket choices.
     if (isBossRound(run.round)) {
       runPlayers = runPlayers.map(rp => ({ ...rp, hp: rp.maxHp }));
       const bossName = battle.enemies.length > 0 ? battle.enemies[0].name : `Boss`;
@@ -363,27 +333,9 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
       const playerStats = run.playerStats.map(ps => {
         const bp = battle.players.find(p => p.id === ps.playerId);
         if (!bp) return ps;
-        return {
-          ...ps,
-          kills: ps.kills + (bp.kills ?? 0),
-          damageDealt: ps.damageDealt + (bp.damageDealt ?? 0),
-        };
+        return { ...ps, kills: ps.kills + (bp.kills ?? 0), damageDealt: ps.damageDealt + (bp.damageDealt ?? 0) };
       });
-      return {
-        ...run,
-        runPlayers,
-        pool: newPool,
-        stats,
-        playerStats,
-        phase: 'boss_victory',
-        battle: null,
-        pendingChoice: null,
-        choicePlayerIdx: 0,
-        playerChoices: run.playerIds.map(() => null),
-        lastUnlockedTrinket: unlocked,
-        bossVictory: { bossName, trinketOptions, chosenTrinket: null, claimedTrinket: null },
-        log,
-      };
+      return { ...run, runPlayers, pool: newPool, stats, playerStats, phase: 'boss_victory', battle: null, pendingChoice: null, choicePlayerIdx: 0, playerChoices: run.playerIds.map(() => null), lastUnlockedTrinket: unlocked, bossVictory: { bossName, trinketOptions, chosenTrinket: null, claimedTrinket: null }, log };
     }
     const stats: DartliteRunStats = {
       ...run.stats,
@@ -395,81 +347,34 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
       xpGained: run.stats.xpGained + xp,
     };
     const log = [...run.log, `Round ${run.round} cleared — +${xp} XP`];
-    // Accumulate per-player kills/damage from this battle into run stats.
     const playerStats = run.playerStats.map(ps => {
       const bp = battle.players.find(p => p.id === ps.playerId);
       if (!bp) return ps;
-      return {
-        ...ps,
-        kills: ps.kills + (bp.kills ?? 0),
-        damageDealt: ps.damageDealt + (bp.damageDealt ?? 0),
-      };
+      return { ...ps, kills: ps.kills + (bp.kills ?? 0), damageDealt: ps.damageDealt + (bp.damageDealt ?? 0) };
     });
-    return {
-      ...run,
-      runPlayers,
-      pool: newPool,
-      stats,
-      playerStats,
-      phase: 'choice',
-      battle: null,
-      pendingChoice: generateChoices(run),
-      choicePlayerIdx: 0,
-      playerChoices: run.playerIds.map(() => null),
-      lastUnlockedTrinket: unlocked,
-      bossVictory: null,
-      log,
-    };
+    return { ...run, runPlayers, pool: newPool, stats, playerStats, phase: 'choice', battle: null, pendingChoice: generateChoices(run), choicePlayerIdx: 0, playerChoices: run.playerIds.map(() => null), lastUnlockedTrinket: unlocked, bossVictory: null, log };
   }
-  // Lost — run over.
-  return {
-    ...run,
-    phase: 'gameover',
-    battle: null,
-    pendingChoice: null,
-    bossVictory: null,
-  };
+  return { ...run, phase: 'gameover', battle: null, pendingChoice: null, bossVictory: null };
 }
 
 // ── Boon choices ──────────────────────────────────────────────────────
 
 export function generateChoices(run: DartliteRun): ChoiceOption[] {
-  // Card mode: offer card-based rewards (new cards + upgrades) instead of
-  // the standard heal/stat/trinket boons.
   if (run.cardMode) {
     return generateCardChoices(run);
   }
   const pool = run.pool.length ? run.pool : STARTER_POOL;
   const options: ChoiceOption[] = [
-    {
-      kind: 'heal',
-      label: 'Heal 20%',
-      desc: 'Restore 20% of the party\'s max HP.',
-      icon: '❤️‍🩹',
-    },
-    {
-      kind: 'stat',
-      label: 'Gain a Stat',
-      desc: '+20 HP, +3% armor, or +4 power (random).',
-      icon: '📊',
-    },
-    {
-      kind: 'trinket',
-      label: 'Random Trinket',
-      desc: 'Draw a random trinket from the available pool.',
-      icon: '🔮',
-    },
+    { kind: 'heal', label: 'Heal 20%', desc: 'Restore 20% of the party\'s max HP.', icon: '❤️‍🩹' },
+    { kind: 'stat', label: 'Gain a Stat', desc: '+20 HP, +3% armor, or +4 power (random).', icon: '📊' },
+    { kind: 'trinket', label: 'Random Trinket', desc: 'Draw a random trinket from the available pool.', icon: '🔮' },
   ];
-  // If the trinket pool is empty, replace it with an extra heal.
   if (!pool.length) {
     options[2] = { kind: 'heal', label: 'Heal 20%', desc: 'Restore 20% of max HP.', icon: '❤️‍🩹' };
   }
   return options;
 }
 
-// Generate card-based reward options for card mode. Offers a 'deck upgrade'
-// option (which opens a sub-popup with upgrade/remove/add) plus a trinket
-// boon and a heal.
 function generateCardChoices(run: DartliteRun): ChoiceOption[] {
   const idx = run.choicePlayerIdx;
   const rp = run.runPlayers[idx];
@@ -483,19 +388,9 @@ function generateCardChoices(run: DartliteRun): ChoiceOption[] {
   }));
   const pool = run.pool.length ? run.pool : STARTER_POOL;
   if (pool.length) {
-    options.push({
-      kind: 'trinket',
-      label: 'Random Trinket',
-      desc: 'Draw a random trinket from the available pool.',
-      icon: '🔮',
-    });
+    options.push({ kind: 'trinket', label: 'Random Trinket', desc: 'Draw a random trinket from the available pool.', icon: '🔮' });
   } else {
-    options.push({
-      kind: 'heal',
-      label: 'Heal 20%',
-      desc: 'Restore 20% of max HP.',
-      icon: '❤️‍🩹',
-    });
+    options.push({ kind: 'heal', label: 'Heal 20%', desc: 'Restore 20% of max HP.', icon: '❤️‍🩹' });
   }
   return options;
 }
@@ -509,8 +404,6 @@ export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): Dartl
   let runPlayers = run.runPlayers;
   let trinkets = run.trinkets;
   let stats = run.stats;
-  // Resolved copy of the option with the specific reward details filled in so
-  // the reveal popup can show exactly what this player received.
   let resolved: ChoiceOption = option;
 
   if (option.kind === 'heal') {
@@ -519,9 +412,6 @@ export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): Dartl
     runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, hp: Math.min(p.maxHp, p.hp + healAmt) } : p);
     resolved = { ...option, amount: healAmt, label: `Heal ${healAmt} HP`, desc: `Restored ${healAmt} HP (${rp.name}).` };
   } else if (option.kind === 'deck_upgrade') {
-    // Deck upgrade is handled by the UI flow which calls applyDeckUpgrade
-    // directly. Here we just pass through — the resolved option is set by
-    // the UI after the player completes the sub-action.
     resolved = { ...option };
   } else if (option.kind === 'stat') {
     const statRoll = Math.random();
@@ -559,9 +449,6 @@ export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): Dartl
   const nextIdx = idx + 1;
   const allChosen = nextIdx >= run.playerIds.length;
 
-  // While players still need to pick, stay in 'choice' and offer fresh
-  // options to the next player. Only after the last player picks do we move
-  // to 'reward' so the UI can show the reveal + progress popup.
   if (!allChosen) {
     return {
       ...run,
@@ -627,15 +514,7 @@ export function applyChoice(run: DartliteRun, option: ChoiceOption): DartliteRun
     stats = { ...stats, trinketsCollected: [...stats.trinketsCollected, id] };
   }
 
-  return {
-    ...run,
-    runPlayers,
-    trinkets,
-    stats,
-    pendingChoice: null,
-    lastUnlockedTrinket: lastUnlocked,
-    phase: 'setup',
-  };
+  return { ...run, runPlayers, trinkets, stats, pendingChoice: null, lastUnlockedTrinket: lastUnlocked, phase: 'setup' };
 }
 
 // ── Trinket effect helpers (used by the battle view) ───────────────────
@@ -710,18 +589,12 @@ export function applyPhoenixRevive(run: DartliteRun): DartliteRun {
 }
 
 // ── Boss trinket selection ────────────────────────────────────────────
-//
-// After a boss victory, the UI shows a boss victory screen with 3-4 boss
-// trinket options. The player picks one; it is applied to the party and the
-// run proceeds to the next round.
 
 export function applyBossTrinketChoice(run: DartliteRun, trinketId: TrinketId): DartliteRun {
   if (!run.bossVictory) return run;
   const def = getTrinketDef(trinketId);
   if (!def) return run;
-  // Apply the boss trinket to the whole party.
   let runPlayers = run.runPlayers.map(rp => ({ ...rp, trinkets: [...rp.trinkets, trinketId] }));
-  // Apply stat bonuses from boss trinkets.
   if (trinketId === 'trk_boss_warlords_crown') {
     runPlayers = runPlayers.map(rp => ({ ...rp, power: rp.power + 25, bonusPower: rp.bonusPower + 25 }));
   } else if (trinketId === 'trk_boss_ice_crystal') {
