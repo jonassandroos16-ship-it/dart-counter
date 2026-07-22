@@ -137,7 +137,8 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     <div className="view-noscroll coop-battle" style={{ position: 'relative', background: 'radial-gradient(ellipse at top, color-mix(in srgb,#7c3aed 15%,var(--bg)) 0%, var(--bg) 70%)', borderRadius: 14, overflow: 'hidden' }}>
       <button className="btn danger sm quit-float" onClick={() => { if (confirm('Quit this run? Progress will be saved.')) onQuit(); }}>Quit</button>
 
-      {run.phase === 'boss_victory' && run.bossVictory ? (
+      {!(showRewardReveal || showProgress) && (
+        run.phase === 'boss_victory' && run.bossVictory ? (
         <BossVictoryScreen
           run={run}
           players={players}
@@ -351,6 +352,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             />
           )}
         </>
+      )
       )}
 
       {showProgress && chosenRun && (
