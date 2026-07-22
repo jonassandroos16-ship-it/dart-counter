@@ -16,7 +16,7 @@ import {
 } from '../campaign/engine';
 import { getChapter, isChapterComplete } from '../campaign/campaignLevels';
 import { levelFromXP } from '../logic';
-import { cardsForLevelUp, addCard, defaultPlayerCards } from '../cards/deck';
+import { cardsForLevelUp, addCard, getPlayerCards, setPlayerCards } from '../cards/deck';
 import { PostGameOverlay, type PostGameInfo, type LevelUpInfo } from './PostGameOverlay';
 
 export type CoopStage = 'none' | 'setup' | 'chapters' | 'map' | 'battle' | 'postgame';
@@ -74,14 +74,14 @@ export function CoopFlow({ players, settings, music, setPlayers, toast, onExitTo
           const nextCampaign = recordLevelClearForPlayer(p, chapterId, clearedIdx, levelId, unlockedPowerUpId);
           let next: Player = { ...p, xp: newXp, level: li.level, coopProgress: nextProg, campaignProgress: nextCampaign };
           if (li.level > oldLevel && settings.gameMode === 'cards') {
-            const curCards = next.cards && next.cards.length > 0 ? next.cards : defaultPlayerCards(next.coopProgress?.classId);
+            const curCards = getPlayerCards(next);
             const newCardDefs = cardsForLevelUp(next.coopProgress?.classId || null, li.level, 'coop', curCards);
             if (newCardDefs.length > 0) {
               let updatedCards = curCards;
               for (const def of newCardDefs) {
                 updatedCards = addCard(updatedCards, def.id);
               }
-              next = { ...next, cards: updatedCards };
+              next = setPlayerCards(next, updatedCards);
             }
             levelUps.push({ playerId: p.id, oldLevel, newLevel: li.level, newCards: newCardDefs.map(d => ({ id: d.id, name: d.name, icon: d.icon })), newPassives: newlyUnlocked });
           } else if (li.level > oldLevel) {
@@ -106,14 +106,14 @@ export function CoopFlow({ players, settings, music, setPlayers, toast, onExitTo
           const { progress: nextProg } = reconcileCoopPassivesForPlayer(cur, li.level);
           let next: Player = { ...p, xp: newXp, level: li.level, coopProgress: nextProg };
           if (li.level > oldLevel && settings.gameMode === 'cards') {
-            const curCards = next.cards && next.cards.length > 0 ? next.cards : defaultPlayerCards(next.coopProgress?.classId);
+            const curCards = getPlayerCards(next);
             const newCardDefs = cardsForLevelUp(next.coopProgress?.classId || null, li.level, 'coop', curCards);
             if (newCardDefs.length > 0) {
               let updatedCards = curCards;
               for (const def of newCardDefs) {
                 updatedCards = addCard(updatedCards, def.id);
               }
-              next = { ...next, cards: updatedCards };
+              next = setPlayerCards(next, updatedCards);
             }
           }
           return next;
