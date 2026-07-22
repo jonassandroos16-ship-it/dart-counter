@@ -1,6 +1,7 @@
 import type { CardDef, PlayerCard, CardPlayState } from './types';
 import { CARD_DEFS, cardsForClass, getCard, upgradedCardDef } from './definitions';
 import type { CoopClassId } from '../campaign/types';
+import type { Player } from '../types';
 
 // ── Deck management ────────────────────────────────────────────────────
 //
@@ -52,8 +53,35 @@ export function defaultPlayerCards(classId?: string | null): PlayerCard[] {
   ];
 }
 
-export function cardFromDef(def: CardDef): PlayerCard {
-  return { cardId: def.id, upgraded: false };
+// ── Per-class deck storage ────────────────────────────────────────────
+//
+// Player.cards is a Record<string, PlayerCard[]> keyed by class id so each
+// class maintains its own separate deck. These helpers handle the lookup,
+// fallback to defaults, backward-compat for the old flat-array format, and
+// writing updated decks back.
+
+export function classKey(classId?: string | null): string {
+  return classId || 'any';
+}
+
+export function getPlayerCards(player: Player): PlayerCard[] {
+  const cards = player.cards;
+  if (!cards) return defaultPlayerCards(player.coopProgress?.classId);
+  // Backward compat: old format was a flat PlayerCard[] array
+  if (Array.isArray(cards)) return cards as unknown as PlayerCard[];
+  const key = classKey(player.coopProgress?.classId);
+  const deck = cards[key];
+  if (deck && deck.length > 0) return deck;
+  return defaultPlayerCards(player.coopProgress?.classId);
+}
+
+export function setPlayerCards(player: Player, updatedCards: PlayerCard[]): Player {
+  const key = classKey(player.coopProgress?.classId);
+  const existing = player.cards;
+  // Migrate old flat-array format to per-class record
+  const base: Record<string, PlayerCard[]> =
+    existing && !Array.isArray(existing) ? { ...existing } : {};
+  return { ...player, cards: { ...base, [key]: updatedCards } };
 }
 
 export function playerCardIds(cards: PlayerCard[]): string[] {
@@ -77,164 +105,70 @@ export function upgradeCard(cards: PlayerCard[], cardId: string): PlayerCard[] {
   return cards.map(c => c.cardId === cardId ? { ...c, upgraded: true } : c);
 }
 
-export function canUpgradeCard(cards: PlayerCard[], cardId: string): boolean {
-  const pc = cards.find(c => c.cardId === cardId);
-  return !!pc && !pc.upgraded;
+// ── Card play state ────────────────────────────────────────────────────
+
+export const MAX_PLAYS_PER_TURN = 3;
+const HAND_SIZE = 4;
+
+export function initCardPlayState(deck: PlayerCard[]): CardPlayState {
+  const shuffled = [...deck].sort(() => Math.random() - 0.5);
+  return {
+    deck: shuffled.slice(HAND_SIZE),
+    hand: shuffled.slice(0, HAND_SIZE),
+    used: [],
+    graveyard: [],
+  };
 }
 
-export function resolveCardDef(pc: PlayerCard): CardDef | undefined {
+export function startTurn(state: CardPlayState): CardPlayState {
+  let deck = [...state.deck];
+  let graveyard = [...state.graveyard];
+  if (deck.length === 0 && graveyard.length > 0) {
+    deck = [...graveyard].sort(() => Math.random() - 0.5);
+    graveyard = [];
+  }
+  const drawCount = Math.min(HAND_SIZE - state.hand.length, deck.length);
+  const newHand = [...state.hand, ...deck.slice(0, drawCount)];
+  const newDeck = deck.slice(drawCount);
+  return { ...state, hand: newHand, deck: newDeck, graveyard };
+}
+
+export function playCardFromHand(state: CardPlayState, handIdx: number): CardPlayState | null {
+  if (handIdx < 0 || handIdx >= state.hand.length) return null;
+  const [played] = state.hand.splice(handIdx, 1);
+  return {
+    ...state,
+    hand: [...state.hand],
+    used: [...state.used, played],
+    graveyard: [...state.graveyard, played],
+  };
+}
+
+export function endTurn(state: CardPlayState): CardPlayState {
+  return { ...state, used: [] };
+}
+
+export function resolveCardDef(pc: PlayerCard): CardDef | null {
   const def = getCard(pc.cardId);
-  if (!def) return undefined;
+  if (!def) return null;
   return pc.upgraded ? upgradedCardDef(def) : def;
 }
 
-// ── Level-up card rewards ──────────────────────────────────────────────
-//
-// When a player levels up in card mode, they gain cards based on their class.
-// The available card pool depends on class and level.
+// ── Level-up card rewards ─────────────────────────────────────────────
 
-export function cardsForLevelUp(
-  cls: CoopClassId | null | undefined,
-  level: number,
-  mode: 'competitive' | 'coop',
-  ownedCards: PlayerCard[],
-): CardDef[] {
-  const classId = cls || 'any';
-  const pool = cardsForClass(classId as 'warrior' | 'priest' | 'rogue' | 'any', mode);
-  return pool.filter(c => (c.levelRequired ?? 1) <= level && !hasCard(ownedCards, c.id));
-}
-
-export function cardsForLevelUpCoop(
-  cls: CoopClassId | null | undefined,
-  level: number,
-  ownedCards: PlayerCard[],
-): CardDef[] {
-  return cardsForLevelUp(cls, level, 'coop', ownedCards);
-}
-
-export function cardsForLevelUpCompetitive(
-  cls: CoopClassId | null | undefined,
-  level: number,
-  ownedCards: PlayerCard[],
-): CardDef[] {
-  return cardsForLevelUp(cls, level, 'competitive', ownedCards);
-}
-
-// ── Dartlite card rewards ──────────────────────────────────────────────
-//
-// In dartlite mode, after winning a round, the player can choose 1 of 3
-// randomly available cards. Cards can also be upgraded as a separate reward.
-
-export function randomCardReward(
-  ownedCards: PlayerCard[],
-  mode: 'competitive' | 'coop',
-  count: number = 3,
-): CardDef[] {
-  const pool = CARD_DEFS.filter(c => c.mode === mode && !hasCard(ownedCards, c.id));
-  if (pool.length === 0) return [];
-  const shuffled = [...pool].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, Math.min(count, pool.length));
-}
-
-export function randomCardUpgradeReward(
-  ownedCards: PlayerCard[],
-  count: number = 3,
-): { cardId: string; name: string; icon: string }[] {
-  const upgradeable = ownedCards.filter(c => !c.upgraded);
-  if (upgradeable.length === 0) return [];
-  const shuffled = [...upgradeable].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, Math.min(count, upgradeable.length)).map(c => {
-    const def = getCard(c.cardId);
-    return { cardId: c.cardId, name: def?.name ?? c.cardId, icon: def?.icon ?? '🃏' };
-  });
-}
-
-// ── Deck validation ────────────────────────────────────────────────────
-
-export function deckSize(cards: PlayerCard[]): number {
-  return cards.length;
-}
-
-export function isDeckValid(cards: PlayerCard[]): boolean {
-  return cards.length >= 4;
-}
-
-// ── Deck-builder logic ──────────────────────────────────────────────────
-//
-// Standard deck-builder flow: a player's collection forms the draw deck.
-// Each turn 5 cards are drawn into a hand. Played cards go to a "used" pile
-// and cannot be replayed that turn. At end of turn the used pile moves to
-// the graveyard. When the deck can't satisfy a draw, the graveyard is
-// shuffled into the deck to form a new one.
-
-export const HAND_SIZE = 5;
-export const MAX_PLAYS_PER_TURN = 3;
-
-export function initCardPlayState(collection: PlayerCard[]): CardPlayState {
-  const deck = shuffle([...collection]);
-  return { deck, hand: [], used: [], graveyard: [] };
-}
-
-export function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
+export function cardsForLevelUp(classId: string | null, level: number, mode: 'competitive' | 'coop', currentCards: PlayerCard[]): CardDef[] {
+  const rewards: CardDef[] = [];
+  const pool = cardsForClass(classId);
+  const owned = new Set(currentCards.map(c => c.cardId));
+  for (const def of pool) {
+    if (rewards.length >= 1) break;
+    if (!owned.has(def.id)) {
+      rewards.push(def);
+    }
   }
-  return a;
+  return rewards;
 }
 
-// Refill the deck from the graveyard if needed so at least `need` cards are
-// available. Returns the updated deck and graveyard.
-function ensureDeck(deck: PlayerCard[], graveyard: PlayerCard[], need: number): { deck: PlayerCard[]; graveyard: PlayerCard[] } {
-  if (deck.length >= need || graveyard.length === 0) return { deck, graveyard };
-  const recycled = shuffle(graveyard);
-  return { deck: [...deck, ...recycled], graveyard: [] };
-}
-
-// Draw up to `count` cards from the deck into the hand, reshuffling the
-// graveyard into the deck if it runs out.
-export function drawCards(state: CardPlayState, count: number = HAND_SIZE): CardPlayState {
-  let { deck, graveyard } = ensureDeck(state.deck, state.graveyard, count);
-  const draw = Math.min(count, deck.length);
-  const drawn = deck.slice(0, draw);
-  deck = deck.slice(draw);
-  return {
-    deck,
-    hand: [...state.hand, ...drawn],
-    used: state.used,
-    graveyard,
-  };
-}
-
-// Start a new turn: clear the hand (any unplayed cards return to the
-// graveyard), then draw a fresh hand of HAND_SIZE.
-export function startTurn(state: CardPlayState): CardPlayState {
-  const graveyard = [...state.graveyard, ...state.hand, ...state.used];
-  const cleared: CardPlayState = { deck: state.deck, hand: [], used: [], graveyard };
-  return drawCards(cleared, HAND_SIZE);
-}
-
-// Play a card from the hand by index: it moves to the used pile.
-export function playCardFromHand(state: CardPlayState, handIdx: number): CardPlayState | null {
-  const card = state.hand[handIdx];
-  if (!card) return null;
-  return {
-    deck: state.deck,
-    hand: state.hand.filter((_, i) => i !== handIdx),
-    used: [...state.used, card],
-    graveyard: state.graveyard,
-  };
-}
-
-// End the turn: move both the used pile and any remaining hand cards into
-// the graveyard. The next time this player's turn starts, startTurn() will
-// draw a fresh hand from the deck (reshuffling the graveyard if needed).
-export function endTurn(state: CardPlayState): CardPlayState {
-  return {
-    deck: state.deck,
-    hand: [],
-    used: [],
-    graveyard: [...state.graveyard, ...state.used, ...state.hand],
-  };
+export function cardsForLevelUpCompetitive(classId: string | null, level: number, currentCards: PlayerCard[]): CardDef[] {
+  return cardsForLevelUp(classId, level, 'competitive', currentCards);
 }

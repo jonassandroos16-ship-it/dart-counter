@@ -1,117 +1,64 @@
-import type { CustomTitle, GameRecord, Player, Settings } from '../types';
-import type { PlayerCard } from '../cards/types';
-import { uid } from './format';
+import type { Player, PlayerCard } from '../types';
 
-function mergeCards(a: PlayerCard[] | undefined, b: PlayerCard[] | undefined): PlayerCard[] | undefined {
-  if (!a && !b) return undefined;
-  const map = new Map<string, PlayerCard>();
-  for (const c of [...(a || []), ...(b || [])]) {
-    const existing = map.get(c.cardId);
+function mergeCards(a: PlayerCard[] | Record<string, PlayerCard[]> | undefined, b: PlayerCard[] | Record<string, PlayerCard[]> | undefined): Record<string, PlayerCard[]> | undefined {
+  // Normalize old flat-array format to per-class record under 'any'
+  const normalize = (v: typeof a): Record<string, PlayerCard[]> | undefined => {
+    if (!v) return undefined;
+    if (Array.isArray(v)) return { any: v };
+    return v;
+  };
+  const ra = normalize(a);
+  const rb = normalize(b);
+  if (!ra && !rb) return undefined;
+  const keys = new Set([...Object.keys(ra || {}), ...Object.keys(rb || {})]);
+  const out: Record<string, PlayerCard[]> = {};
+  for (const k of keys) {
+    const av = ra?.[k] || [];
+    const bv = rb?.[k] || [];
+    if (av.length === 0 && bv.length === 0) continue;
+    const map = new Map<string, PlayerCard>();
+    for (const c of [...av, ...bv]) {
+      const existing = map.get(c.cardId);
+      if (!existing) {
+        map.set(c.cardId, { ...c });
+      } else {
+        map.set(c.cardId, { cardId: c.cardId, upgraded: existing.upgraded || c.upgraded });
+      }
+    }
+    out[k] = Array.from(map.values());
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+export function mergePlayers(a: Player[], b: Player[]): Player[] {
+  const map = new Map<string, Player>();
+  for (const p of a) map.set(p.id, p);
+  for (const p of b) {
+    const existing = map.get(p.id);
     if (!existing) {
-      map.set(c.cardId, { ...c });
+      map.set(p.id, p);
     } else {
-      map.set(c.cardId, { cardId: c.cardId, upgraded: existing.upgraded || c.upgraded });
+      const merged: Player = { ...existing, ...p };
+      // Merge cards per class
+      const mergedCards = mergeCards(existing.cards, p.cards);
+      if (mergedCards) merged.cards = mergedCards;
+      // Merge unlocked titles
+      const titles = new Set([...(existing.unlockedTitles || []), ...(p.unlockedTitles || [])]);
+      merged.unlockedTitles = Array.from(titles);
+      // Merge unlocked badges
+      const badges = new Set([...(existing.unlockedBadges || []), ...(p.unlockedBadges || [])]);
+      merged.unlockedBadges = Array.from(badges);
+      // Merge badge counts (take max)
+      const badgeCounts: Record<string, number> = { ...(existing.badgeCounts || {}) };
+      for (const [k, v] of Object.entries(p.badgeCounts || {})) {
+        badgeCounts[k] = Math.max(badgeCounts[k] || 0, v);
+      }
+      merged.badgeCounts = badgeCounts;
+      // Merge XP (take max)
+      merged.xp = Math.max(existing.xp || 0, p.xp || 0);
+      merged.level = Math.max(existing.level || 1, p.level || 1);
+      map.set(p.id, merged);
     }
   }
   return Array.from(map.values());
-}
-
-export interface BackupShape {
-  players?: Player[];
-  games?: GameRecord[];
-  settings?: Settings;
-  exportedAt?: string;
-}
-
-function matchPlayerKey(p: Player): string {
-  return `${(p.name || '').trim().toLowerCase()}|${(p.color || '').toLowerCase()}`;
-}
-
-function mergeBadgeCounts(a: Record<string, number> | undefined, b: Record<string, number> | undefined): Record<string, number> {
-  const out: Record<string, number> = { ...(a || {}) };
-  for (const [k, v] of Object.entries(b || {})) {
-    out[k] = Math.max(out[k] || 0, v);
-  }
-  return out;
-}
-
-function mergePlayers(existing: Player[], incoming: Player[]): Player[] {
-  const byId = new Map<string, Player>();
-  const byKey = new Map<string, Player>();
-  for (const p of existing) {
-    byId.set(p.id, p);
-    byKey.set(matchPlayerKey(p), p);
-  }
-  for (const p of incoming) {
-    const idMatch = byId.get(p.id);
-    if (idMatch) {
-      byId.set(idMatch.id, {
-        ...idMatch,
-        ...p,
-        xp: Math.max(idMatch.xp || 0, p.xp || 0) || idMatch.xp || p.xp || 0,
-        level: Math.max(idMatch.level || 0, p.level || 0) || idMatch.level || p.level || 0,
-        unlockedTitles: Array.from(new Set([...(idMatch.unlockedTitles || []), ...(p.unlockedTitles || [])])),
-        unlockedBadges: Array.from(new Set([...(idMatch.unlockedBadges || []), ...(p.unlockedBadges || [])])),
-        badgeCounts: mergeBadgeCounts(idMatch.badgeCounts, p.badgeCounts),
-        cards: mergeCards(idMatch.cards, p.cards),
-      });
-      byKey.set(matchPlayerKey(p), byId.get(p.id)!);
-      continue;
-    }
-    const keyMatch = byKey.get(matchPlayerKey(p));
-    if (keyMatch) {
-      byId.set(keyMatch.id, {
-        ...keyMatch,
-        ...p,
-        id: keyMatch.id,
-        xp: Math.max(keyMatch.xp || 0, p.xp || 0) || keyMatch.xp || p.xp || 0,
-        level: Math.max(keyMatch.level || 0, p.level || 0) || keyMatch.level || p.level || 0,
-        unlockedTitles: Array.from(new Set([...(keyMatch.unlockedTitles || []), ...(p.unlockedTitles || [])])),
-        unlockedBadges: Array.from(new Set([...(keyMatch.unlockedBadges || []), ...(p.unlockedBadges || [])])),
-        badgeCounts: mergeBadgeCounts(keyMatch.badgeCounts, p.badgeCounts),
-        cards: mergeCards(keyMatch.cards, p.cards),
-      });
-      continue;
-    }
-    let id = p.id;
-    while (byId.has(id)) id = id + '_' + uid();
-    const placed = { ...p, id };
-    byId.set(id, placed);
-    byKey.set(matchPlayerKey(placed), placed);
-  }
-  return Array.from(byId.values());
-}
-
-function mergeGames(existing: GameRecord[], incoming: GameRecord[]): GameRecord[] {
-  const byId = new Map<string, GameRecord>(existing.map(g => [g.id, g]));
-  for (const g of incoming) {
-    if (!byId.has(g.id)) byId.set(g.id, g);
-  }
-  return Array.from(byId.values());
-}
-
-function mergeSettings(existing: Settings, incoming?: Settings): Settings {
-  if (!incoming) return existing;
-  const customTitles = (() => {
-    const byId = new Map<string, CustomTitle>();
-    for (const t of [...existing.customTitles, ...(incoming.customTitles || [])]) byId.set(t.id, t);
-    return Array.from(byId.values());
-  })();
-  return {
-    ...existing,
-    ...incoming,
-    customTitles,
-    powerUpScaling: { ...existing.powerUpScaling, ...(incoming.powerUpScaling || {}) },
-  };
-}
-
-export function mergeBackup(
-  existing: { players: Player[]; games: GameRecord[]; settings: Settings },
-  backup: BackupShape,
-): { players: Player[]; games: GameRecord[]; settings: Settings } {
-  return {
-    players: mergePlayers(existing.players, backup.players || []),
-    games: mergeGames(existing.games, backup.games || []),
-    settings: mergeSettings(existing.settings, backup.settings),
-  };
 }

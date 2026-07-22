@@ -44,8 +44,23 @@ export interface Player {
   // Per-player Dartlite (rogue-lite) stats. Persist across runs; trinkets
   // and run-time attributes do NOT carry over.
   dartliteStats?: PlayerDartliteStats;
-  // Per-player card collection for card-based mode.
-  cards?: PlayerCard[];
+  // Per-player card collection for card-based mode, keyed by class id.
+  cards?: Record<string, PlayerCard[]>;
+}
+
+export interface Visit {
+  darts: Dart[];
+  scored: number;
+  remaining: number;
+  leg: number;
+  bust?: boolean;
+  atc?: boolean;
+  practice?: boolean;
+  date: string;
+  checkout?: number;
+  mode?: string;
+  hits?: number;
+  frozen?: boolean;
 }
 
 export interface Dart {
@@ -54,24 +69,7 @@ export interface Dart {
   base: number;
   mult: number;
   isDouble: boolean;
-  isOuter?: boolean;
-}
-
-export interface Visit {
-  darts: Dart[];
-  scored: number;
-  remaining?: number;
-  leg?: number;
-  bust?: boolean;
-  checkout?: number;
-  atc?: boolean;
-  hits?: number;
-  endIdx?: number;
-  date: string;
-  mode?: string;
-  gameId?: string;
-  gameDate?: string;
-  practice?: boolean;
+  isOuter: boolean;
 }
 
 export interface GamePlayer {
@@ -79,165 +77,93 @@ export interface GamePlayer {
   name: string;
   color: string;
   score: number;
-  legsWon: number;
   visits: Visit[];
-  idx: number;
+  legsWon: number;
   dartsThrown: number;
-  done: boolean;
-  lives?: number;
-  eliminated?: boolean;
+  team?: number;
+  // Battle mode
+  hp?: number;
+  maxHp?: number;
+  armorPct?: number;
+  powerPct?: number;
+  damageDealt?: number;
+  damageTaken?: number;
+  attacks?: { target: string; damage: number; visit: number; date: string }[];
+  defeated?: boolean;
+  // Killer mode
   killerNumber?: number;
   killerHits?: number;
+  lives?: number;
+  eliminated?: boolean;
   kills?: string[];
-  team?: number; // 0-indexed team id when team mode is active
-  // Power-up state during a match (only present when game.powerUpsEnabled).
-  powerUpCharge?: number;   // 0..100 — fills from doubles/triples/bullseyes
-  powerUpUsed?: boolean;    // legacy: true once the equipped power up has been used this match (kept for migration)
-  powerUpUses?: number;     // number of times the equipped power up has been activated this match
-  powerUpId?: string | null; // snapshot of the equipped power up at game start
-  // Battle mode state (only present when game.mode === 'battle').
-  hp?: number;              // current health points (decreases when attacked)
-  maxHp?: number;           // snapshot of max HP at game start
-  armorPct?: number;        // snapshot of armor (percentage reduction per dart, 0..armorMax) at game start
-  powerPct?: number;        // snapshot of power (flat bonus per dart) at game start
-  defeated?: boolean;       // true when HP hits 0
-  attacks?: { target: string; damage: number; visit: number; date: string }[];
-  damageDealt?: number;     // total damage dealt this match
-  damageTaken?: number;     // total damage taken this match
 }
 
 export interface Game {
-  id: string;
   mode: string;
-  date: string;
-  doubleOut: boolean;
-  practice: boolean;
-  atc: boolean;
-  legsBestOf: number;
   players: GamePlayer[];
   turn: number;
   leg: number;
-  finished: boolean;
-  winner: string | null;
-  tiedPlayers?: string[] | null;
-  tied?: boolean;
+  legsBestOf: number;
+  roundStartTurn: number;
   checkedOutThisRound: string[];
   thrownThisRound: string[];
-  roundStartTurn: number;
+  doubleOut: boolean;
+  practice: boolean;
+  teamMode: boolean;
+  teamCount?: number;
+  teamTurn?: number;
+  teamPlayerCursor?: number[];
+  teamLegsWon?: number[];
+  winningTeam?: number;
   darts: Dart[];
   mult: number;
-  atcDarts?: { hit: boolean; target: string }[];
-  teamMode?: boolean;            // true when playing team vs team
-  teamCount?: number;           // number of teams
-  teamLegsWon?: number[];       // legs won per team (parallel to team index)
-  teamTurn?: number;            // current team whose turn it is (0-indexed)
-  teamPlayerCursor?: number[];  // per-team index into its player rotation order
-  winningTeam?: number | null;  // team that won (for team mode)
-  powerUpsEnabled?: boolean;    // true when power ups are active for this match
-  cardState?: Record<string, CardPlayState>; // per-player deck-builder state (card mode)
+  date: string;
+  finished: boolean;
+  winner: string | null;
+  tied: boolean;
+  tiedPlayers: string[] | null;
+  powerUpsEnabled: boolean;
+  cardState?: Record<string, CardPlayState>;
 }
 
 export interface GameRecord {
   id: string;
-  date: string;
   mode: string;
-  practice: boolean;
-  atc: boolean;
-  doubleOut: boolean;
-  legsBestOf: number;
+  players: GamePlayer[];
   winner: string | null;
   tied: boolean;
   tiedPlayers: string[] | null;
-  teamMode?: boolean;
+  winningTeam?: number;
+  date: string;
+  legsBestOf: number;
+  doubleOut: boolean;
+  practice: boolean;
+  teamMode: boolean;
   teamCount?: number;
-  winningTeam?: number | null;
-  powerUpsEnabled?: boolean;
-  players: {
-    id: string;
-    name: string;
-    color: string;
-    legsWon: number;
-    dartsThrown: number;
-    visits: Visit[];
-    team?: number;
-    kills?: string[];
-    defeated?: boolean;
-    // Power-up activation flags — present only when game.powerUpsEnabled.
-    // Used by post-game badges that reward the winner for using a power-up.
-    usedPowerUp?: string | null;
-  }[];
+  powerUpsEnabled: boolean;
 }
-
-export interface CustomTitle {
-  id: string;
-  name: string;
-  desc?: string;
-  icon?: string;
-  custom?: boolean;
-  condition?: { type: 'sum'; value: number } | { type: 'combo'; base: number; mult: number; count: number } | { type: 'sequence'; darts: { base: number; mult: number }[] };
-  base?: number;
-  mult?: number;
-  count?: number;
-}
-
-export interface XPConfig {
-  win: number; visit60: number; visit80: number; visit100: number;
-  visit120: number; visit140: number; visit180: number;
-  checkout: number; perDart: number; levelMult: number; baseLevelXp: number;
-}
-
-export interface PowerUpScalingConfig {
-  chargePerDouble: number;   // charge % granted per double hit
-  chargePerTriple: number;   // charge % granted per triple hit
-  chargePerBull: number;     // charge % granted per bull (25/50)
-  chargePerScorePoint: number; // additional charge per scored point (scales with score)
-  chargeMax: number;         // cap for charge
-  pointsPerLevel: number;    // power-up unlock points granted per level gained
-  startingPoints: number;    // points a brand-new player starts with
-  attributePointsPerLevel: number; // attribute points per level
-  attributeStartHealth: number;
-  attributeStartArmor: number;
-  attributeStartPower: number;
-  healthPerPoint: number;   // HP gained per point spent on health
-  armorPerPoint: number;     // armor % gained per point spent on armor (percentage reduction per dart)
-  powerPerPoint: number;     // power gained per point spent on power (flat, per dart)
-  armorMax: number;          // hard cap for armor (percentage reduction per dart)
-  powerMax: number;          // hard cap for power (flat bonus per dart)
-  healthMax: number;          // hard cap for HP at max level progression
-  battleMinDamage: number;    // minimum damage on a successful hit (default 1)
-  // Starting charge (0..chargeMax) for specific power-ups at the start of a
-  // match. Lets early-game power-ups like Surge begin partially charged.
-  startingCharge: Record<string, number>;
-  // Per-power-up activation threshold (0..chargeMax). When a power-up's
-  // charge reaches this value it becomes ready to activate. Defaults to
-  // `chargeMax` for any id not listed. Lets each power-up be balanced
-  // independently — e.g. Surge could need 80 while Blocker needs 120.
-  chargesNeeded: Record<string, number>;
-}
-
-export type HitSoundPackId = 'thud' | 'board' | 'punch' | 'arcade';
-export type ClickSoundId = 'none' | 'tick' | 'pop' | 'tap';
-
-export type GameMode = 'dartboard' | 'cards';
 
 export interface Settings {
-  theme: 'dark' | 'light';
-  accent: string;
-  gameMode: GameMode;
-  confirmReset: boolean;
-  sound: boolean;
-  music: boolean;
-  musicStartTrack: string;
-  musicSetupTrack: string;
-  musicMatchTrack: string;
-  musicCoopTrack: string;
-  sfxVolume: number;
-  musicVolume: number;
-  hitSoundPack: HitSoundPackId;
-  clickSound: ClickSoundId;
-  clickVolume: number;
-  xpConfig: XPConfig;
-  customTitles: CustomTitle[];
-  popups: { scores: boolean; milestones: boolean; xp: boolean; titles: boolean };
-  powerUpScaling: PowerUpScalingConfig;
+  startingScore: number;
+  doubleOut: boolean;
+  legsBestOf: number;
+  xpConfig: {
+    perDart: number;
+    visit60: number;
+    visit80: number;
+    visit100: number;
+    visit120: number;
+    visit140: number;
+    visit180: number;
+    win: number;
+  };
+  popups: {
+    scores: boolean;
+    milestones: boolean;
+    titles: boolean;
+    xp: boolean;
+  };
+  customTitles: any[];
+  powerUpScaling: any;
+  gameMode: 'standard' | 'cards';
 }
