@@ -25,7 +25,7 @@ import type { EnemyDef } from '../campaign/types';
 import type { PlayerCard } from '../cards/types';
 import { getPlayerCards } from '../cards/deck';
 import {
-  generateCardRewardOptions, applyCardReward, type CardRewardChoice,
+  generateCardRewardOptions, type CardRewardChoice,
 } from './cardRewards';
 
 // ── Round & boss schedule ──────────────────────────────────────────────
@@ -105,7 +105,7 @@ export interface DartliteRunPlayer {
 
 // ── Choices ───────────────────────────────────────────────────────────
 
-export type ChoiceKind = 'heal' | 'stat' | 'trinket' | 'card_new' | 'card_upgrade';
+export type ChoiceKind = 'heal' | 'stat' | 'trinket' | 'card_new' | 'card_upgrade' | 'deck_upgrade';
 
 export interface ChoiceOption {
   kind: ChoiceKind;
@@ -469,23 +469,19 @@ export function generateChoices(run: DartliteRun): ChoiceOption[] {
   return options;
 }
 
-// Generate card-based reward options for card mode. Offers up to 2 new card
-// rewards and 1 card upgrade, falling back to heal if the pool/upgradeable
-// cards are exhausted.
+// Generate card-based reward options for card mode. Offers a 'deck upgrade'
+// option (which opens a sub-popup with upgrade/remove/add) plus a trinket
+// boon and a heal.
 function generateCardChoices(run: DartliteRun): ChoiceOption[] {
   const idx = run.choicePlayerIdx;
   const rp = run.runPlayers[idx];
   const ownedCards = rp?.cards ?? [];
-  // Card mode offers both card rewards and a trinket boon so players can
-  // still collect trinkets alongside their card builds.
-  const cardOpts = generateCardRewardOptions(ownedCards, 'coop').slice(0, 2);
+  const cardOpts = generateCardRewardOptions(ownedCards, 'coop');
   const options: ChoiceOption[] = cardOpts.map(o => ({
-    kind: o.kind,
+    kind: o.kind === 'deck_upgrade' ? 'deck_upgrade' : o.kind === 'heal' ? 'heal' : 'card_new',
     label: o.label,
     desc: o.desc,
     icon: o.icon,
-    cardId: o.cardId,
-    cardName: o.cardName,
   }));
   const pool = run.pool.length ? run.pool : STARTER_POOL;
   if (pool.length) {
@@ -524,21 +520,11 @@ export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): Dartl
     const healAmt = Math.round(rp.maxHp * 0.2);
     runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, hp: Math.min(p.maxHp, p.hp + healAmt) } : p);
     resolved = { ...option, amount: healAmt, label: `Heal ${healAmt} HP`, desc: `Restored ${healAmt} HP (${rp.name}).` };
-  } else if (option.kind === 'card_new' || option.kind === 'card_upgrade') {
-    const rp = runPlayers[idx];
-    const ownedCards = rp.cards;
-    const cardChoice: CardRewardChoice = {
-      kind: option.kind,
-      label: option.label,
-      desc: option.desc,
-      icon: option.icon,
-      cardId: option.cardId,
-      cardName: option.cardName,
-    };
-    const updatedCards = applyCardReward(ownedCards, cardChoice);
-    runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, cards: updatedCards } : p);
-    const cardLabel = option.kind === 'card_new' ? `New Card: ${option.cardName ?? '??'}` : `Upgraded: ${option.cardName ?? '??'}`;
-    resolved = { ...option, label: cardLabel, desc: option.desc };
+  } else if (option.kind === 'deck_upgrade') {
+    // Deck upgrade is handled by the UI flow which calls applyDeckUpgrade
+    // directly. Here we just pass through — the resolved option is set by
+    // the UI after the player completes the sub-action.
+    resolved = { ...option };
   } else if (option.kind === 'stat') {
     const statRoll = Math.random();
     let statName: 'health' | 'armor' | 'power';
