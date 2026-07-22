@@ -4,11 +4,12 @@ import type { PlayerCard, CardDef } from '../cards/types';
 import { cardDamage, cardRarityColor, cardTypeColor } from '../cards/definitions';
 import { resolveCardDef, getPlayerCards } from '../cards/deck';
 
-export function CoopCardHand({ thrower, players, state, onPlayCard }: {
+export function CoopCardHand({ thrower, players, state, onPlayCard, onPlayUtility }: {
   thrower: Player | undefined;
   players: Player[];
   state: CampaignBattleState;
   onPlayCard: (base: number, mult: number, label: string, isBull: boolean) => void;
+  onPlayUtility: (card: CardDef) => void;
 }) {
   const playerData = players.find(p => p.id === thrower?.id);
   const playerCards: PlayerCard[] = playerData ? getPlayerCards(playerData) : [];
@@ -50,13 +51,15 @@ export function CoopCardHand({ thrower, players, state, onPlayCard }: {
           <div className="muted small" style={{ marginBottom: 4, fontWeight: 600 }}>Spells</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {spellCards.map((card, idx) => (
-              <button key={idx} disabled
+              <button key={idx} onClick={() => onPlayUtility(card)}
+                disabled={state.darts.length > 0}
                 style={{
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
                   padding: '8px 10px', borderRadius: 8, minWidth: 64,
                   background: `color-mix(in srgb, ${cardTypeColor(card.type)} 14%, var(--bg-3))`,
                   border: `1px solid ${cardRarityColor(card.rarity)}`,
-                  cursor: 'not-allowed', color: 'inherit', textAlign: 'center', opacity: 0.6,
+                  cursor: state.darts.length > 0 ? 'not-allowed' : 'pointer', color: 'inherit', textAlign: 'center',
+                  opacity: state.darts.length > 0 ? 0.6 : 1,
                 }}>
                 <span style={{ fontSize: 22 }}>{card.icon}</span>
                 <span style={{ fontSize: 11, fontWeight: 800 }}>{card.name}</span>
@@ -71,13 +74,15 @@ export function CoopCardHand({ thrower, players, state, onPlayCard }: {
           <div className="muted small" style={{ marginBottom: 4, fontWeight: 600 }}>Utility</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {utilityCards.map((card, idx) => (
-              <button key={idx} disabled
+              <button key={idx} onClick={() => onPlayUtility(card)}
+                disabled={state.darts.length > 0}
                 style={{
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
                   padding: '8px 10px', borderRadius: 8, minWidth: 64,
                   background: `color-mix(in srgb, ${cardTypeColor(card.type)} 14%, var(--bg-3))`,
                   border: `1px solid ${cardRarityColor(card.rarity)}`,
-                  cursor: 'not-allowed', color: 'inherit', textAlign: 'center', opacity: 0.6,
+                  cursor: state.darts.length > 0 ? 'not-allowed' : 'pointer', color: 'inherit', textAlign: 'center',
+                  opacity: state.darts.length > 0 ? 0.6 : 1,
                 }}>
                 <span style={{ fontSize: 22 }}>{card.icon}</span>
                 <span style={{ fontSize: 11, fontWeight: 800 }}>{card.name}</span>

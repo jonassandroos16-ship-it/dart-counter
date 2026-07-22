@@ -8,6 +8,121 @@ import {
 } from './engine';
 import { getChapter } from './campaignLevels';
 import type { Player, Settings } from '../types';
+import type { CardDef } from '../cards/types';
+
+function applyUtilityCard(state: CampaignBattleState, card: CardDef, _settings: Settings): CampaignBattleState {
+  if (state.phase !== 'player') return state;
+  if (state.darts.length > 0) return state;
+  const thrower = state.players[state.playerTurnIdx];
+  if (!thrower) return state;
+  const mag = card.magnitude ?? 0;
+  const effect = card.effect ?? '';
+
+  // Healing effects
+  if (effect === 'heal' || effect === 'blessing') {
+    const heal = effect === 'blessing' ? Math.min(mag, 40) : mag;
+    const partyHp = Math.min(state.partyMaxHp, state.partyHp + heal);
+    return { ...state, partyHp };
+  }
+
+  // Heal-over-time: add a regen buff to all players
+  if (effect === 'heal_over_time') {
+    const buffId = `regen_${Date.now()}`;
+    const players = state.players.map(p => ({
+      ...p,
+      buffs: [...p.buffs, { id: buffId, kind: 'regen' as const, amount: mag, turnsLeft: 3, source: thrower.id }],
+    }));
+    return { ...state, players };
+  }
+
+  // Party shields
+  if (effect === 'party_shield_flat' || effect === 'party_shield') {
+    const heal = effect === 'party_shield_flat' ? Math.min(mag, state.partyMaxHp - state.partyHp) : 0;
+    const buffId = `shield_${Date.now()}`;
+    const players = state.players.map(p => ({
+      ...p,
+      buffs: [...p.buffs, { id: buffId, kind: 'shield' as const, amount: mag, turnsLeft: 2, source: thrower.id }],
+    }));
+    return { ...state, players, partyHp: Math.min(state.partyMaxHp, state.partyHp + heal) };
+  }
+
+  // Enemy debuffs: curse, weaken, miss, bleed, freeze
+  if (effect === 'enemy_curse' || effect === 'enemy_debuff') {
+    const enemies = state.enemies.map(e => e.defeated ? e : {
+      ...e,
+      distractedTurns: Math.max(e.distractedTurns, 3),
+      distractAmount: Math.max(e.distractAmount, mag / 100),
+    });
+    return { ...state, enemies };
+  }
+  if (effect === 'enemy_miss') {
+    const enemies = state.enemies.map(e => e.defeated ? e : {
+      ...e,
+      distractedTurns: Math.max(e.distractedTurns, 2),
+      distractAmount: Math.max(e.distractAmount, mag / 100),
+    });
+    return { ...state, enemies };
+  }
+  if (effect === 'bleed') {
+    const buffId = `bleed_${Date.now()}`;
+    const enemies = state.enemies.map(e => e.defeated ? e : {
+      ...e,
+      buffs: [...(e as any).buffs, { id: buffId, kind: 'bleed', amount: mag, turnsLeft: 3 }],
+    });
+    return { ...state, enemies };
+  }
+  if (effect === 'freeze') {
+    const enemies = state.enemies.map(e => e.defeated ? e : { ...e, frozenTurns: Math.max(e.frozenTurns, 1) });
+    return { ...state, enemies };
+  }
+
+  // Power/accuracy/armor buffs
+  if (effect === 'power_buff') {
+    const buffId = `power_${Date.now()}`;
+    const players = state.players.map(p => ({
+      ...p,
+      buffs: [...p.buffs, { id: buffId, kind: 'power' as const, amount: mag, turnsLeft: 3, source: thrower.id }],
+    }));
+    return { ...state, players };
+  }
+  if (effect === 'accuracy_buff') {
+    const enemies = state.enemies.map(e => e.defeated ? e : {
+      ...e,
+      distractedTurns: Math.max(e.distractedTurns, 3),
+      distractAmount: Math.max(e.distractAmount, mag / 100),
+    });
+    return { ...state, enemies };
+  }
+  if (effect === 'armor_buff') {
+    const buffId = `armor_${Date.now()}`;
+    const players = state.players.map(p => ({
+      ...p,
+      buffs: [...p.buffs, { id: buffId, kind: 'armor' as const, amount: mag, turnsLeft: 3, source: thrower.id }],
+    }));
+    return { ...state, players };
+  }
+
+  // Surge / hot streak / reflect / bust protect / double_up / extra_dart / revive
+  if (effect === 'surge' || effect === 'hot_streak' || effect === 'bust_protect' || effect === 'double_up' || effect === 'extra_dart' || effect === 'reflect') {
+    const buffId = `${effect}_${Date.now()}`;
+    const players = state.players.map(p => ({
+      ...p,
+      buffs: [...p.buffs, { id: buffId, kind: effect as any, amount: mag, turnsLeft: 2, source: thrower.id }],
+    }));
+    return { ...state, players };
+  }
+  if (effect === 'revive') {
+    return { ...state, partyHp: Math.max(state.partyHp, Math.round(state.partyMaxHp * 0.25)) };
+  }
+
+  // Draw / shadowstep / redraw / recycle — no-op in coop (no deck system)
+  // These effects are handled by the deck system in CardBoard/Dartlite modes.
+  if (effect === 'draw' || effect === 'shadowstep' || effect === 'redraw' || effect === 'recycle') {
+    return state;
+  }
+
+  return state;
+}
 import { Sound } from '../sound';
 import type { MusicEngine } from '../music';
 import { initials } from '../store';
@@ -381,6 +496,10 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
                 state={state}
                 onPlayCard={(base, mult, label) => {
                   onAdd(base, mult, label, base === 50);
+                }}
+                onPlayUtility={(card) => {
+                  setState(applyUtilityCard(state, card, settings));
+                  Sound.play('powerup', {}, settings);
                 }}
               />
             ) : (
