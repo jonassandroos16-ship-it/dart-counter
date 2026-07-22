@@ -13,8 +13,9 @@ import { GameOver } from '../GameOver';
 import type { PlayerCard, CardDef, CardPlayState } from '../../cards/types';
 import { cardDamage, cardRarityColor, cardTypeColor } from '../../cards/definitions';
 import {
-  defaultPlayerCards, initCardPlayState, startTurn,
+  initCardPlayState, startTurn,
   playCardFromHand, endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
+  getPlayerCards,
 } from '../../cards/deck';
 
 const HIGH_SCORE_VISITS = 7;
@@ -37,7 +38,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     const cardState: Record<string, CardPlayState> = {};
     for (const gp of game.players) {
       const playerData = players.find(pl => pl.id === gp.id);
-      const collection: PlayerCard[] = (playerData?.cards && playerData.cards.length > 0 ? playerData.cards : defaultPlayerCards(playerData?.coopProgress?.classId));
+      const collection: PlayerCard[] = getPlayerCards(playerData);
       cardState[gp.id] = initCardPlayState(collection);
     }
     setGame({ ...game, cardState });
@@ -59,7 +60,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
 
   const p = game.players[game.turn];
   const playerData = players.find(pl => pl.id === p.id);
-  const collection: PlayerCard[] = (playerData?.cards && playerData.cards.length > 0 ? playerData.cards : defaultPlayerCards(playerData?.coopProgress?.classId));
+  const collection: PlayerCard[] = getPlayerCards(playerData);
   const state: CardPlayState = game.cardState?.[p.id] ?? initCardPlayState(collection);
   const handDefs = state.hand.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
   const usedDefs = state.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
