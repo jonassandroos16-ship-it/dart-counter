@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import type { Game, GameRecord, Player, Settings, Dart } from '../../types';
 import { TEAM_COLORS, getTitleInfo, MODES, SCORE_POPUPS } from '../../constants';
 import { recordFromGame, checkoutHint, leadTrailBadge, visitAvg, levelFromXP, getPlayerXPById, computeBattleDartDamage } from '../../logic';
@@ -11,9 +11,9 @@ import { runMilestones, awardXP, checkTitleUnlocks, awardBadges } from '../rewar
 import { finishSimpleGame } from '../finish';
 import { GameOver } from '../GameOver';
 import type { PlayerCard, CardDef, CardPlayState } from '../../cards/types';
-import { cardDamage, cardRarityColor, cardTypeColor } from '../../cards/definitions';
+import { cardDamage, cardRarityColor, cardTypeColor, resolveCardDef } from '../../cards/definitions';
 import {
-  defaultPlayerCards, resolveCardDef, initCardPlayState, startTurn,
+  defaultPlayerCards, initCardPlayState, startTurn,
   playCardFromHand, endTurn, MAX_PLAYS_PER_TURN,
 } from '../../cards/deck';
 
@@ -26,15 +26,18 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
 }) {
   const [, force] = useState(0);
   const [targetId, setTargetId] = useState<string | null>(null);
+  const [selectedCardIdx, setSelectedCardIdx] = useState<number | null>(null);
+  const [showDeck, setShowDeck] = useState(false);
+  const [showGraveyard, setShowGraveyard] = useState(false);
+  const [animatingOut, setAnimatingOut] = useState<number | null>(null);
+  const prevHandLen = useRef<number>(0);
 
-  // Initialize per-player deck-builder state the first time CardBoard mounts.
-  // Each player's collection becomes their draw deck, shuffled.
   useEffect(() => {
     if (game.cardState && Object.keys(game.cardState).length === game.players.length) return;
     const cardState: Record<string, CardPlayState> = {};
     for (const gp of game.players) {
       const playerData = players.find(pl => pl.id === gp.id);
-      const collection: PlayerCard[] = (playerData?.cards && playerData.cards.length > 0 ? playerData.cards : defaultPlayerCards());
+      const collection: PlayerCard[] = (playerData?.cards && playerData.cards.length > 0 ? playerData.cards : defaultPlayerCards(playerData?.coopProgress?.classId));
       cardState[gp.id] = initCardPlayState(collection);
     }
     setGame({ ...game, cardState });
@@ -56,7 +59,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
 
   const p = game.players[game.turn];
   const playerData = players.find(pl => pl.id === p.id);
-  const collection: PlayerCard[] = (playerData?.cards && playerData.cards.length > 0 ? playerData.cards : defaultPlayerCards());
+  const collection: PlayerCard[] = (playerData?.cards && playerData.cards.length > 0 ? playerData.cards : defaultPlayerCards(playerData?.coopProgress?.classId));
   const state: CardPlayState = game.cardState?.[p.id] ?? initCardPlayState(collection);
   const handDefs = state.hand.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
   const usedDefs = state.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
@@ -71,7 +74,6 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
   const curTeam = game.teamMode ? (p.team ?? 0) : -1;
   const curTeamColor = game.teamMode ? TEAM_COLORS[curTeam % TEAM_COLORS.length] : p.color;
 
-  // Battle mode: auto-select target when only one alive opponent.
   const aliveOthers = isBattle ? others.filter(pl => !pl.defeated) : [];
   useEffect(() => {
     if (isBattle) {
@@ -79,6 +81,20 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       else setTargetId(null);
     }
   }, [game.turn, aliveOthers.length, isBattle]);
+
+  // Track hand length changes for enter/exit animations.
+  useEffect(() => {
+    const curLen = state.hand.length;
+    if (curLen < prevHandLen.current && prevHandRef.current !== null) {
+      setAnimatingOut(prevHandRef.current);
+      const t = setTimeout(() => setAnimatingOut(null), 300);
+      prevHandRef.current = null;
+      return () => clearTimeout(t);
+    }
+    prevHandLen.current = curLen;
+  }, [state.hand.length]);
+
+  const prevHandRef = useRef<number | null>(null);
 
   const playCard = (handIdx: number) => {
     const card = handDefs[handIdx];
@@ -97,6 +113,8 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     const label = card.name;
     const dart = { value, label, base, mult: isBull ? 2 : (base === 25 && value === 50 ? 2 : mult), isDouble: !!(isBull || (base === 25 && value === 50) || mult === 2), isOuter: false };
     Sound.play('dart', { score: value }, settings);
+    prevHandRef.current = handIdx;
+    setSelectedCardIdx(null);
     setGame({
       ...game,
       darts: [...game.darts, dart],
@@ -109,7 +127,6 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
   const undoCard = () => {
     if (!game.darts.length) return;
     const lastDart = game.darts[game.darts.length - 1];
-    // Find the matching used card (last played) and return it to the hand.
     const usedIdx = [...state.used].reverse().findIndex(pc => {
       const def = resolveCardDef(pc);
       return def?.name === lastDart.label;
@@ -135,8 +152,6 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     const scored = game.darts.reduce((a, d) => a + d.value, 0);
     const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
     const cur = newPlayers[game.turn] as any;
-
-    // Move the current player's used pile into the graveyard (end of turn).
     const endedState = endTurn(state);
 
     if (game.practice) {
@@ -372,7 +387,6 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         }
       }
     }
-    // Skip defeated (battle), eliminated (killer), or finished (highscore) players.
     if (isBattle) {
       while (g.players[turn].defeated) turn = (turn + 1) % g.players.length;
     } else if (isKiller) {
@@ -426,12 +440,11 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     setGame(finished);
   };
 
-  const damageCards = handDefs.filter(c => c.type === 'damage');
-  const spellCards = handDefs.filter(c => c.type === 'spell');
-  const utilityCards = handDefs.filter(c => c.type === 'utility');
-
   const hpPct = (pl: any) => Math.max(0, Math.min(100, ((pl.hp || 0) / (pl.maxHp || 1)) * 100));
   const aliveCount = isBattle ? game.players.filter(pl => !pl.defeated).length : isKiller ? game.players.filter(pl => !pl.eliminated).length : 0;
+
+  const selectedCard = selectedCardIdx !== null ? handDefs[selectedCardIdx] : null;
+  const canPlayMore = game.darts.length < MAX_PLAYS_PER_TURN;
 
   return (
     <div className="view-noscroll">
@@ -570,92 +583,150 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       )}
 
       <div className="play-input">
-        <div className="pad-card">
-          <div className="muted small" style={{ marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Your Hand — {p.name}</div>
-          <PileBar deckCount={state.deck.length} handCount={state.hand.length} usedCount={state.used.length} graveyardCount={state.graveyard.length} />
-          <CardSection title="Damage" cards={damageCards} onPlay={playCard} disabled={game.darts.length >= MAX_PLAYS_PER_TURN} typeColor="#ef4444" />
-          {spellCards.length > 0 && <CardSection title="Spells" cards={spellCards} onPlay={playCard} disabled={false} typeColor="#3b82f6" />}
-          {utilityCards.length > 0 && <CardSection title="Utility" cards={utilityCards} onPlay={playCard} disabled={false} typeColor="#3b82f6" />}
-          {usedDefs.length > 0 && (
-            <div style={{ marginTop: 8 }}>
-              <div className="muted small" style={{ marginBottom: 4, fontWeight: 600 }}>Used this turn (cannot replay)</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', opacity: 0.55 }}>
-                {usedDefs.map((card, idx) => (
-                  <div key={idx} style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-                    padding: '6px 8px', borderRadius: 8, minWidth: 52,
-                    background: 'var(--bg-3)', border: `1px solid ${cardRarityColor(card.rarity)}`,
-                  }}>
-                    <span style={{ fontSize: 18 }}>{card.icon}</span>
-                    <span style={{ fontSize: 10, fontWeight: 800 }}>{card.name}</span>
+        <div className="pad-card card-board-pad">
+          <div className="card-pile-row">
+            <button className="card-pile-btn" onClick={() => setShowDeck(true)} title="View deck">
+              <span className="card-pile-icon">{'\u{1F0A0}'}</span>
+              <span className="card-pile-label">Deck</span>
+              <span className="card-pile-count">{state.deck.length}</span>
+            </button>
+            <div className="card-hand-label">Your Hand — {p.name}</div>
+            <button className="card-pile-btn" onClick={() => setShowGraveyard(true)} title="View graveyard">
+              <span className="card-pile-icon">{'\u26B0\uFE0F'}</span>
+              <span className="card-pile-label">Graveyard</span>
+              <span className="card-pile-count">{state.graveyard.length}</span>
+            </button>
+          </div>
+
+          <div className="card-hand-fan">
+            {handDefs.length === 0 && (
+              <div className="muted small" style={{ padding: '20px 0', textAlign: 'center' }}>No cards in hand. End turn to draw new cards.</div>
+            )}
+            {handDefs.map((card, idx) => {
+              const tColor = cardTypeColor(card.type);
+              const rColor = cardRarityColor(card.rarity);
+              const isAnimatingOut = animatingOut === idx;
+              return (
+                <div
+                  key={`${idx}-${card.id}`}
+                  className={`card-tile ${isAnimatingOut ? 'card-anim-out' : 'card-anim-in'}`}
+                  style={{
+                    '--card-color': tColor,
+                    '--card-rarity': rColor,
+                    '--card-rot': `${(idx - (handDefs.length - 1) / 2) * 4}deg`,
+                    '--card-offset': `${Math.abs(idx - (handDefs.length - 1) / 2) * 6}px`,
+                  } as React.CSSProperties}
+                  onClick={() => setSelectedCardIdx(idx)}
+                >
+                  <div className="card-tile-inner">
+                    <div className="card-tile-top">
+                      <span className="card-tile-icon">{card.icon}</span>
+                    </div>
+                    <div className="card-tile-name">{card.name}</div>
+                    <div className="card-tile-type">{card.type === 'damage' ? `${cardDamage(card)} dmg` : card.type}</div>
                   </div>
-                ))}
-              </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {usedDefs.length > 0 && (
+            <div className="card-used-row">
+              <span className="muted small" style={{ fontWeight: 600 }}>Used:</span>
+              {usedDefs.map((card, idx) => (
+                <div key={idx} className="card-used-tile" style={{ borderColor: cardRarityColor(card.rarity) }}>
+                  <span style={{ fontSize: 16 }}>{card.icon}</span>
+                  <span style={{ fontSize: 10, fontWeight: 800 }}>{card.name}</span>
+                </div>
+              ))}
             </div>
           )}
+
           <div className="row" style={{ gap: 8, marginTop: 8 }}>
             <button className="btn block ghost" onClick={undoCard}>{'\u21B6'} Undo card</button>
             <button className="btn block primary" onClick={enterVisit}>{isBattle ? 'Attack!' : 'Enter visit'}</button>
           </div>
         </div>
       </div>
-    </div>
-  );
-}
 
-function PileBar({ deckCount, handCount, usedCount, graveyardCount }: { deckCount: number; handCount: number; usedCount: number; graveyardCount: number }) {
-  const piles: { label: string; value: number; icon: string }[] = [
-    { label: 'Deck', value: deckCount, icon: '\u{1F0A0}' },
-    { label: 'Hand', value: handCount, icon: '\u270B' },
-    { label: 'Used', value: usedCount, icon: '\u{1F5D1}\uFE0F' },
-    { label: 'Graveyard', value: graveyardCount, icon: '\u26B0\uFE0F' },
-  ];
-  return (
-    <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-      {piles.map(pl => (
-        <div key={pl.label} style={{
-          display: 'flex', alignItems: 'center', gap: 4,
-          padding: '4px 8px', borderRadius: 6,
-          background: 'var(--bg-3)', border: '1px solid var(--border)',
-          fontSize: 11,
-        }}>
-          <span>{pl.icon}</span>
-          <span className="muted">{pl.label}</span>
-          <b style={{ color: 'var(--text)' }}>{pl.value}</b>
+      {selectedCard && (
+        <div className="card-popup-overlay" onClick={() => setSelectedCardIdx(null)}>
+          <div className="card-popup" onClick={e => e.stopPropagation()} style={{ '--card-color': cardTypeColor(selectedCard.type), '--card-rarity': cardRarityColor(selectedCard.rarity) } as React.CSSProperties}>
+            <div className="card-popup-header">
+              <span className="card-popup-icon">{selectedCard.icon}</span>
+              <span className="card-popup-name">{selectedCard.name}</span>
+              <span className="card-popup-rarity" style={{ color: cardRarityColor(selectedCard.rarity) }}>{selectedCard.rarity}</span>
+            </div>
+            <div className="card-popup-body">
+              <div className="card-popup-type" style={{ color: cardTypeColor(selectedCard.type) }}>
+                {selectedCard.type === 'damage' ? `Damage — ${cardDamage(selectedCard)} points` : selectedCard.type === 'spell' ? 'Spell' : 'Utility'}
+              </div>
+              <div className="card-popup-desc">{selectedCard.desc}</div>
+              {selectedCard.class !== 'any' && <div className="card-popup-class">Class: {selectedCard.class}</div>}
+            </div>
+            <div className="card-popup-actions">
+              <button className="btn block ghost" onClick={() => setSelectedCardIdx(null)}>Cancel</button>
+              <button
+                className="btn block primary"
+                disabled={selectedCard.type === 'damage' && !canPlayMore}
+                onClick={() => playCard(selectedCardIdx!)}
+              >
+                {selectedCard.type === 'damage' ? 'Play' : 'Use'}
+              </button>
+            </div>
+          </div>
         </div>
-      ))}
-    </div>
-  );
-}
+      )}
 
-function CardSection({ title, cards, onPlay, disabled, typeColor }: {
-  title: string; cards: CardDef[]; onPlay: (idx: number) => void; disabled: boolean; typeColor: string;
-}) {
-  if (cards.length === 0) return null;
-  return (
-    <div style={{ marginBottom: 8 }}>
-      <div className="muted small" style={{ marginBottom: 4, fontWeight: 600 }}>{title}</div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {cards.map((card, idx) => (
-          <button key={idx} onClick={() => onPlay(idx)} disabled={disabled && card.type === 'damage'}
-            style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-              padding: '8px 10px', borderRadius: 8, minWidth: 64,
-              background: `color-mix(in srgb, ${typeColor} 14%, var(--bg-3))`,
-              border: `1px solid ${cardRarityColor(card.rarity)}`,
-              cursor: 'pointer', color: 'inherit', textAlign: 'center',
-              opacity: disabled && card.type === 'damage' ? 0.5 : 1,
-              transition: 'transform 0.1s ease, box-shadow 0.1s ease',
-            }}
-            onMouseEnter={e => { if (!(disabled && card.type === 'damage')) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 4px 12px ${cardTypeColor(card.type)}33`; } }}
-            onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
-          >
-            <span style={{ fontSize: 22 }}>{card.icon}</span>
-            <span style={{ fontSize: 11, fontWeight: 800 }}>{card.name}</span>
-            <span className="muted" style={{ fontSize: 9, lineHeight: 1.2 }}>{card.type === 'damage' ? `${cardDamage(card)} dmg` : card.desc.slice(0, 30)}</span>
-          </button>
-        ))}
-      </div>
+      {showDeck && (
+        <div className="card-popup-overlay" onClick={() => setShowDeck(false)}>
+          <div className="card-pile-popup" onClick={e => e.stopPropagation()}>
+            <div className="card-pile-popup-header">
+              <h3>{'\u{1F0A0}'} Deck ({state.deck.length})</h3>
+              <button className="btn sm ghost" onClick={() => setShowDeck(false)}>Close</button>
+            </div>
+            <div className="card-pile-popup-grid">
+              {state.deck.length === 0 && <div className="muted small" style={{ padding: 20 }}>Deck is empty. Graveyard will be shuffled in on next draw.</div>}
+              {state.deck.map((pc, idx) => {
+                const def = resolveCardDef(pc);
+                if (!def) return null;
+                return (
+                  <div key={idx} className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))` }}>
+                    <span style={{ fontSize: 20 }}>{def.icon}</span>
+                    <span style={{ fontSize: 10, fontWeight: 800 }}>{def.name}</span>
+                    <span className="muted" style={{ fontSize: 9 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showGraveyard && (
+        <div className="card-popup-overlay" onClick={() => setShowGraveyard(false)}>
+          <div className="card-pile-popup" onClick={e => e.stopPropagation()}>
+            <div className="card-pile-popup-header">
+              <h3>{'\u26B0\uFE0F'} Graveyard ({state.graveyard.length})</h3>
+              <button className="btn sm ghost" onClick={() => setShowGraveyard(false)}>Close</button>
+            </div>
+            <div className="card-pile-popup-grid">
+              {state.graveyard.length === 0 && <div className="muted small" style={{ padding: 20 }}>Graveyard is empty.</div>}
+              {state.graveyard.map((pc, idx) => {
+                const def = resolveCardDef(pc);
+                if (!def) return null;
+                return (
+                  <div key={idx} className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))` }}>
+                    <span style={{ fontSize: 20 }}>{def.icon}</span>
+                    <span style={{ fontSize: 10, fontWeight: 800 }}>{def.name}</span>
+                    <span className="muted" style={{ fontSize: 9 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
