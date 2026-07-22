@@ -4,7 +4,7 @@ import { allVisitsFor, levelFromXP } from '../logic';
 import { Sound } from '../sound';
 import type { PopupControls } from '../Popups';
 import { computeGameBadges } from '../badges';
-import { defaultPlayerCards, addCard, cardsForLevelUpCompetitive } from '../cards/deck';
+import { addCard, cardsForLevelUpCompetitive, getPlayerCards, setPlayerCards } from '../cards/deck';
 import { reconcileCoopPassivesForPlayer } from '../campaign/engine/classes';
 
 export function runMilestones(p: GamePlayer, remaining: number, visitScore: number, settings: Settings, popups: PopupControls, setPlayers: (updater: any) => void, game: Game, players: Player[], games: GameRecord[]) {
@@ -44,14 +44,14 @@ export function awardXP(playerId: string, amount: number, reason: string, settin
     let next: Player = { ...p, xp: newXp, level: li.level };
     if (li.level > oldLevel) {
       if (settings.gameMode === 'cards') {
-        const curCards = next.cards && next.cards.length > 0 ? next.cards : defaultPlayerCards(next.coopProgress?.classId);
+        const curCards = getPlayerCards(next);
         const newCards = cardsForLevelUpCompetitive(next.coopProgress?.classId || null, li.level, curCards);
         if (newCards.length > 0) {
           let updatedCards = curCards;
           for (const def of newCards) {
             updatedCards = addCard(updatedCards, def.id);
           }
-          next = { ...next, cards: updatedCards };
+          next = setPlayerCards(next, updatedCards);
         }
       }
       const coopProg = next.coopProgress;
