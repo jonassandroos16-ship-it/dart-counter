@@ -126,14 +126,15 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
   };
 
   const finishVisit = () => {
+    const pending = overlay?.pending;
     setOverlay(null);
-    const finishedState = overlay?.pending;
-    if (!finishedState) return;
+    if (!pending) return;
+    const finishedState = pending;
     const newPlayers = finishedState.players;
     const remainingAlive = newPlayers.filter((pl: any) => !pl.defeated);
     if (remainingAlive.length <= 1) {
       const winner = remainingAlive[0] || null;
-      setTimeout(() => finishSimpleGame(finishedState, winner, settings, setGame, setGames, setPlayers, popups, music, [], []), 200);
+      setTimeout(() => finishSimpleGame(finishedState, winner, settings, setGame, setGames, setPlayers, popups, music, players, games), 200);
       return;
     }
     Sound.play('enter', {}, settings);
@@ -201,7 +202,7 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
           </div>
         )}
         {game.powerUpsEnabled && (p as any)._hotStreak && (
-          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#f97316 18%,var(--bg-3))', border: '1px solid #f97316', color: '#fb923c' }}>
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#f97316 18%,var(--bg-3))', border: '1px solid #f97316', color: '#fb9234' }}>
             🔥 Hot Streak! Each dart this visit earns +5 bonus per dart before it.
           </div>
         )}

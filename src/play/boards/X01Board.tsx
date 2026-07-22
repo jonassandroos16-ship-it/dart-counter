@@ -103,12 +103,13 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
         const tc = game.teamCount || 2;
         const nextTeam = ((game.teamTurn || 0) + 1) % tc;
         const cursors = [...(game.teamPlayerCursor || Array(tc).fill(0))];
+        cursors[nextTeam] = 0;
         const ros: number[][] = Array.from({ length: tc }, () => []);
         newPlayers.forEach((pl, i) => { const t = pl.team ?? 0; if (t < tc) ros[t].push(i); });
         const nextTurn = ros[nextTeam][cursors[nextTeam] % ros[nextTeam].length];
         Sound.play('win', {}, settings);
         toast(`Team ${cur.team! + 1} wins leg ${game.leg}`);
-        setGame({ ...game, players: newPlayers, leg: nextLeg, turn: nextTurn, teamTurn: nextTeam, teamLegsWon: teamLegs, roundStartTurn: nextTurn, checkedOutThisRound: [], thrownThisRound: [], darts: [], mult: 1 });
+        setGame({ ...game, players: newPlayers, leg: nextLeg, turn: nextTurn, teamTurn: nextTeam, teamLegsWon: teamLegs, teamPlayerCursor: cursors, roundStartTurn: nextTurn, checkedOutThisRound: [], thrownThisRound: [], darts: [], mult: 1 });
         return;
       }
       const checkedOut = [...game.checkedOutThisRound, cur.id];
@@ -295,7 +296,7 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
           </div>
         )}
         {game.powerUpsEnabled && (p as any)._hotStreak && (
-          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#f97316 18%,var(--bg-3))', border: '1px solid #f97316', color: '#fb923c' }}>
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#f97316 18%,var(--bg-3))', border: '1px solid #f97316', color: '#fb9234' }}>
             🔥 Hot Streak! Each dart this visit earns +5 bonus per dart before it.
           </div>
         )}

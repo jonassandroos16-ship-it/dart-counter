@@ -24,9 +24,7 @@ import {
 import type { EnemyDef } from '../campaign/types';
 import type { PlayerCard } from '../cards/types';
 import { getPlayerCards } from '../cards/deck';
-import {
-  generateCardRewardOptions, type CardRewardChoice,
-} from './cardRewards';
+import { generateCardRewardOptions } from './cardRewards';
 
 // ── Round & boss schedule ──────────────────────────────────────────────
 
@@ -301,7 +299,7 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
       name: rp.name,
       color: rp.color,
       attributes: {
-        health: rp.maxHp,
+        health: rp.hp,
         armor: rp.armor,
         power: rp.power,
         pointsAvailable: 0,
