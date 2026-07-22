@@ -48,18 +48,18 @@ describe('Card Definitions', () => {
     expect(cardDamage(getCard('util_redraw')!)).toBe(0);
   });
 
-  it('upgradedCardDef increases damage by 50%', () => {
+  it('upgradedCardDef increases damage by 30%', () => {
     const base = getCard('dmg_t20')!;
     const upgraded = upgradedCardDef(base);
     expect(upgraded.upgraded).toBe(true);
     expect(upgraded.name).toBe('Triple 20+');
-    expect(cardDamage(upgraded)).toBe(90);
+    expect(cardDamage(upgraded)).toBe(78);
   });
 
-  it('upgradedCardDef increases magnitude by 50%', () => {
+  it('upgradedCardDef increases magnitude by 30%', () => {
     const base = getCard('spell_heal')!;
     const upgraded = upgradedCardDef(base);
-    expect(upgraded.magnitude).toBe(120);
+    expect(upgraded.magnitude).toBe(104);
   });
 
   it('cardsForMode filters by mode (both includes all)', () => {

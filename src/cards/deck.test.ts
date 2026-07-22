@@ -49,7 +49,6 @@ describe('Deck Management', () => {
 
   it('does not include an Outer Bull card by default for warrior', () => {
     const cards = defaultPlayerCards('warrior');
-    // Outer Bull IS one of the 3 shared attack cards now
     expect(hasCard(cards, 'dmg_outer_bull')).toBe(true);
   });
 
@@ -115,8 +114,8 @@ describe('Deck Management', () => {
     upgraded = upgradeCard(upgraded, 'dmg_t20');
     const def = resolveCardDef(upgraded.find(c => c.cardId === 'dmg_t20')!);
     expect(def?.upgraded).toBe(true);
-    // Double upgrade: 60 * 1.5 = 90, then 90 * 1.5 = 135
-    expect(cardDamage(def!)).toBe(135);
+    // Double upgrade: round(60*1.3)=78, round(78*1.3)=102
+    expect(cardDamage(def!)).toBe(102);
   });
 
   it('resolveCardDef returns base def when not upgraded', () => {
