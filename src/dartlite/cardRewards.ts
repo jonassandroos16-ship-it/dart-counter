@@ -1,9 +1,9 @@
 import type { PlayerCard } from '../cards/types';
-import type { CardDef } from '../cards/definitions';
+import type { CardDef } from '../cards/types';
 import { cardsForClass } from '../cards/definitions';
 import {
-  hasCard, addCard, upgradeCard, removeCard,
-  resolveCardDef, getCard, maxUpgradeLevelInDeck, addCardAtLevel,
+  hasCard, upgradeCard, removeCard,
+  resolveCardDef, maxUpgradeLevelInDeck, addCardAtLevel,
   MAX_UPGRADE_LEVEL,
 } from '../cards/deck';
 
@@ -61,9 +61,9 @@ export type DeckUpgradeAction = 'upgrade_card' | 'remove_card' | 'add_card';
 export function generateAddCardChoices(
   ownedCards: PlayerCard[],
   cls: string,
-  mode: 'competitive' | 'coop',
+  _mode: 'competitive' | 'coop',
 ): CardDef[] {
-  const pool = cardsForClass(cls as 'warrior' | 'priest' | 'rogue' | 'any', mode)
+  const pool = cardsForClass(cls as 'warrior' | 'priest' | 'rogue' | 'any', 'coop')
     .filter(c => !hasCard(ownedCards, c.id));
   if (pool.length === 0) return [];
   const shuffled = [...pool].sort(() => Math.random() - 0.5);
@@ -80,8 +80,8 @@ export function applyDeckUpgrade(
   ownedCards: PlayerCard[],
   action: DeckUpgradeAction,
   cardId?: string,
-  cls?: string,
-  mode?: 'competitive' | 'coop',
+  _cls?: string,
+  _mode?: 'competitive' | 'coop',
 ): PlayerCard[] {
   if (action === 'upgrade_card' && cardId) {
     return upgradeCard(ownedCards, cardId);

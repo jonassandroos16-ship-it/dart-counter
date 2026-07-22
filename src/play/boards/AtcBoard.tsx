@@ -1,13 +1,14 @@
 import type { Game, GameRecord, Player, Settings } from '../../types';
 import { ATC_TARGETS, atcLabel } from '../../constants';
-import { recordFromGame } from '../../logic';
 import { Sound } from '../../sound';
 import type { MusicEngine } from '../../music';
-import { awardBadges } from '../rewards';
 import { BadgeAvatar } from '../common';
+import { finishSimpleGame } from '../finish';
+import { GameOver } from '../GameOver';
+import type { PopupControls } from '../../Popups';
 
-export function AtcBoard({ game, setGame, settings, players, games, toast, music, onQuit, setGames, setPlayers }: {
-  game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[]; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void;
+export function AtcBoard({ game, setGame, settings, players, games, toast, music, onQuit, setGames, setPlayers, popups, onGameOver }: {
+  game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[]; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void;
 }) {
   const p = game.players[game.turn];
   const total = ATC_TARGETS.length;
@@ -42,16 +43,16 @@ export function AtcBoard({ game, setGame, settings, players, games, toast, music
     const newPlayers = g.players.map((pl, i) => i === g.turn ? { ...pl, dartsThrown: pl.dartsThrown + atcDarts.length, visits: [...pl.visits, { darts: atcDarts as any, atc: true, scored: 0, hits, endIdx: pl.idx, leg: 1, date: new Date().toISOString() }] } : pl);
     const newGame = { ...g, players: newPlayers, atcDarts: [] as any[] };
     if (newPlayers[g.turn].idx >= total) {
-      const finished = { ...newGame, finished: true, winner: newPlayers[g.turn].id };
-      Sound.play('win', {}, settings);
-      music.startContext('setup', settings);
-      setGames((prev: any[]) => [...prev, recordFromGame(finished)]);
-      awardBadges(finished, setPlayers);
-      setGame(finished);
+      const winner = newPlayers[g.turn];
+      finishSimpleGame(newGame, winner, settings, setGame, setGames, setPlayers, popups, music, players, games);
       return;
     }
     setGame({ ...newGame, turn: (newGame.turn + 1) % newGame.players.length });
   };
+
+  if (game.finished) {
+    return <GameOver game={game} onNewGame={onQuit} onViewStats={onGameOver} />;
+  }
 
   return (
     <div className="view-noscroll">

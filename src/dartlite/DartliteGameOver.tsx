@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { DartliteRun } from './engine';
 import { getTrinket } from './trinkets';
 import { recordDartliteRun } from './stats';
@@ -9,7 +10,9 @@ interface Props {
 }
 
 export function DartliteGameOver({ run, setPlayers, onContinue }: Props) {
-  recordDartliteRun(run, setPlayers as any);
+  useEffect(() => {
+    recordDartliteRun(run, setPlayers as any);
+  }, []); // run once on mount
 
   const seenTrinkets = run.stats.trinketsCollected.filter((v, i, a) => a.indexOf(v) === i);
 

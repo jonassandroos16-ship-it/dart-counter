@@ -95,7 +95,8 @@ export function recordDartliteRun(
   run: DartliteRun,
   setPlayers: (updater: (prev: Player[]) => Player[]) => void,
 ): void {
-  const seenTrinkets = [...new Set(run.stats.trinketsCollected)] as TrinketId[];
+  const seenTrinkets = ([...new Set(run.stats.trinketsCollected)] as TrinketId[])
+    .filter(id => (id as string) !== 'trk_phoenix_heart_used');
   setPlayers((prev: Player[]) => prev.map(p => {
     if (!run.playerIds.includes(p.id)) return p;
     const cur = p.dartliteStats || defaultDartliteStats();
