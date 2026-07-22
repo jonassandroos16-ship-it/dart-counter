@@ -8,6 +8,7 @@ import {
 } from '../campaign/engine';
 import type { CoopClassId, CoopPassiveId, PlayerCoopProgress } from '../campaign/types';
 import { effectiveLevel } from './helpers';
+import { defaultClassAttributes } from '../logic';
 import type { SetPlayers, Toast } from './BasicTab';
 
 export function ClassTab({ player, setPlayers, toast, settings }: {
@@ -29,7 +30,14 @@ export function ClassTab({ player, setPlayers, toast, settings }: {
       if (p.id !== player.id) return p;
       const cur = p.coopProgress || defaultCoopProgress();
       const next = selectClassForPlayer(cur, classId);
-      return { ...p, coopProgress: next };
+      // Ensure classAttributes entry exists for the new class, then sync
+      // the legacy `attributes` field to the new class's active attributes.
+      const caMap = { ...(p.classAttributes || {}) };
+      if (!caMap[classId]) {
+        caMap[classId] = defaultClassAttributes(classId, settings);
+      }
+      const activeAttrs = caMap[classId];
+      return { ...p, coopProgress: next, classAttributes: caMap, attributes: { ...activeAttrs } };
     }));
     const cls = getCoopClass(classId);
     toast(`${cls?.name || classId} class selected — starter passive equipped`);

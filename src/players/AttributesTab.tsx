@@ -1,5 +1,7 @@
-import type { Player, Settings } from '../types';
-import { defaultAttributes, totalAttributePointsForLevel } from '../logic';
+import type { Player, Settings, ClassAttributes } from '../types';
+import { totalAttributePointsForLevel, defaultClassAttributes, classStartHealth, classStartArmor, classStartPower, classHealthMax, classArmorMax, classPowerMax } from '../logic';
+import { COOP_CLASSES, getCoopClass } from '../campaign/engine';
+import type { CoopClassId } from '../campaign/types';
 import { spentOn, effectiveLevel } from './helpers';
 import type { SetPlayers, Toast } from './BasicTab';
 
@@ -10,77 +12,141 @@ export function AttributesTab({ player, settings, setPlayers, toast }: {
   toast: Toast;
 }) {
   const cfg = settings.powerUpScaling;
-  const attrs = player.attributes || defaultAttributes(settings);
+  const activeClassId = (player.coopProgress?.classId || 'warrior') as CoopClassId;
+  const activeClass = getCoopClass(activeClassId);
+  const classAttrs = player.classAttributes || {};
+  const active = classAttrs[activeClassId] || defaultClassAttributes(activeClassId, settings);
   const level = effectiveLevel(player, settings);
   const totalPoints = totalAttributePointsForLevel(level, settings) + (player.developerMode ? 100 : 0);
-  const healthMax = Number.isFinite(cfg.healthMax) ? cfg.healthMax : Number.MAX_SAFE_INTEGER;
-  const armorMax = Number.isFinite(cfg.armorMax) ? cfg.armorMax : Number.MAX_SAFE_INTEGER;
-  const powerMax = Number.isFinite(cfg.powerMax) ? cfg.powerMax : Number.MAX_SAFE_INTEGER;
-  const safeHealth = Number.isFinite(attrs.health) ? attrs.health : cfg.attributeStartHealth;
-  const safeArmor = Number.isFinite(attrs.armor) ? attrs.armor : cfg.attributeStartArmor;
-  const safePower = Number.isFinite(attrs.power) ? attrs.power : cfg.attributeStartPower;
-  const spent = spentOn(safeHealth, cfg.attributeStartHealth, cfg.healthPerPoint)
-    + spentOn(safeArmor, cfg.attributeStartArmor, cfg.armorPerPoint)
-    + spentOn(safePower, cfg.attributeStartPower, cfg.powerPerPoint);
+  const hMax = classHealthMax(activeClassId, settings);
+  const aMax = classArmorMax(activeClassId, settings);
+  const pMax = classPowerMax(activeClassId, settings);
+  const startH = classStartHealth(activeClassId, settings);
+  const startA = classStartArmor(activeClassId, settings);
+  const startP = classStartPower(activeClassId, settings);
+  const safeHealth = Number.isFinite(active.health) ? active.health : startH;
+  const safeArmor = Number.isFinite(active.armor) ? active.armor : startA;
+  const safePower = Number.isFinite(active.power) ? active.power : startP;
+  const spent = spentOn(safeHealth, startH, cfg.healthPerPoint)
+    + spentOn(safeArmor, startA, cfg.armorPerPoint)
+    + spentOn(safePower, startP, cfg.powerPerPoint);
   const available = Math.max(0, totalPoints - spent);
-  const armorAtCap = safeArmor >= armorMax;
-  const powerAtCap = safePower >= powerMax;
-  const healthAtCap = safeHealth >= healthMax;
+  const healthAtCap = safeHealth >= hMax;
+  const armorAtCap = safeArmor >= aMax;
+  const powerAtCap = safePower >= pMax;
 
   const spend = (kind: 'health' | 'armor' | 'power') => {
     if (!Number.isFinite(available) || available <= 0) { toast('No attribute points available'); return; }
     setPlayers((prev: Player[]) => prev.map(p => {
       if (p.id !== player.id) return p;
-      const a = p.attributes || defaultAttributes(settings);
-      const curHealth = Number.isFinite(a.health) ? a.health : cfg.attributeStartHealth;
-      const curArmor = Number.isFinite(a.armor) ? a.armor : cfg.attributeStartArmor;
-      const curPower = Number.isFinite(a.power) ? a.power : cfg.attributeStartPower;
+      const cid = (p.coopProgress?.classId || 'warrior') as CoopClassId;
+      const caMap = { ...(p.classAttributes || {}) };
+      const ca = caMap[cid] || defaultClassAttributes(cid, settings);
+      const cH = classStartHealth(cid, settings);
+      const cA = classStartArmor(cid, settings);
+      const cP = classStartPower(cid, settings);
+      const cHMax = classHealthMax(cid, settings);
+      const cAMax = classArmorMax(cid, settings);
+      const cPMax = classPowerMax(cid, settings);
+      const curH = Number.isFinite(ca.health) ? ca.health : cH;
+      const curA = Number.isFinite(ca.armor) ? ca.armor : cA;
+      const curP = Number.isFinite(ca.power) ? ca.power : cP;
+      const lv = effectiveLevel(p, settings);
+      const tp = totalAttributePointsForLevel(lv, settings) + (p.developerMode ? 100 : 0);
+      const sp = spentOn(curH, cH, cfg.healthPerPoint) + spentOn(curA, cA, cfg.armorPerPoint) + spentOn(curP, cP, cfg.powerPerPoint);
+      const avail = Math.max(0, tp - sp);
       if (kind === 'health') {
-        if (curHealth >= healthMax) { toast(`Health capped at ${healthMax}`); return p; }
+        if (curH >= cHMax) { toast(`Health capped at ${cHMax}`); return p; }
         const step = Number.isFinite(cfg.healthPerPoint) && cfg.healthPerPoint > 0 ? cfg.healthPerPoint : 1;
-        return { ...p, attributes: { ...a, health: Math.min(healthMax, curHealth + step), pointsAvailable: Math.max(0, available - 1) } };
+        const nextCa: ClassAttributes = { ...ca, health: Math.min(cHMax, curH + step), pointsAvailable: Math.max(0, avail - 1) };
+        caMap[cid] = nextCa;
+        return { ...p, classAttributes: caMap, attributes: { ...nextCa } };
       }
       if (kind === 'armor') {
-        if (curArmor >= armorMax) { toast(`Armor capped at ${armorMax}`); return p; }
+        if (curA >= cAMax) { toast(`Armor capped at ${cAMax}`); return p; }
         const step = Number.isFinite(cfg.armorPerPoint) && cfg.armorPerPoint > 0 ? cfg.armorPerPoint : 1;
-        return { ...p, attributes: { ...a, armor: Math.min(armorMax, curArmor + step), pointsAvailable: Math.max(0, available - 1) } };
+        const nextCa: ClassAttributes = { ...ca, armor: Math.min(cAMax, curA + step), pointsAvailable: Math.max(0, avail - 1) };
+        caMap[cid] = nextCa;
+        return { ...p, classAttributes: caMap, attributes: { ...nextCa } };
       }
-      if (curPower >= powerMax) { toast(`Power capped at ${powerMax}`); return p; }
+      if (curP >= cPMax) { toast(`Power capped at ${cPMax}`); return p; }
       const step = Number.isFinite(cfg.powerPerPoint) && cfg.powerPerPoint > 0 ? cfg.powerPerPoint : 1;
-      return { ...p, attributes: { ...a, power: Math.min(powerMax, curPower + step), pointsAvailable: Math.max(0, available - 1) } };
+      const nextCa: ClassAttributes = { ...ca, power: Math.min(cPMax, curP + step), pointsAvailable: Math.max(0, avail - 1) };
+      caMap[cid] = nextCa;
+      return { ...p, classAttributes: caMap, attributes: { ...nextCa } };
     }));
   };
 
   const reset = () => {
-    setPlayers((prev: Player[]) => prev.map(p => p.id === player.id ? { ...p, attributes: { ...defaultAttributes(settings), pointsAvailable: totalPoints } } : p));
-    toast('Attributes reset');
+    setPlayers((prev: Player[]) => prev.map(p => {
+      if (p.id !== player.id) return p;
+      const cid = (p.coopProgress?.classId || 'warrior') as CoopClassId;
+      const caMap = { ...(p.classAttributes || {}) };
+      const lv = effectiveLevel(p, settings);
+      const tp = totalAttributePointsForLevel(lv, settings) + (p.developerMode ? 100 : 0);
+      const resetCa: ClassAttributes = { ...defaultClassAttributes(cid, settings), pointsAvailable: tp };
+      caMap[cid] = resetCa;
+      return { ...p, classAttributes: caMap, attributes: { ...resetCa } };
+    }));
+    toast(`${activeClass?.name || 'Class'} attributes reset`);
   };
 
   return (
     <>
-      <div className="muted small" style={{ marginBottom: 10 }}>Players start with {cfg.attributeStartHealth} HP, {cfg.attributeStartArmor}% armor and {cfg.attributeStartPower} power. Each level grants {cfg.attributePointsPerLevel} attribute points. Health caps at {cfg.healthMax}, armor at {cfg.armorMax}% (percentage damage reduction per dart) and power at {cfg.powerMax} (flat per dart).</div>
+      <div className="muted small" style={{ marginBottom: 10 }}>
+        {activeClass ? `${activeClass.icon} ${activeClass.name}` : 'No class'} starts with {startH} HP, {startA}% armor and {startP} power. Each level grants {cfg.attributePointsPerLevel} attribute points. Health caps at {hMax}, armor at {aMax}% (percentage damage reduction per dart) and power at {pMax} (flat per dart).
+      </div>
       <div className="card" style={{ padding: 12, marginBottom: 10 }}>
-        <div className="row between"><b>Level</b><span className="xp-pill">Lvl {level}</span></div>
+        <div className="row between"><b>{activeClass ? `${activeClass.icon} ${activeClass.name}` : 'No Class'}</b><span className="xp-pill">Lvl {level}</span></div>
         <div className="row between" style={{ marginTop: 6 }}><span className="muted small">Total points earned</span><span className="small"><b>{totalPoints}</b></span></div>
-        <div className="row between" style={{ marginTop: 4 }}><span className="muted small">Points spent</span><span className="small"><b>{spent}</b></span></div>
+        <div className="row between" style={{ marginTop: 4 }}><span className="muted small">Points spent on {activeClass?.name}</span><span className="small"><b>{spent}</b></span></div>
         <div className="row between" style={{ marginTop: 4 }}><span className="muted small">Available</span><span className="xp-pill">{available} pts</span></div>
       </div>
       <div className="card" style={{ padding: 12, marginBottom: 10 }}>
         <div className="row between"><b>❤️ Health</b><span style={{ fontWeight: 800, fontSize: 18 }}>{safeHealth} HP{healthAtCap ? <span className="muted small" style={{ marginLeft: 6 }}>MAX</span> : null}</span></div>
-        <div className="muted small" style={{ marginTop: 4 }}>Each point adds +{cfg.healthPerPoint} HP (max {cfg.healthMax}). Your total damage pool in Battle.</div>
+        <div className="muted small" style={{ marginTop: 4 }}>Each point adds +{cfg.healthPerPoint} HP (max {hMax}). Your total damage pool in Battle.</div>
         <button className="btn primary block" style={{ marginTop: 8 }} disabled={!Number.isFinite(available) || available <= 0 || healthAtCap} onClick={() => spend('health')}>{healthAtCap ? 'Health at cap' : '+ Spend 1 point on Health'}</button>
       </div>
       <div className="card" style={{ padding: 12, marginBottom: 10 }}>
         <div className="row between"><b>🛡️ Armor</b><span style={{ fontWeight: 800, fontSize: 18 }}>{safeArmor}%{armorAtCap ? <span className="muted small" style={{ marginLeft: 6 }}>MAX</span> : null}</span></div>
-        <div className="muted small" style={{ marginTop: 4 }}>Each point adds +{cfg.armorPerPoint}% armor (max {cfg.armorMax}%). Percentage damage reduction applied to EVERY dart in Battle.</div>
+        <div className="muted small" style={{ marginTop: 4 }}>Each point adds +{cfg.armorPerPoint}% armor (max {aMax}%). Percentage damage reduction applied to EVERY dart in Battle.</div>
         <button className="btn primary block" style={{ marginTop: 8 }} disabled={!Number.isFinite(available) || available <= 0 || armorAtCap} onClick={() => spend('armor')}>{armorAtCap ? 'Armor at cap' : '+ Spend 1 point on Armor'}</button>
       </div>
       <div className="card" style={{ padding: 12, marginBottom: 10 }}>
         <div className="row between"><b>⚡ Power</b><span style={{ fontWeight: 800, fontSize: 18 }}>{safePower}{powerAtCap ? <span className="muted small" style={{ marginLeft: 6 }}>MAX</span> : null}</span></div>
-        <div className="muted small" style={{ marginTop: 4 }}>Each point adds +{cfg.powerPerPoint} power (max {cfg.powerMax}). Flat damage bonus added to EVERY dart that hits in Battle.</div>
+        <div className="muted small" style={{ marginTop: 4 }}>Each point adds +{cfg.powerPerPoint} power (max {pMax}). Flat damage bonus added to EVERY dart that hits in Battle.</div>
         <button className="btn primary block" style={{ marginTop: 8 }} disabled={!Number.isFinite(available) || available <= 0 || powerAtCap} onClick={() => spend('power')}>{powerAtCap ? 'Power at cap' : '+ Spend 1 point on Power'}</button>
       </div>
-      <button className="btn ghost sm block" onClick={reset}>Reset attributes</button>
+
+      {/* Per-class overview */}
+      <div className="card" style={{ padding: 12, marginBottom: 10 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>All Classes Overview</div>
+        {COOP_CLASSES.map(cls => {
+          const ca = classAttrs[cls.id] || defaultClassAttributes(cls.id, settings);
+          const isCurrent = cls.id === activeClassId;
+          const clsXp = player.coopProgress?.classXp?.[cls.id] ?? 0;
+          const clsLv = clsXp > 0 ? effectiveLevel({ ...player, coopProgress: { ...player.coopProgress!, classId: cls.id as CoopClassId } }, settings) : 1;
+          const clsTotal = totalAttributePointsForLevel(clsLv, settings) + (player.developerMode ? 100 : 0);
+          const cStartH = classStartHealth(cls.id, settings);
+          const cStartA = classStartArmor(cls.id, settings);
+          const cStartP = classStartPower(cls.id, settings);
+          const clsSpent = spentOn(ca.health, cStartH, cfg.healthPerPoint) + spentOn(ca.armor, cStartA, cfg.armorPerPoint) + spentOn(ca.power, cStartP, cfg.powerPerPoint);
+          const clsAvail = Math.max(0, clsTotal - clsSpent);
+          return (
+            <div key={cls.id} style={{ padding: 10, marginBottom: 6, borderRadius: 8, background: 'var(--bg-3)', border: isCurrent ? '1px solid var(--accent)' : '1px solid transparent' }}>
+              <div className="row between" style={{ alignItems: 'center' }}>
+                <span style={{ fontWeight: 700, fontSize: 13 }}>{cls.icon} {cls.name}{isCurrent ? ' (active)' : ''}</span>
+                <span className="muted small">Lvl {clsLv}</span>
+              </div>
+              <div className="muted small" style={{ marginTop: 4 }}>
+                ❤️ {ca.health} HP · 🛡️ {ca.armor}% · ⚡ {ca.power} · {clsAvail} pts available
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <button className="btn ghost sm block" onClick={reset}>Reset {activeClass?.name || 'class'} attributes</button>
     </>
   );
 }

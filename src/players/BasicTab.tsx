@@ -1,9 +1,10 @@
 import type { Player, Settings, PlayerSoundId } from '../types';
 import { COLORS, allTitles, SHOWDOWN_BGS, PLAYER_SOUNDS } from '../constants';
-import { defaultAttributes } from '../logic';
+import { defaultClassAttributes } from '../logic';
 import { BADGES } from '../badges';
 import { POWER_UPS } from '../powerups';
 import { COOP_POWER_UPS, passivesForClass, defaultCoopProgress } from '../campaign/engine';
+import type { CoopClassId } from '../campaign/types';
 import { Sound } from '../sound';
 
 export type SetPlayers = (updater: (prev: Player[]) => Player[]) => void;
@@ -92,10 +93,20 @@ export function applyDevMode(p: Player, settings: Settings): Player {
       coopUnlocked: COOP_POWER_UPS.map(pu => pu.id),
       coopActive: p.powerUps?.coopActive ?? null,
     },
-    attributes: {
-      ...(p.attributes || defaultAttributes(settings)),
-      pointsAvailable: (p.attributes?.pointsAvailable ?? 0) + 100,
-    },
+    attributes: (() => {
+      const cid = (p.coopProgress?.classId || 'warrior') as CoopClassId;
+      const caMap = { ...(p.classAttributes || {}) };
+      const ca = caMap[cid] || defaultClassAttributes(cid, settings);
+      caMap[cid] = { ...ca, pointsAvailable: (ca.pointsAvailable ?? 0) + 100 };
+      return { ...caMap[cid] };
+    })(),
+    classAttributes: (() => {
+      const cid = (p.coopProgress?.classId || 'warrior') as CoopClassId;
+      const caMap = { ...(p.classAttributes || {}) };
+      const ca = caMap[cid] || defaultClassAttributes(cid, settings);
+      caMap[cid] = { ...ca, pointsAvailable: (ca.pointsAvailable ?? 0) + 100 };
+      return caMap;
+    })(),
     coopProgress: (() => {
       const cur = p.coopProgress || defaultCoopProgress();
       const classId = cur.classId || 'warrior';
