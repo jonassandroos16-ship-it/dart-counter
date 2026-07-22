@@ -7,9 +7,9 @@ import { defaultPlayerCards } from './deck';
 
 const collection = [
   ...defaultPlayerCards('warrior'),
-  { cardId: 'dmg_bull', upgraded: false },
-  { cardId: 'dmg_d20', upgraded: false },
-  { cardId: 'dmg_outer_bull', upgraded: false },
+  { cardId: 'dmg_bull', upgradeLevel: 0, upgraded: false },
+  { cardId: 'dmg_d20', upgradeLevel: 0, upgraded: false },
+  { cardId: 'dmg_outer_bull', upgradeLevel: 0, upgraded: false },
 ];
 
 describe('Deck-builder logic', () => {
@@ -85,7 +85,7 @@ describe('Deck-builder logic', () => {
     const drawn = drawCards(s, HAND_SIZE);
     const played = playCardFromHand(drawn, 0)!;
     const usedCard = played.used[0];
-    const stillInHand = played.hand.some(c => c.cardId === usedCard.cardId && c.upgraded === usedCard.upgraded);
+    const stillInHand = played.hand.some(c => c.cardId === usedCard.cardId && c.upgradeLevel === usedCard.upgradeLevel);
     expect(stillInHand).toBe(false);
   });
 

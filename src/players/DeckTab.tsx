@@ -1,6 +1,6 @@
 import type { Player, Settings } from '../types';
 import type { SetPlayers, Toast } from './BasicTab';
-import { addCard, removeCard, resolveCardDef, getPlayerCards, setPlayerCards } from '../cards/deck';
+import { addCard, removeCard, upgradeCard, resolveCardDef, getPlayerCards, setPlayerCards } from '../cards/deck';
 import { CARD_DEFS, getCard, cardDamage, cardTypeColor, cardRarityColor, cardsForClass } from '../cards/definitions';
 import type { CardDef, PlayerCard } from '../cards/types';
 import { levelFromXP } from '../logic';
@@ -55,7 +55,7 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
     setPlayers((prev: Player[]) => prev.map(p => {
       if (p.id !== player.id) return p;
       const cur = getPlayerCards(p);
-      return setPlayerCards(p, cur.map(c => c.cardId === cardId ? { ...c, upgraded: true } : c));
+      return setPlayerCards(p, upgradeCard(cur, cardId));
     }));
     toast('Card upgraded');
   };
@@ -87,13 +87,13 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
                 <div key={pc.cardId} className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))`, position: 'relative' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <span style={{ fontSize: 22 }}>{def.icon}</span>
-                    {pc.upgraded && <span style={{ fontSize: 10, fontWeight: 800, color: '#fbbf24' }}>★</span>}
+                    {pc.upgradeLevel > 0 && <span style={{ fontSize: 10, fontWeight: 800, color: '#fbbf24' }}>{'★'.repeat(pc.upgradeLevel)}</span>}
                   </div>
-                  <div style={{ fontSize: 11, fontWeight: 800, marginTop: 2 }}>{def.name}{pc.upgraded ? '+' : ''}</div>
+                  <div style={{ fontSize: 11, fontWeight: 800, marginTop: 2 }}>{def.name}{pc.upgradeLevel > 0 ? ` +${pc.upgradeLevel}` : ''}</div>
                   <div className="muted" style={{ fontSize: 9, lineHeight: 1.2 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</div>
                   <ClassBadge def={def} cls={cls} />
                   <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                    {!pc.upgraded && <button className="btn sm" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => upgradeCardForPlayer(pc.cardId)}>Upgrade</button>}
+                    {pc.upgradeLevel < 5 && <button className="btn sm" style={{ fontSize: 10, padding: '2px 6px' }} onClick={() => upgradeCardForPlayer(pc.cardId)}>Upgrade</button>}
                     <button className="btn sm danger" style={{ fontSize: 11, padding: '4px 8px' }} onClick={() => removeCardFromPlayer(pc.cardId)}>Remove</button>
                   </div>
                 </div>

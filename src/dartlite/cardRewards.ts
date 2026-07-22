@@ -1,81 +1,126 @@
 import type { PlayerCard } from '../cards/types';
-import { randomCardReward, randomCardUpgradeReward, hasCard, addCard, upgradeCard } from '../cards/deck';
+import type { CardDef } from '../cards/definitions';
+import { cardsForClass } from '../cards/definitions';
+import {
+  hasCard, addCard, upgradeCard, removeCard,
+  resolveCardDef, getCard, maxUpgradeLevelInDeck, addCardAtLevel,
+  MAX_UPGRADE_LEVEL,
+} from '../cards/deck';
 
 // ── Dartlite card rewards ──────────────────────────────────────────────
 //
-// In card mode, dartlite rewards include card-related options alongside
-// the standard heal/stat/trinket boons. After winning a round, the player
-// can choose 1 of 3 randomly available cards. Cards can also be upgraded
-// as a separate reward choice.
+// In card mode, the "upgrade card" reward is replaced by a "deck upgrade"
+// reward. When chosen, it opens a popup with 3 options:
+//   1. Upgrade a card — pick from the deck, each upgrade scales the card.
+//   2. Remove a card — pick from the deck to remove it.
+//   3. Add a new card — 3 random cards from the class pool, auto-upgraded to
+//      the highest upgrade level in the deck to scale with rounds.
 
-export type CardRewardKind = 'card_new' | 'card_upgrade' | 'heal';
+export type CardRewardKind = 'deck_upgrade' | 'heal';
 
 export interface CardRewardChoice {
   kind: CardRewardKind;
   label: string;
   desc: string;
   icon: string;
-  cardId?: string;
-  cardName?: string;
 }
 
-// Generate 3 reward options for card mode: up to 2 new cards and 1 upgrade,
-// falling back to a heal when the new-card pool or upgradeable cards are
-// exhausted so the player always has 3 choices.
 export function generateCardRewardOptions(
-  ownedCards: PlayerCard[],
-  mode: 'competitive' | 'coop',
+  _ownedCards: PlayerCard[],
+  _mode: 'competitive' | 'coop',
 ): CardRewardChoice[] {
-  const newCards = randomCardReward(ownedCards, mode, 2);
-  const upgrades = randomCardUpgradeReward(ownedCards, 1);
-
-  const options: CardRewardChoice[] = [];
-
-  for (const c of newCards) {
-    options.push({
-      kind: 'card_new',
-      label: `New Card: ${c.name}`,
-      desc: c.desc,
-      icon: c.icon,
-      cardId: c.id,
-      cardName: c.name,
-    });
-  }
-
-  for (const u of upgrades) {
-    options.push({
-      kind: 'card_upgrade',
-      label: `Upgrade: ${u.name}`,
-      desc: `Improve ${u.name}'s effect.`,
+  return [
+    {
+      kind: 'deck_upgrade',
+      label: 'Deck Upgrade',
+      desc: 'Upgrade a card, remove a card, or add a new card to your deck.',
       icon: '⬆️',
-      cardId: u.cardId,
-      cardName: u.name,
-    });
-  }
-
-  while (options.length < 3) {
-    options.push({
+    },
+    {
       kind: 'heal',
       label: 'Heal 20%',
       desc: 'Restore 20% of max HP.',
       icon: '❤️‍🩹',
-    });
-  }
-
-  return options.slice(0, 3);
+    },
+    {
+      kind: 'heal',
+      label: 'Heal 20%',
+      desc: 'Restore 20% of max HP.',
+      icon: '❤️‍🩹',
+    },
+  ];
 }
 
+// ── Deck upgrade sub-actions ───────────────────────────────────────────
+
+export type DeckUpgradeAction = 'upgrade_card' | 'remove_card' | 'add_card';
+
+// Generate the 3 random card choices for the "add card" action. Each card
+// is auto-upgraded to the highest upgrade level currently in the deck so new
+// cards scale with round depth.
+export function generateAddCardChoices(
+  ownedCards: PlayerCard[],
+  cls: string,
+  mode: 'competitive' | 'coop',
+): CardDef[] {
+  const pool = cardsForClass(cls as 'warrior' | 'priest' | 'rogue' | 'any', mode)
+    .filter(c => !hasCard(ownedCards, c.id));
+  if (pool.length === 0) return [];
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  const selected = shuffled.slice(0, Math.min(3, pool.length));
+  return selected;
+}
+
+export function autoUpgradeLevel(ownedCards: PlayerCard[]): number {
+  return maxUpgradeLevelInDeck(ownedCards);
+}
+
+// Apply a deck upgrade action and return the new card array.
+export function applyDeckUpgrade(
+  ownedCards: PlayerCard[],
+  action: DeckUpgradeAction,
+  cardId?: string,
+  cls?: string,
+  mode?: 'competitive' | 'coop',
+): PlayerCard[] {
+  if (action === 'upgrade_card' && cardId) {
+    return upgradeCard(ownedCards, cardId);
+  }
+  if (action === 'remove_card' && cardId) {
+    return removeCard(ownedCards, cardId);
+  }
+  if (action === 'add_card' && cardId) {
+    const level = autoUpgradeLevel(ownedCards);
+    return addCardAtLevel(ownedCards, cardId, level);
+  }
+  return ownedCards;
+}
+
+// Get upgrade preview info for a card: current def vs next-level def.
+export function upgradePreview(ownedCards: PlayerCard[], cardId: string): {
+  current: CardDef | undefined;
+  next: CardDef | undefined;
+  canUpgrade: boolean;
+} {
+  const pc = ownedCards.find(c => c.cardId === cardId);
+  if (!pc) return { current: undefined, next: undefined, canUpgrade: false };
+  const current = resolveCardDef(pc);
+  const canUpgrade = pc.upgradeLevel < MAX_UPGRADE_LEVEL;
+  const next = canUpgrade ? resolveCardDef({ ...pc, upgradeLevel: pc.upgradeLevel + 1, upgraded: true }) : undefined;
+  return { current, next, canUpgrade };
+}
+
+// Get card info for display.
+export function cardInfo(pc: PlayerCard): CardDef | undefined {
+  return resolveCardDef(pc);
+}
+
+// Legacy compat: applyCardReward now only handles heal (deck_upgrade is
+// handled by the UI flow calling applyDeckUpgrade directly).
 export function applyCardReward(
   ownedCards: PlayerCard[],
   choice: CardRewardChoice,
 ): PlayerCard[] {
-  if (choice.kind === 'card_new' && choice.cardId) {
-    if (!hasCard(ownedCards, choice.cardId)) {
-      return addCard(ownedCards, choice.cardId);
-    }
-  }
-  if (choice.kind === 'card_upgrade' && choice.cardId) {
-    return upgradeCard(ownedCards, choice.cardId);
-  }
+  void choice;
   return ownedCards;
 }

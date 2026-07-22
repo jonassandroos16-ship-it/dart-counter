@@ -19,7 +19,7 @@ export interface CardDef {
   effect?: string;
   /** Spell/utility cards: numeric magnitude for the effect */
   magnitude?: number;
-  /** Upgrade level: 0 = base, 1 = upgraded */
+  /** Upgrade level: 0 = base, 1+ = upgraded (can stack multiple times) */
   upgraded?: boolean;
   /** Class level at which this card becomes available in the deck */
   levelRequired?: number;
@@ -27,6 +27,9 @@ export interface CardDef {
 
 export interface PlayerCard {
   cardId: string;
+  /** Upgrade level: 0 = base, 1 = first upgrade, 2 = second, etc. */
+  upgradeLevel: number;
+  /** @deprecated Use upgradeLevel instead. true when upgradeLevel > 0. */
   upgraded: boolean;
 }
 

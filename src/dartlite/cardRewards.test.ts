@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { generateCardRewardOptions, applyCardReward } from './cardRewards';
-import { defaultPlayerCards, hasCard } from '../cards/deck';
+import { generateCardRewardOptions, generateAddCardChoices, applyDeckUpgrade, autoUpgradeLevel, upgradePreview } from './cardRewards';
+import { defaultPlayerCards, hasCard, maxUpgradeLevelInDeck } from '../cards/deck';
 
 describe('Dartlite Card Rewards', () => {
   it('generateCardRewardOptions returns 3 options', () => {
@@ -9,69 +9,107 @@ describe('Dartlite Card Rewards', () => {
     expect(options).toHaveLength(3);
   });
 
-  it('generateCardRewardOptions includes card_new or card_upgrade kinds', () => {
+  it('generateCardRewardOptions includes deck_upgrade kind', () => {
     const owned = defaultPlayerCards('warrior');
     const options = generateCardRewardOptions(owned, 'coop');
-    expect(options.some(o => o.kind === 'card_new' || o.kind === 'card_upgrade')).toBe(true);
+    expect(options.some(o => o.kind === 'deck_upgrade')).toBe(true);
   });
 
-  it('generateCardRewardOptions offers up to 2 new cards and 1 upgrade', () => {
+  it('generateCardRewardOptions always offers deck_upgrade', () => {
     const owned = defaultPlayerCards('warrior');
     const options = generateCardRewardOptions(owned, 'coop');
-    const newCount = options.filter(o => o.kind === 'card_new').length;
-    const upgradeCount = options.filter(o => o.kind === 'card_upgrade').length;
-    expect(newCount).toBeLessThanOrEqual(2);
-    expect(upgradeCount).toBeLessThanOrEqual(1);
-    expect(newCount + upgradeCount).toBeGreaterThan(0);
+    const upgradeCount = options.filter(o => o.kind === 'deck_upgrade').length;
+    expect(upgradeCount).toBe(1);
   });
 
-  it('applyCardReward adds a new card', () => {
+  it('applyDeckUpgrade upgrades a card', () => {
     const owned = defaultPlayerCards('warrior');
-    const options = generateCardRewardOptions(owned, 'coop');
-    const cardOption = options.find(o => o.kind === 'card_new' && o.cardId);
-    if (cardOption) {
-      const updated = applyCardReward(owned, cardOption);
-      expect(hasCard(updated, cardOption.cardId!)).toBe(true);
+    const updated = applyDeckUpgrade(owned, 'upgrade_card', 'dmg_s20');
+    const card = updated.find(c => c.cardId === 'dmg_s20');
+    expect(card?.upgradeLevel).toBe(1);
+    expect(card?.upgraded).toBe(true);
+  });
+
+  it('applyDeckUpgrade can upgrade a card multiple times', () => {
+    const owned = defaultPlayerCards('warrior');
+    const once = applyDeckUpgrade(owned, 'upgrade_card', 'dmg_s20');
+    const twice = applyDeckUpgrade(once, 'upgrade_card', 'dmg_s20');
+    const card = twice.find(c => c.cardId === 'dmg_s20');
+    expect(card?.upgradeLevel).toBe(2);
+  });
+
+  it('applyDeckUpgrade removes a card', () => {
+    const owned = defaultPlayerCards('warrior');
+    const updated = applyDeckUpgrade(owned, 'remove_card', 'dmg_s20');
+    expect(hasCard(updated, 'dmg_s20')).toBe(false);
+  });
+
+  it('applyDeckUpgrade adds a new card at the highest upgrade level in the deck', () => {
+    const owned = defaultPlayerCards('warrior');
+    // Upgrade one card to level 2
+    const upgraded = applyDeckUpgrade(owned, 'upgrade_card', 'dmg_s20');
+    const upgraded2 = applyDeckUpgrade(upgraded, 'upgrade_card', 'dmg_s20');
+    // Now add a new card — it should auto-upgrade to level 2
+    const withNew = applyDeckUpgrade(upgraded2, 'add_card', 'dmg_bull', 'warrior', 'coop');
+    const newCard = withNew.find(c => c.cardId === 'dmg_bull');
+    expect(newCard).toBeDefined();
+    expect(newCard?.upgradeLevel).toBe(2);
+    expect(newCard?.upgraded).toBe(true);
+  });
+
+  it('applyDeckUpgrade does not duplicate existing cards', () => {
+    const owned = defaultPlayerCards('warrior');
+    const once = applyDeckUpgrade(owned, 'add_card', 'dmg_s20', 'warrior', 'coop');
+    // dmg_s20 already in deck — should not duplicate
+    expect(once.filter(c => c.cardId === 'dmg_s20')).toHaveLength(1);
+  });
+
+  it('generateAddCardChoices returns up to 3 cards not in the deck', () => {
+    const owned = defaultPlayerCards('warrior');
+    const choices = generateAddCardChoices(owned, 'warrior', 'coop');
+    expect(choices.length).toBeLessThanOrEqual(3);
+    expect(choices.every(c => !hasCard(owned, c.id))).toBe(true);
+  });
+
+  it('autoUpgradeLevel returns the highest upgrade level in the deck', () => {
+    const owned = defaultPlayerCards('warrior');
+    expect(autoUpgradeLevel(owned)).toBe(0);
+    const upgraded = applyDeckUpgrade(owned, 'upgrade_card', 'dmg_s20');
+    expect(autoUpgradeLevel(upgraded)).toBe(1);
+    const upgraded2 = applyDeckUpgrade(upgraded, 'upgrade_card', 'dmg_s20');
+    expect(autoUpgradeLevel(upgraded2)).toBe(2);
+  });
+
+  it('upgradePreview shows current and next level', () => {
+    const owned = defaultPlayerCards('warrior');
+    const preview = upgradePreview(owned, 'dmg_s20');
+    expect(preview.canUpgrade).toBe(true);
+    expect(preview.current?.name).toBe('Single 20');
+    expect(preview.next?.name).toBe('Single 20+');
+  });
+
+  it('upgradePreview returns canUpgrade=false at max level', () => {
+    const owned = defaultPlayerCards('warrior');
+    let updated = owned;
+    for (let i = 0; i < 5; i++) {
+      updated = applyDeckUpgrade(updated, 'upgrade_card', 'dmg_s20');
     }
+    const preview = upgradePreview(updated, 'dmg_s20');
+    expect(preview.canUpgrade).toBe(false);
   });
 
-  it('applyCardReward upgrades a card', () => {
+  it('maxUpgradeLevelInDeck returns 0 for starter deck', () => {
     const owned = defaultPlayerCards('warrior');
-    const options = generateCardRewardOptions(owned, 'coop');
-    const upgradeOption = options.find(o => o.kind === 'card_upgrade' && o.cardId);
-    if (upgradeOption) {
-      const updated = applyCardReward(owned, upgradeOption);
-      const card = updated.find(c => c.cardId === upgradeOption.cardId);
-      expect(card?.upgraded).toBe(true);
-    }
-  });
-
-  it('applyCardReward does not duplicate existing cards', () => {
-    const owned = defaultPlayerCards('warrior');
-    const options = generateCardRewardOptions(owned, 'coop');
-    const cardOption = options.find(o => o.kind === 'card_new' && o.cardId);
-    if (cardOption) {
-      const once = applyCardReward(owned, cardOption);
-      const twice = applyCardReward(once, cardOption);
-      expect(twice.filter(c => c.cardId === cardOption.cardId)).toHaveLength(1);
-    }
+    expect(maxUpgradeLevelInDeck(owned)).toBe(0);
   });
 
   it('falls back to heal when no new cards or upgrades available', () => {
-    // Own every card already upgraded — no new cards, no upgrades.
-    const allCards = [
-      'dmg_s20', 'dmg_s19', 'dmg_s18', 'dmg_d20', 'dmg_outer_bull',
-      'dmg_t20', 'dmg_t19', 'dmg_t18', 'dmg_bull',
-      'dmg_warrior_strike', 'dmg_priest_smite', 'dmg_rogue_backstab',
-      'dmg_meteor', 'dmg_warrior_cleave', 'dmg_priest_judgment', 'dmg_rogue_assassinate',
-      'dmg_apocalypse',
-      'spell_bust_protect', 'spell_surge', 'spell_hot_streak',
-      'spell_power_buff', 'spell_heal', 'spell_accuracy_buff', 'spell_enemy_debuff',
-      'spell_freeze', 'spell_double_up',
-      'util_reroll', 'util_draw', 'util_reserve', 'util_shield', 'util_extra_dart', 'util_revive',
-    ].map(id => ({ cardId: id, upgraded: true }));
-    const options = generateCardRewardOptions(allCards, 'coop');
+    // With deck_upgrade always offered, this test verifies the heal options
+    // are still present alongside deck_upgrade
+    const owned = defaultPlayerCards('warrior');
+    const options = generateCardRewardOptions(owned, 'coop');
     expect(options).toHaveLength(3);
-    expect(options.every(o => o.kind === 'heal')).toBe(true);
+    expect(options.some(o => o.kind === 'deck_upgrade')).toBe(true);
+    expect(options.some(o => o.kind === 'heal')).toBe(true);
   });
 });

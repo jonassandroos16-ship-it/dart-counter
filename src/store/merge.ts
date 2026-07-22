@@ -19,7 +19,10 @@ function mergeCards(
       if (!existing) {
         map.set(c.cardId, { ...c });
       } else {
-        map.set(c.cardId, { cardId: c.cardId, upgraded: existing.upgraded || c.upgraded });
+        const existingLevel = existing.upgradeLevel ?? (existing.upgraded ? 1 : 0);
+        const incomingLevel = c.upgradeLevel ?? (c.upgraded ? 1 : 0);
+        const maxLevel = Math.max(existingLevel, incomingLevel);
+        map.set(c.cardId, { cardId: c.cardId, upgradeLevel: maxLevel, upgraded: maxLevel > 0 });
       }
     }
     out[k] = Array.from(map.values());
