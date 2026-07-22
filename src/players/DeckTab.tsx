@@ -27,7 +27,7 @@ function ClassBadge({ def, cls }: { def: CardDef; cls: string | null }) {
 export function DeckTab({ player, setPlayers, toast, settings }: {
   player: Player; setPlayers: SetPlayers; toast: Toast; settings: Settings;
 }) {
-  const cards: PlayerCard[] = player.cards && player.cards.length > 0 ? player.cards : defaultPlayerCards();
+  const cards: PlayerCard[] = player.cards && player.cards.length > 0 ? player.cards : defaultPlayerCards(player.coopProgress?.classId);
   const cls = player.coopProgress?.classId || null;
   const xpInfo = levelFromXP(player.xp ?? 0, settings);
   const playerLevel = xpInfo.level;
@@ -35,7 +35,7 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
   const addCardToPlayer = (cardId: string) => {
     setPlayers((prev: Player[]) => prev.map(p => {
       if (p.id !== player.id) return p;
-      const cur = p.cards && p.cards.length > 0 ? p.cards : defaultPlayerCards();
+      const cur = p.cards && p.cards.length > 0 ? p.cards : defaultPlayerCards(p.coopProgress?.classId);
       return { ...p, cards: addCard(cur, cardId) };
     }));
     const def = getCard(cardId);
@@ -45,7 +45,7 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
   const removeCardFromPlayer = (cardId: string) => {
     setPlayers((prev: Player[]) => prev.map(p => {
       if (p.id !== player.id) return p;
-      const cur = p.cards && p.cards.length > 0 ? p.cards : defaultPlayerCards();
+      const cur = p.cards && p.cards.length > 0 ? p.cards : defaultPlayerCards(p.coopProgress?.classId);
       return { ...p, cards: removeCard(cur, cardId) };
     }));
     toast('Card removed from deck');

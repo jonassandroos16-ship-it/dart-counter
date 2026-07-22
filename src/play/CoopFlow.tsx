@@ -74,7 +74,7 @@ export function CoopFlow({ players, settings, music, setPlayers, toast, onExitTo
           const nextCampaign = recordLevelClearForPlayer(p, chapterId, clearedIdx, levelId, unlockedPowerUpId);
           let next: Player = { ...p, xp: newXp, level: li.level, coopProgress: nextProg, campaignProgress: nextCampaign };
           if (li.level > oldLevel && settings.gameMode === 'cards') {
-            const curCards = next.cards && next.cards.length > 0 ? next.cards : defaultPlayerCards();
+            const curCards = next.cards && next.cards.length > 0 ? next.cards : defaultPlayerCards(next.coopProgress?.classId);
             const newCardDefs = cardsForLevelUp(next.coopProgress?.classId || null, li.level, 'coop', curCards);
             if (newCardDefs.length > 0) {
               let updatedCards = curCards;
@@ -106,7 +106,7 @@ export function CoopFlow({ players, settings, music, setPlayers, toast, onExitTo
           const { progress: nextProg } = reconcileCoopPassivesForPlayer(cur, li.level);
           let next: Player = { ...p, xp: newXp, level: li.level, coopProgress: nextProg };
           if (li.level > oldLevel && settings.gameMode === 'cards') {
-            const curCards = next.cards && next.cards.length > 0 ? next.cards : defaultPlayerCards();
+            const curCards = next.cards && next.cards.length > 0 ? next.cards : defaultPlayerCards(next.coopProgress?.classId);
             const newCardDefs = cardsForLevelUp(next.coopProgress?.classId || null, li.level, 'coop', curCards);
             if (newCardDefs.length > 0) {
               let updatedCards = curCards;
