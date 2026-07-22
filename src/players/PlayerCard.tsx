@@ -24,7 +24,7 @@ export function PlayerCard({ player, games, settings, customTitles, onEdit, onDe
   const classXpInfo = cls ? classLevelFromXp(p.coopProgress, cls, settings) : null;
   const classXpVal = cls ? getClassXp(p.coopProgress, cls) : 0;
   const effectiveLv = effectiveLevel(p, settings);
-  const ti = getTitleInfo(xp.selectedTitle, customTitles);
+  const ti = getTitleInfo(xp.selectedTitle ?? '', customTitles);
   const bi = getBadgeInfo(xp.selectedBadge);
   const avatarContent = bi ? bi.icon : initials(p.name);
   const totalBadgeEarns = Object.values(xp.badgeCounts || {}).reduce((a: number, b: number) => a + b, 0);

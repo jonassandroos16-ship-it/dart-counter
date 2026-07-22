@@ -328,7 +328,7 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
           {others.map(pl => {
             const xpInfo = getPlayerXPById(pl.id, players);
             const li = levelFromXP(xpInfo.xp, settings);
-            const ti = getTitleInfo(xpInfo.selectedTitle, settings.customTitles);
+            const ti = getTitleInfo(xpInfo.selectedTitle ?? '', settings.customTitles);
             const badge = leadTrailBadge(pl, game);
             const plTeam = game.teamMode ? (pl.team ?? 0) : -1;
             const plTeamColor = game.teamMode ? TEAM_COLORS[plTeam % TEAM_COLORS.length] : pl.color;

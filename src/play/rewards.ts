@@ -5,7 +5,7 @@ import { Sound } from '../sound';
 import type { PopupControls } from '../Popups';
 import { computeGameBadges } from '../badges';
 import { addCard, cardsForLevelUpCompetitive, getPlayerCards, setPlayerCards } from '../cards/deck';
-import { reconcileCoopPassivesForPlayer, addClassXp, classLevelFromXp, getClassXp } from '../campaign/engine/classes';
+import { reconcileCoopPassivesForPlayer, addClassXp, classLevelFromXp } from '../campaign/engine/classes';
 import { COOP_CLASSES } from '../campaign/engine/classes';
 import type { CoopClassId } from '../campaign/types';
 
