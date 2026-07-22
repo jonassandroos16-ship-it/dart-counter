@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import type { Player, Settings } from '../types';
 import type { SetPlayers, Toast } from './BasicTab';
-import { addCard, removeCard, upgradeCard, resolveCardDef, getPlayerCards, setPlayerCards } from '../cards/deck';
+import { addCard, removeCard, resolveCardDef, getPlayerCards, setPlayerCards } from '../cards/deck';
 import { CARD_DEFS, getCard, cardDamage, cardTypeColor, cardRarityColor, cardsForClass, splitStarterAndLeveled } from '../cards/definitions';
 import type { CardDef, PlayerCard } from '../cards/types';
 import { effectiveLevel } from './helpers';
@@ -24,12 +25,11 @@ function ClassBadge({ def, cls }: { def: CardDef; cls: string | null }) {
   );
 }
 
-function CardTile({ pc, def, cls, onUpgrade, onRemove }: {
-  pc: PlayerCard; def: CardDef; cls: string | null;
-  onUpgrade: () => void; onRemove: () => void;
+function CardTile({ pc, def, cls, onClick }: {
+  pc: PlayerCard; def: CardDef; cls: string | null; onClick: () => void;
 }) {
   return (
-    <div className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))`, position: 'relative' }}>
+    <div className="card-mini-tile" onClick={onClick} style={{ cursor: 'pointer', borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))`, position: 'relative' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <span style={{ fontSize: 22 }}>{def.icon}</span>
         {pc.upgradeLevel > 0 && <span style={{ fontSize: 10, fontWeight: 800, color: '#fbbf24' }}>{'★'.repeat(pc.upgradeLevel)}</span>}
@@ -37,19 +37,16 @@ function CardTile({ pc, def, cls, onUpgrade, onRemove }: {
       <div style={{ fontSize: 11, fontWeight: 800, marginTop: 2 }}>{def.name}{pc.upgradeLevel > 0 ? ` +${pc.upgradeLevel}` : ''}</div>
       <div className="muted" style={{ fontSize: 9, lineHeight: 1.2 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</div>
       <ClassBadge def={def} cls={cls} />
-      <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-        {pc.upgradeLevel < 5 && <button className="btn sm" style={{ fontSize: 10, padding: '2px 6px' }} onClick={onUpgrade}>Upgrade</button>}
-        <button className="btn sm danger" style={{ fontSize: 11, padding: '4px 8px' }} onClick={onRemove}>Remove</button>
-      </div>
     </div>
   );
 }
 
-function AvailableCardTile({ def, cls, onAdd, locked, requiredLevel }: {
-  def: CardDef; cls: string | null; onAdd: () => void; locked?: boolean; requiredLevel?: number;
+function AvailableCardTile({ def, cls, onAdd, onClick, locked, requiredLevel }: {
+  def: CardDef; cls: string | null; onAdd: () => void; onClick: () => void; locked?: boolean; requiredLevel?: number;
 }) {
   return (
-    <div className="card-mini-tile" style={{
+    <div className="card-mini-tile" onClick={onClick} style={{
+      cursor: 'pointer',
       borderColor: locked ? 'var(--border)' : cardRarityColor(def.rarity),
       background: locked ? 'var(--bg-2)' : `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))`,
       opacity: locked ? 0.55 : 1,
@@ -64,7 +61,7 @@ function AvailableCardTile({ def, cls, onAdd, locked, requiredLevel }: {
       {locked ? (
         <button className="btn sm" style={{ fontSize: 11, padding: '4px 8px', marginTop: 4, cursor: 'not-allowed', opacity: 0.6 }} disabled title={`Reach level ${requiredLevel} to unlock this card`}>Locked</button>
       ) : (
-        <button className="btn sm primary" style={{ fontSize: 11, padding: '4px 8px', marginTop: 4 }} onClick={onAdd}>Add</button>
+        <button className="btn sm primary" style={{ fontSize: 11, padding: '4px 8px', marginTop: 4 }} onClick={(e) => { e.stopPropagation(); onAdd(); }}>Add</button>
       )}
     </div>
   );
@@ -76,6 +73,21 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
   const cards: PlayerCard[] = getPlayerCards(player);
   const cls = player.coopProgress?.classId || null;
   const playerLevel = effectiveLevel(player, settings);
+  const [detailCard, setDetailCard] = useState<PlayerCard | null>(null);
+  const [detailDef, setDetailDef] = useState<CardDef | null>(null);
+
+  const showCardDetail = (pc: PlayerCard) => {
+    const def = resolveCardDef(pc);
+    if (def) {
+      setDetailCard(pc);
+      setDetailDef(def);
+    }
+  };
+
+  const showAvailableCardDetail = (def: CardDef) => {
+    setDetailCard(null);
+    setDetailDef(def);
+  };
 
   const addCardToPlayer = (cardId: string) => {
     setPlayers((prev: Player[]) => prev.map(p => {
@@ -85,6 +97,8 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
     }));
     const def = getCard(cardId);
     toast(`${def?.name || cardId} added to your deck`);
+    setDetailCard(null);
+    setDetailDef(null);
   };
 
   const removeCardFromPlayer = (cardId: string) => {
@@ -94,15 +108,8 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
       return setPlayerCards(p, removeCard(cur, cardId));
     }));
     toast('Card removed from deck');
-  };
-
-  const upgradeCardForPlayer = (cardId: string) => {
-    setPlayers((prev: Player[]) => prev.map(p => {
-      if (p.id !== player.id) return p;
-      const cur = getPlayerCards(p);
-      return setPlayerCards(p, upgradeCard(cur, cardId));
-    }));
-    toast('Card upgraded');
+    setDetailCard(null);
+    setDetailDef(null);
   };
 
   // Split owned cards into starter and leveled groups
@@ -146,8 +153,7 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
             <div style={gridStyle}>
               {ownedStarter.map(({ pc, def }) => (
                 <CardTile key={pc.cardId} pc={pc} def={def} cls={cls}
-                  onUpgrade={() => upgradeCardForPlayer(pc.cardId)}
-                  onRemove={() => removeCardFromPlayer(pc.cardId)} />
+                  onClick={() => showCardDetail(pc)} />
               ))}
             </div>
           )}
@@ -163,8 +169,7 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
             <div style={gridStyle}>
               {ownedLeveled.get(lvl)!.map(({ pc, def }) => (
                 <CardTile key={pc.cardId} pc={pc} def={def} cls={cls}
-                  onUpgrade={() => upgradeCardForPlayer(pc.cardId)}
-                  onRemove={() => removeCardFromPlayer(pc.cardId)} />
+                  onClick={() => showCardDetail(pc)} />
               ))}
             </div>
           </div>
@@ -186,7 +191,7 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
                 <div className="muted small" style={{ fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em', fontSize: 10 }}>Starter Cards ({availStarter.length})</div>
                 <div style={gridStyle}>
                   {availStarter.map(def => (
-                    <AvailableCardTile key={def.id} def={def} cls={cls} onAdd={() => addCardToPlayer(def.id)} />
+                    <AvailableCardTile key={def.id} def={def} cls={cls} onAdd={() => addCardToPlayer(def.id)} onClick={() => showAvailableCardDetail(def)} />
                   ))}
                 </div>
               </div>
@@ -201,7 +206,7 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
                 </div>
                 <div style={gridStyle}>
                   {availLeveled.get(lvl)!.map(def => (
-                    <AvailableCardTile key={def.id} def={def} cls={cls} locked={lvl > playerLevel} requiredLevel={lvl} onAdd={() => addCardToPlayer(def.id)} />
+                    <AvailableCardTile key={def.id} def={def} cls={cls} locked={lvl > playerLevel} requiredLevel={lvl} onAdd={() => addCardToPlayer(def.id)} onClick={() => showAvailableCardDetail(def)} />
                   ))}
                 </div>
               </div>
@@ -209,6 +214,41 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
           </>
         )}
       </div>
+
+      {/* Card detail popup */}
+      {detailDef && (
+        <div className="card-popup-overlay" onClick={() => { setDetailCard(null); setDetailDef(null); }}>
+          <div className="card-popup" onClick={e => e.stopPropagation()} style={{ '--card-color': cardTypeColor(detailDef.type), '--card-rarity': cardRarityColor(detailDef.rarity) } as React.CSSProperties}>
+            <div className="card-popup-header">
+              <span className="card-popup-icon">{detailDef.icon}</span>
+              <span className="card-popup-name">{detailDef.name}</span>
+              <span className="card-popup-rarity" style={{ color: cardRarityColor(detailDef.rarity) }}>{detailDef.rarity}</span>
+            </div>
+            <div className="card-popup-body">
+              <div className="card-popup-type" style={{ color: cardTypeColor(detailDef.type) }}>
+                {detailDef.type === 'damage' ? `Damage — ${cardDamage(detailDef)} points` : detailDef.type === 'spell' ? 'Spell' : 'Utility'}
+              </div>
+              <div className="card-popup-desc">{detailDef.desc}</div>
+              {detailCard && detailCard.upgradeLevel > 0 && (
+                <div className="card-popup-class">Upgrade Level: +{detailCard.upgradeLevel} {'★'.repeat(detailCard.upgradeLevel)}</div>
+              )}
+              <div className="card-popup-class">Class: {detailDef.class === 'any' ? 'Any' : detailDef.class}</div>
+              {detailDef.levelRequired != null && detailDef.levelRequired > 1 && (
+                <div className="card-popup-class">Requires Level {detailDef.levelRequired}</div>
+              )}
+            </div>
+            <div className="card-popup-actions">
+              <button className="btn block ghost" onClick={() => { setDetailCard(null); setDetailDef(null); }}>Close</button>
+              {detailCard && (
+                <button className="btn block danger" onClick={() => removeCardFromPlayer(detailCard.cardId)}>Remove from Deck</button>
+              )}
+              {!detailCard && (
+                <button className="btn block primary" onClick={() => addCardToPlayer(detailDef.id)}>Add to Deck</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
