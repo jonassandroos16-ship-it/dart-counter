@@ -11,7 +11,7 @@ export function CoopCardHand({ thrower, players, state, onPlayCard }: {
   onPlayCard: (base: number, mult: number, label: string, isBull: boolean) => void;
 }) {
   const playerData = players.find(p => p.id === thrower?.id);
-  const playerCards: PlayerCard[] = (playerData?.cards && playerData.cards.length > 0 ? playerData.cards : defaultPlayerCards());
+  const playerCards: PlayerCard[] = (playerData?.cards && playerData.cards.length > 0 ? playerData.cards : defaultPlayerCards(playerData?.coopProgress?.classId));
   const availableCards = playerCards.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
   const damageCards = availableCards.filter(c => c.type === 'damage');
   const spellCards = availableCards.filter(c => c.type === 'spell');

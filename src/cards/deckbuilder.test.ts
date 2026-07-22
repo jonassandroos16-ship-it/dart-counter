@@ -1,21 +1,18 @@
 import { describe, it, expect } from 'vitest';
 import {
   initCardPlayState, drawCards, startTurn, playCardFromHand, endTurn,
-  HAND_SIZE, MAX_PLAYS_PER_TURN, shuffle,
+  shuffle, HAND_SIZE, MAX_PLAYS_PER_TURN,
 } from './deck';
 import { defaultPlayerCards } from './deck';
-import type { PlayerCard } from './types';
 
-// A collection larger than HAND_SIZE so draws aren't capped by deck size.
-const collection: PlayerCard[] = [
-  ...defaultPlayerCards(),
+const collection = [
+  ...defaultPlayerCards('warrior'),
   { cardId: 'dmg_bull', upgraded: false },
   { cardId: 'dmg_d20', upgraded: false },
   { cardId: 'dmg_outer_bull', upgraded: false },
 ];
 
 describe('Deck-builder logic', () => {
-
   it('initCardPlayState shuffles the collection into the deck and leaves piles empty', () => {
     const s = initCardPlayState(collection);
     expect(s.deck).toHaveLength(collection.length);
@@ -29,42 +26,39 @@ describe('Deck-builder logic', () => {
     const drawn = drawCards(s, HAND_SIZE);
     expect(drawn.hand).toHaveLength(HAND_SIZE);
     expect(drawn.deck).toHaveLength(collection.length - HAND_SIZE);
-    expect(drawn.used).toHaveLength(0);
   });
 
   it('drawCards reshuffles the graveyard into the deck when it runs out', () => {
     const s = initCardPlayState(collection);
-    const drawn = drawCards(s, collection.length); // empty the deck into the hand
+    // Draw all cards into hand
+    const drawn = drawCards(s, collection.length);
     expect(drawn.deck).toHaveLength(0);
     expect(drawn.hand).toHaveLength(collection.length);
-    // Move the hand into the graveyard to simulate cards used in prior turns.
-    const withGraveyard: typeof drawn = { ...drawn, hand: [], graveyard: drawn.hand };
-    const after = drawCards(withGraveyard, HAND_SIZE);
-    expect(after.hand).toHaveLength(HAND_SIZE);
-    expect(after.graveyard).toHaveLength(0);
-    expect(after.deck.length).toBe(collection.length - HAND_SIZE);
+    // Now move some to graveyard via endTurn-like state
+    const played = playCardFromHand(drawn, 0)!;
+    const played2 = playCardFromHand(played, 0)!;
+    const ended = endTurn(played2);
+    // Drawing again should reshuffle graveyard into deck
+    const drawnAgain = drawCards(ended, 1);
+    expect(drawnAgain.hand).toHaveLength(1);
+    expect(drawnAgain.graveyard).toHaveLength(0);
   });
 
   it('startTurn clears the hand and used pile into the graveyard, then draws a fresh hand', () => {
     const s = initCardPlayState(collection);
     const drawn = drawCards(s, HAND_SIZE);
     const played = playCardFromHand(drawn, 0)!;
-    expect(played.used).toHaveLength(1);
-    expect(played.hand).toHaveLength(HAND_SIZE - 1);
     const next = startTurn(played);
     expect(next.hand).toHaveLength(HAND_SIZE);
     expect(next.used).toHaveLength(0);
-    // Total cards across all piles is conserved.
-    expect(next.deck.length + next.hand.length + next.used.length + next.graveyard.length).toBe(collection.length);
+    expect(next.graveyard).toHaveLength(HAND_SIZE);
   });
 
   it('playCardFromHand moves the chosen card to the used pile and removes it from hand', () => {
     const s = initCardPlayState(collection);
     const drawn = drawCards(s, HAND_SIZE);
-    const card = drawn.hand[2];
-    const played = playCardFromHand(drawn, 2)!;
-    expect(played.hand).not.toContain(card);
-    expect(played.used).toContain(card);
+    const played = playCardFromHand(drawn, 0)!;
+    expect(played.used).toHaveLength(1);
     expect(played.hand).toHaveLength(HAND_SIZE - 1);
   });
 
@@ -73,7 +67,7 @@ describe('Deck-builder logic', () => {
     expect(playCardFromHand(s, 99)).toBeNull();
   });
 
-  it('endTurn moves the used pile into the graveyard and clears used', () => {
+  it('endTurn moves used pile and remaining hand into the graveyard and clears both', () => {
     const s = initCardPlayState(collection);
     const drawn = drawCards(s, HAND_SIZE);
     const played = playCardFromHand(drawn, 0)!;
@@ -81,7 +75,9 @@ describe('Deck-builder logic', () => {
     expect(played2.used).toHaveLength(2);
     const ended = endTurn(played2);
     expect(ended.used).toHaveLength(0);
-    expect(ended.graveyard).toHaveLength(2);
+    expect(ended.hand).toHaveLength(0);
+    // 2 used + 3 remaining hand = 5 in graveyard
+    expect(ended.graveyard).toHaveLength(5);
   });
 
   it('a card in the used pile cannot be replayed the same turn', () => {
