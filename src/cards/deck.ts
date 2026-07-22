@@ -8,13 +8,47 @@ import type { CoopClassId } from '../campaign/types';
 // are gained on level-up (based on class) and as dartlite rewards. Each
 // card can be upgraded once.
 
-export function defaultPlayerCards(): PlayerCard[] {
-  // Starter cards: one T20, one T19, one Single 20, one Miss
+// Starter deck: 10 cards per player.
+//   4 class-specific (damage/spell mix)
+//   3 shared attack (class 'any' damage)
+//   2 shared utility (class 'any')
+//   1 class utility
+// If no class is selected, the 'any' cards plus neutral fallbacks are used.
+const STARTER_SHARED_ATTACK = ['dmg_s20', 'dmg_d20', 'dmg_outer_bull'];
+const STARTER_SHARED_UTILITY = ['util_reroll', 'util_reserve'];
+
+const STARTER_CLASS_CARDS: Record<string, { specific: string[]; utility: string }> = {
+  warrior: {
+    specific: ['dmg_warrior_slam', 'dmg_warrior_cleave', 'spell_surge', 'spell_hot_streak'],
+    utility: 'util_warrior_rage',
+  },
+  priest: {
+    specific: ['dmg_priest_smite', 'dmg_priest_judgment', 'spell_heal', 'spell_accuracy_buff'],
+    utility: 'util_priest_blessing',
+  },
+  rogue: {
+    specific: ['dmg_rogue_backstab', 'dmg_rogue_poison', 'spell_enemy_debuff', 'spell_freeze'],
+    utility: 'util_rogue_shadowstep',
+  },
+};
+
+// Fallback for players without a class — extra shared cards fill the slots.
+const STARTER_NO_CLASS_FALLBACK: string[] = [
+  'dmg_s20', 'dmg_d20', 'dmg_outer_bull', 'dmg_s20',
+  'util_reroll', 'util_reserve', 'util_reroll',
+  'dmg_s20', 'dmg_d20', 'util_reserve',
+];
+
+export function defaultPlayerCards(classId?: string | null): PlayerCard[] {
+  const cls = STARTER_CLASS_CARDS[classId || ''];
+  if (!cls) {
+    return STARTER_NO_CLASS_FALLBACK.map(cardId => ({ cardId, upgraded: false }));
+  }
   return [
-    { cardId: 'dmg_t20', upgraded: false },
-    { cardId: 'dmg_t19', upgraded: false },
-    { cardId: 'dmg_s20', upgraded: false },
-    { cardId: 'dmg_miss', upgraded: false },
+    ...cls.specific.map(cardId => ({ cardId, upgraded: false })),
+    ...STARTER_SHARED_ATTACK.map(cardId => ({ cardId, upgraded: false })),
+    ...STARTER_SHARED_UTILITY.map(cardId => ({ cardId, upgraded: false })),
+    { cardId: cls.utility, upgraded: false },
   ];
 }
 
@@ -193,14 +227,14 @@ export function playCardFromHand(state: CardPlayState, handIdx: number): CardPla
   };
 }
 
-// End the turn: move the used pile into the graveyard. The hand is kept
-// (unplayed cards stay available next turn) — callers that want a fresh
-// hand should use startTurn instead.
+// End the turn: move both the used pile and any remaining hand cards into
+// the graveyard. The next time this player's turn starts, startTurn() will
+// draw a fresh hand from the deck (reshuffling the graveyard if needed).
 export function endTurn(state: CardPlayState): CardPlayState {
   return {
     deck: state.deck,
-    hand: state.hand,
+    hand: [],
     used: [],
-    graveyard: [...state.graveyard, ...state.used],
+    graveyard: [...state.graveyard, ...state.used, ...state.hand],
   };
 }
