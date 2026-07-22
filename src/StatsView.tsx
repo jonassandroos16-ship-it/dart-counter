@@ -4,6 +4,7 @@ import { playerStats, levelFromXP, getPlayerXP, bucketAverages, filterGamesByDat
 import { LineChart, BarChart, DartboardHeatmap } from './Charts';
 import { CalendarPicker, filterForPeriod, describeFilter, type Period } from './CalendarPicker';
 import { loadDartliteGlobalStats } from './dartlite/stats';
+import { ALL_TRINKET_IDS, getTrinket } from './dartlite/trinkets';
 import { COOP_CLASSES, getClassXp } from './campaign/engine/classes';
 import type { CoopClassId } from './campaign/types';
 
@@ -124,14 +125,14 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
                 const fmt = (v: number) => v === 0 && m.empty ? m.empty : m.format(v);
                 let color = 'var(--text)';
                 if (cVal != null && m.better) {
-                  if (m.better === 'higher') color = val > cVal ? 'var(--success)' : val < cVal ? 'var(--error)' : 'var(--text)';
-                  else color = val < cVal ? 'var(--success)' : val > cVal ? 'var(--error)' : 'var(--text)';
+                  if (m.better === 'higher') color = val > cVal ? 'var(--accent)' : val < cVal ? 'var(--danger)' : 'var(--text)';
+                  else color = val < cVal ? 'var(--accent)' : val > cVal ? 'var(--danger)' : 'var(--text)';
                 }
                 return (
                   <div key={m.key} style={{ padding: 8, background: 'var(--bg-3)', borderRadius: 6 }}>
                     <div className="muted small">{m.label}</div>
                     <div style={{ fontWeight: 800, fontSize: 18, color }}>{fmt(val)}</div>
-                    {cVal != null && <div className="muted small" style={{ color: 'var(--text-2)' }}>{fmt(cVal)}</div>}
+                    {cVal != null && <div className="muted small" style={{ color: 'var(--muted)' }}>{fmt(cVal)}</div>}
                   </div>
                 );
               })}
@@ -140,6 +141,7 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
 
           <ClassXpSection player={player} settings={settings} />
           <CoopStatsSection players={players} />
+          <DartliteStatsSection players={players} />
 
           {playerGames.length > 0 && (
             <>
@@ -184,8 +186,8 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
                   return (
                     <div key={m.key} style={{ display: 'contents' }}>
                       <div style={{ padding: '4px 8px' }}>{m.label}</div>
-                      <div style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, color: m.better === 'higher' ? (val > cVal ? 'var(--success)' : val < cVal ? 'var(--error)' : 'var(--text)') : m.better === 'lower' ? (val < cVal ? 'var(--success)' : val > cVal ? 'var(--error)' : 'var(--text)') : 'var(--text)' }}>{m.format(val)}</div>
-                      <div style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, color: m.better === 'higher' ? (cVal > val ? 'var(--success)' : cVal < val ? 'var(--error)' : 'var(--text)') : m.better === 'lower' ? (cVal < val ? 'var(--success)' : cVal > val ? 'var(--error)' : 'var(--text)') : 'var(--text)' }}>{m.format(cVal)}</div>
+                      <div style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, color: m.better === 'higher' ? (val > cVal ? 'var(--accent)' : val < cVal ? 'var(--danger)' : 'var(--text)') : m.better === 'lower' ? (val < cVal ? 'var(--accent)' : val > cVal ? 'var(--danger)' : 'var(--text)') : 'var(--text)' }}>{m.format(val)}</div>
+                      <div style={{ padding: '4px 8px', textAlign: 'center', fontWeight: 700, color: m.better === 'higher' ? (cVal > val ? 'var(--accent)' : cVal < val ? 'var(--danger)' : 'var(--text)') : m.better === 'lower' ? (cVal < val ? 'var(--accent)' : cVal > val ? 'var(--danger)' : 'var(--text)') : 'var(--text)' }}>{m.format(cVal)}</div>
                     </div>
                   );
                 })}
@@ -198,8 +200,8 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
                   <h4 style={{ marginBottom: 6 }}>Head-to-head</h4>
                   <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                     <div><span className="muted">Games: </span><b>{h2h.games}</b></div>
-                    <div><span className="muted">{player.name} wins: </span><b style={{ color: 'var(--success)' }}>{h2h.gamesWon}</b></div>
-                    <div><span className="muted">{comparePlayer!.name} wins: </span><b style={{ color: 'var(--success)' }}>{h2h.gamesTied}</b></div>
+                    <div><span className="muted">{player.name} wins: </span><b style={{ color: 'var(--accent)' }}>{h2h.gamesWon}</b></div>
+                    <div><span className="muted">{comparePlayer!.name} wins: </span><b style={{ color: 'var(--accent)' }}>{h2h.gamesTied}</b></div>
                     <div><span className="muted">Ties: </span><b>{h2h.gamesTied}</b></div>
                   </div>
                 </div>
@@ -249,25 +251,85 @@ function ClassXpSection({ player, settings }: { player: Player; settings: Settin
 
 // ── Coop Campaign stats section ───────────────────────────────────────
 
-function CoopStatsSection({ players: _players }: { players: Player[] }) {
-  const dartliteStats = loadDartliteGlobalStats();
+function CoopStatsSection({ players }: { players: Player[] }) {
+  const campaignKills = players.reduce((a, p) => a + ((p as any).campaignKills || 0), 0);
+  const levelsCleared = players.reduce((a, p) => a + (p.campaignProgress?.highest_level_beaten || 0), 0);
+
   return (
     <div className="card" style={{ marginTop: 12 }}>
-      <h3 style={{ marginBottom: 8 }}>🎮 Co-op Campaign</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
-        <div style={{ padding: 8, background: 'var(--bg-3)', borderRadius: 6 }}>
-          <div className="muted small">Levels cleared</div>
-          <div style={{ fontWeight: 800, fontSize: 18 }}>{dartliteStats?.totalBattles || 0}</div>
+      <h3 style={{ marginBottom: 8 }}>⚔️ Co-op Campaign</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
+        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{campaignKills}</div>
+          <div className="muted small">Campaign Kills</div>
         </div>
-        <div style={{ padding: 8, background: 'var(--bg-3)', borderRadius: 6 }}>
-          <div className="muted small">Bosses slain</div>
-          <div style={{ fontWeight: 800, fontSize: 18 }}>{dartliteStats?.totalBosses || 0}</div>
-        </div>
-        <div style={{ padding: 8, background: 'var(--bg-3)', borderRadius: 6 }}>
-          <div className="muted small">XP gained</div>
-          <div style={{ fontWeight: 800, fontSize: 18 }}>{dartliteStats?.totalXp || 0}</div>
+        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{levelsCleared}</div>
+          <div className="muted small">Levels Cleared</div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function DartliteStatsSection({ players }: { players: Player[] }) {
+  const g = loadDartliteGlobalStats();
+  const totalSeen = players.reduce((a, p) => a + (p.dartliteStats?.seenTrinkets.length || 0), 0);
+  const uniqueSeen = new Set(players.flatMap(p => p.dartliteStats?.seenTrinkets || [])).size;
+
+  return (
+    <div className="card" style={{ marginTop: 12 }}>
+      <h3 style={{ marginBottom: 8 }}>🎲 Dartlite</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
+        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{g.totalKills}</div>
+          <div className="muted small">Total Kills</div>
+        </div>
+        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{g.totalBattles}</div>
+          <div className="muted small">Battles Won</div>
+        </div>
+        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{g.totalMiniBosses}</div>
+          <div className="muted small">Mini-Bosses</div>
+        </div>
+        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{g.totalBosses}</div>
+          <div className="muted small">Bosses</div>
+        </div>
+        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{g.bestRound}</div>
+          <div className="muted small">Best Round</div>
+        </div>
+        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{g.totalRuns}</div>
+          <div className="muted small">Runs</div>
+        </div>
+        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{g.totalXp}</div>
+          <div className="muted small">XP Gained</div>
+        </div>
+        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>{uniqueSeen}/{ALL_TRINKET_IDS.length}</div>
+          <div className="muted small">Trinkets Seen</div>
+        </div>
+      </div>
+      {uniqueSeen > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div className="muted small" style={{ fontWeight: 700, marginBottom: 6 }}>Discovered Trinkets</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {ALL_TRINKET_IDS.filter(id => players.some(p => p.dartliteStats?.seenTrinkets.includes(id))).map(id => {
+              const t = getTrinket(id);
+              return (
+                <span key={id} title={t.desc} className="pill" style={{ fontSize: 11, background: 'color-mix(in srgb,#7c3aed 18%,var(--bg-3))', color: '#c4b5fd', borderColor: 'transparent' }}>
+                  {t.icon} {t.name}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      <div className="muted small" style={{ marginTop: 8 }}>Total trinket discoveries across all players: {totalSeen}</div>
     </div>
   );
 }
