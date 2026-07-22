@@ -387,9 +387,13 @@ export interface CoopPassiveDef {
 // class selection and passive equip state only.
 export interface PlayerCoopProgress {
   classId: CoopClassId | null;          // currently selected class
-  xp?: number;                          // DEPRECATED — kept for migration; use Player.xp
+  xp?: number;                          // DEPRECATED — kept for migration; use classXp
   unlockedPassives: CoopPassiveId[];   // passives unlocked (incl. starter)
   equippedPassives: CoopPassiveId[];   // passives currently equipped (active)
+  // Per-class XP tracking. Each class maintains its own XP and level.
+  // Migrated from the unified Player.xp system so switching classes
+  // preserves each class's progression independently.
+  classXp?: Record<string, number>;     // { warrior: 150, priest: 80, rogue: 0 }
 }
 
 // Per-player Co-op Campaign progress. Stored on the Player object as
