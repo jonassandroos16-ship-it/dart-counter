@@ -1,4 +1,4 @@
-import type { Game, GamePlayer, GameRecord, Player, Settings, Visit } from './types';
+import type { Game, GamePlayer, GameRecord, Player, Settings, Visit, ClassAttributes, PlayerAttributes } from './types';
 import { MODES, CHECKOUTS, ATC_TARGETS, atcLabel, defaultSettings } from './constants';
 import { uid, todayKey } from './store';
 import { POWER_UPS } from './powerups';
@@ -16,8 +16,6 @@ export function createGame(modeKey: string, playerIds: string[], players: Player
       gp.powerUpUsed = false;
       gp.powerUpUses = 0;
       gp.powerUpId = src.powerUps?.active ?? null;
-      // Some power-ups start a match partially charged (configured in
-      // settings). Surge is the canonical example — an early-game boost.
       const s = settings as Settings | null;
       const startMap = (s && s.powerUpScaling && s.powerUpScaling.startingCharge) || {};
       const startCharge = startMap[gp.powerUpId || ''] || 0;
@@ -31,17 +29,15 @@ export function createGame(modeKey: string, playerIds: string[], players: Player
     }
     if (modeKey === 'battle') {
       const s = settings as Settings | null;
-      const attrs = src.attributes || defaultAttributes(s || defaultSettings());
-      const cfg = s ? s.powerUpScaling : defaultSettings().powerUpScaling;
-      // Fallbacks for missing scaling fields (e.g. older saves that predate
-      // `healthMax`/`battleMinDamage`). Without these, `Math.min(undefined, x)`
-      // produces NaN and corrupts battle HP.
-      const healthMax = Number.isFinite(cfg.healthMax) ? cfg.healthMax : Number.MAX_SAFE_INTEGER;
-      const armorMax = Number.isFinite(cfg.armorMax) ? cfg.armorMax : Number.MAX_SAFE_INTEGER;
-      const powerMax = Number.isFinite(cfg.powerMax) ? cfg.powerMax : Number.MAX_SAFE_INTEGER;
-      const startHealth = Number.isFinite(cfg.attributeStartHealth) ? cfg.attributeStartHealth : 0;
-      const startArmor = Number.isFinite(cfg.attributeStartArmor) ? cfg.attributeStartArmor : 0;
-      const startPower = Number.isFinite(cfg.attributeStartPower) ? cfg.attributeStartPower : 0;
+      const ss = s || defaultSettings();
+      const attrs = effectiveAttributes(src, ss);
+      const cid = src.coopProgress?.classId;
+      const healthMax = classHealthMax(cid, ss);
+      const armorMax = classArmorMax(cid, ss);
+      const powerMax = classPowerMax(cid, ss);
+      const startHealth = classStartHealth(cid, ss);
+      const startArmor = classStartArmor(cid, ss);
+      const startPower = classStartPower(cid, ss);
       const safeHealth = Number.isFinite(attrs.health) ? attrs.health : startHealth;
       const safeArmor = Number.isFinite(attrs.armor) ? attrs.armor : startArmor;
       const safePower = Number.isFinite(attrs.power) ? attrs.power : startPower;
@@ -119,10 +115,6 @@ export function checkoutHint(remaining: number | null, doubleOut: boolean, pract
     if (remaining <= 20) return `Checkout: S${remaining}`;
     if (remaining === 25) return 'Checkout: 25 (outer bull)';
     if (remaining === 50) return 'Checkout: Bull';
-    // Straight-out: any darts summing to `remaining` finish the leg. Suggest
-    // two single segments (1-20) that add up when possible; otherwise fall
-    // back to a generic message so we never reference impossible segments
-    // (e.g. S31) or darts that would bust (e.g. D16 on 31).
     if (remaining <= 40) {
       const first = Math.min(20, remaining - 1);
       const rest = remaining - first;
@@ -169,7 +161,6 @@ export function levelFromXP(totalXP: number, settings: Settings) {
 
 export function getPlayerXP(player: Player | undefined) {
   if (!player) return { xp: 0, level: 1, unlockedTitles: [] as string[], selectedTitle: null as string | null, unlockedBadges: [] as string[], badgeCounts: {} as Record<string, number>, selectedBadge: null as string | null, showBadgeContext: false };
-  // Use class-specific XP if available, fall back to legacy player.xp for migration
   const classId = player.coopProgress?.classId;
   const classXp = classId ? (player.coopProgress?.classXp?.[classId] ?? 0) : 0;
   const xp = classXp || player.xp || 0;
@@ -216,89 +207,73 @@ export function totalPowerUpPointsForLevel(level: number, settings: Settings): n
 }
 
 export function reconcilePlayerPoints(player: Player, settings: Settings): Player {
-  // Derive level from class-specific XP so the reconciler never relies on a
-  // stale cached `player.level`. Uses the currently selected class's XP.
-  const classId = player.coopProgress?.classId;
-  const classXp = classId ? (player.coopProgress?.classXp?.[classId] ?? 0) : 0;
-  const level = levelFromXP(classXp || player.xp || 0, settings).level;
+  let p = ensureClassAttributes(player, settings);
+  const classId = p.coopProgress?.classId || 'warrior';
+  const classXp = p.coopProgress?.classXp?.[classId] ?? 0;
+  const level = levelFromXP(classXp || p.xp || 0, settings).level;
   const cfg = settings.powerUpScaling;
-  const attrs = player.attributes || defaultAttributes(settings);
-  const pwr = player.powerUps || defaultPowerUps(settings);
-  const devBonus = player.developerMode ? 100 : 0;
+  const pwr = p.powerUps || defaultPowerUps(settings);
+  const devBonus = p.developerMode ? 100 : 0;
 
-  const attrTotal = totalAttributePointsForLevel(level, settings) + devBonus;
-
-  // Normalize each attribute: NaN/non-finite → start value; otherwise keep the
-  // stored value (we'll recompute spent points from the normalized value below).
-  const startHealth = numOr(cfg.attributeStartHealth, 0);
-  const startArmor = numOr(cfg.attributeStartArmor, 0);
-  const startPower = numOr(cfg.attributeStartPower, 0);
-  const normHealth = Number.isFinite(attrs.health) ? attrs.health : startHealth;
-  const normArmor = Number.isFinite(attrs.armor) ? attrs.armor : startArmor;
-  const normPower = Number.isFinite(attrs.power) ? attrs.power : startPower;
-
-  let healthSpent = safeSpent(normHealth, startHealth, cfg.healthPerPoint);
-  let armorSpent = safeSpent(normArmor, startArmor, cfg.armorPerPoint);
-  let powerSpent = safeSpent(normPower, startPower, cfg.powerPerPoint);
-  let attrSpent = healthSpent + armorSpent + powerSpent;
-
-  // If the player spent more points than they have, clamp attribute values back
-  // to what their available points actually allow. We reduce overspend in
-  // reverse order (power → armor → health) so health is the last to be cut,
-  // matching the order players typically invest in.
-  let nextHealth = normHealth;
-  let nextArmor = normArmor;
-  let nextPower = normPower;
-  if (attrSpent > attrTotal) {
-    const overflow = attrSpent - attrTotal;
-    // Cut power first.
-    const cutPower = Math.min(powerSpent, overflow);
-    if (cutPower > 0) {
-      powerSpent -= cutPower;
-      nextPower = startPower + powerSpent * cfg.powerPerPoint;
+  const classAttrs = { ...(p.classAttributes || {}) };
+  let classChanged = false;
+  for (const cls of COOP_CLASSES) {
+    const ca = classAttrs[cls.id] || defaultClassAttributes(cls.id, settings);
+    const cStartH = classStartHealth(cls.id, settings);
+    const cStartA = classStartArmor(cls.id, settings);
+    const cStartP = classStartPower(cls.id, settings);
+    const cHMax = classHealthMax(cls.id, settings);
+    const cAMax = classArmorMax(cls.id, settings);
+    const cPwMax = classPowerMax(cls.id, settings);
+    const clsLevel = cls.id === classId ? level : levelFromXP(p.coopProgress?.classXp?.[cls.id] ?? 0, settings).level;
+    const clsTotal = totalAttributePointsForLevel(clsLevel, settings) + devBonus;
+    const normH = Number.isFinite(ca.health) ? ca.health : cStartH;
+    const normA = Number.isFinite(ca.armor) ? ca.armor : cStartA;
+    const normP = Number.isFinite(ca.power) ? ca.power : cStartP;
+    let hSpent = safeSpent(normH, cStartH, cfg.healthPerPoint);
+    let aSpent = safeSpent(normA, cStartA, cfg.armorPerPoint);
+    let pSpent = safeSpent(normP, cStartP, cfg.powerPerPoint);
+    let spent = hSpent + aSpent + pSpent;
+    let nH = normH, nA = normA, nP = normP;
+    if (spent > clsTotal) {
+      const overflow = spent - clsTotal;
+      const cutP = Math.min(pSpent, overflow);
+      if (cutP > 0) { pSpent -= cutP; nP = cStartP + pSpent * cfg.powerPerPoint; }
+      const remP = overflow - cutP;
+      const cutA = Math.min(aSpent, remP);
+      if (cutA > 0) { aSpent -= cutA; nA = cStartA + aSpent * cfg.armorPerPoint; }
+      const remA = remP - cutA;
+      const cutH = Math.min(hSpent, remA);
+      if (cutH > 0) { hSpent -= cutH; nH = cStartH + hSpent * cfg.healthPerPoint; }
+      spent = hSpent + aSpent + pSpent;
     }
-    const remainingAfterPower = overflow - cutPower;
-    const cutArmor = Math.min(armorSpent, remainingAfterPower);
-    if (cutArmor > 0) {
-      armorSpent -= cutArmor;
-      nextArmor = startArmor + armorSpent * cfg.armorPerPoint;
+    const avail = Math.max(0, clsTotal - spent);
+    nH = Math.min(cHMax, nH);
+    nA = Math.min(cAMax, nA);
+    nP = Math.min(cPwMax, nP);
+    if (ca.health !== nH || ca.armor !== nA || ca.power !== nP || ca.pointsAvailable !== avail) {
+      classAttrs[cls.id] = { health: nH, armor: nA, power: nP, pointsAvailable: avail };
+      classChanged = true;
     }
-    const remainingAfterArmor = remainingAfterPower - cutArmor;
-    const cutHealth = Math.min(healthSpent, remainingAfterArmor);
-    if (cutHealth > 0) {
-      healthSpent -= cutHealth;
-      nextHealth = startHealth + healthSpent * cfg.healthPerPoint;
-    }
-    attrSpent = healthSpent + armorSpent + powerSpent;
   }
 
-  const attrAvail = Math.max(0, attrTotal - attrSpent);
-
+  const activeAttrs = classAttrs[classId] || defaultClassAttributes(classId, settings);
+  const nextAttrs = { ...activeAttrs };
   const pwrTotal = totalPowerUpPointsForLevel(level, settings) + devBonus;
   const pwrSpent = (pwr.unlocked || []).length;
   const pwrAvail = Math.max(0, pwrTotal - pwrSpent);
-
-  const nextAttrs = {
-    ...attrs,
-    health: nextHealth,
-    armor: nextArmor,
-    power: nextPower,
-    pointsAvailable: attrAvail,
-  };
   const nextPwr = { ...pwr, pointsAvailable: pwrAvail };
 
-  const changed =
-    attrs.pointsAvailable !== attrAvail ||
-    pwr.pointsAvailable !== pwrAvail ||
-    attrs.health !== nextHealth ||
-    attrs.armor !== nextArmor ||
-    attrs.power !== nextPower;
+  const changed = classChanged ||
+    (p.attributes?.pointsAvailable !== nextAttrs.pointsAvailable) ||
+    (p.attributes?.health !== nextAttrs.health) ||
+    (p.attributes?.armor !== nextAttrs.armor) ||
+    (p.attributes?.power !== nextAttrs.power) ||
+    (pwr.pointsAvailable !== pwrAvail);
   if (!changed) return player;
-  return { ...player, attributes: nextAttrs, powerUps: nextPwr };
+  return { ...p, classAttributes: classAttrs, attributes: nextAttrs, powerUps: nextPwr };
 }
 
-// Compute how many points were spent on a single attribute, guarding against
-// zero/missing per-point values so we never produce NaN.
 function safeSpent(current: number, start: number, perPoint: number): number {
   if (!Number.isFinite(current) || !Number.isFinite(start)) return 0;
   if (!Number.isFinite(perPoint) || perPoint <= 0) return 0;
@@ -317,13 +292,6 @@ export function reconcileAllPlayersPoints(players: Player[], settings: Settings)
   return { players: next, changed };
 }
 
-// Per-dart battle damage. Each dart is calculated independently so armor
-// applies to every dart (countering multi-hit builds) and power boosts every
-// successful hit. Misses deal 0 damage (power only applies on a hit). A
-// successful hit always deals at least `battleMinDamage` (default 1) so armor
-// can never fully neutralize a turn.
-//
-//   damage(dart) = max(0, dartValue + power) − armor   →   clamp to [minDamage, ∞) on hit, 0 on miss
 export function computeBattleDartDamage(dartValue: number, attackerPower: number, targetArmor: number, settings: Settings): number {
   const cfg = settings.powerUpScaling;
   const powerMax = Number.isFinite(cfg.powerMax) ? cfg.powerMax : Number.MAX_SAFE_INTEGER;
@@ -331,19 +299,15 @@ export function computeBattleDartDamage(dartValue: number, attackerPower: number
   const minDamage = Number.isFinite(cfg.battleMinDamage) && cfg.battleMinDamage > 0 ? cfg.battleMinDamage : 1;
   const power = Math.min(powerMax, Math.max(0, attackerPower));
   const armor = Math.min(armorMax, Math.max(0, targetArmor));
-  if (dartValue <= 0) return 0; // miss — power only applies on successful hits
+  if (dartValue <= 0) return 0;
   const raw = Math.max(0, dartValue + power) - armor;
   return Math.max(minDamage, raw);
 }
 
-// Convenience: total damage across a visit's darts.
 export function computeBattleVisitDamage(dartValues: number[], attackerPower: number, targetArmor: number, settings: Settings): number {
   return dartValues.reduce((sum, v) => sum + computeBattleDartDamage(v, attackerPower, targetArmor, settings), 0);
 }
 
-// Legacy single-number API kept for any external callers; computes per-dart
-// damage from a flat visit score treated as a single hit. Prefer
-// computeBattleDartDamage / computeBattleVisitDamage for new code.
 export function computeBattleDamage(visitScore: number, attackerPower: number, targetArmor: number, settings: Settings): number {
   return computeBattleDartDamage(visitScore, attackerPower, targetArmor, settings);
 }
@@ -362,10 +326,7 @@ export function allVisitsFor(playerId: string, games: GameRecord[]): any[] {
   return out;
 }
 
-export interface DateFilter {
-  start: string;
-  end: string;
-}
+export interface DateFilter { start: string; end: string; }
 
 export function filterGamesByDate(games: GameRecord[], filter: DateFilter | null): GameRecord[] {
   if (!filter) return games;
@@ -405,7 +366,6 @@ export function playerStats(playerId: string, games: GameRecord[]) {
   })();
   const winRate = competitiveGames.length ? gamesWon / competitiveGames.length * 100 : 0;
   const tieRate = competitiveGames.length ? gamesTied / competitiveGames.length * 100 : 0;
-
   let dartsThrown = 0;
   const finishDartsList: number[] = [];
   playerGames.forEach(g => {
@@ -424,17 +384,12 @@ export function playerStats(playerId: string, games: GameRecord[]) {
   const finishMin = finishDartsList.length ? Math.min(...finishDartsList) : 0;
   const finishMax = finishDartsList.length ? Math.max(...finishDartsList) : 0;
   const finishAvg = finishDartsList.length ? finishDartsList.reduce((a, b) => a + b, 0) / finishDartsList.length : 0;
-
   const battleGames = playerGames.filter(g => g.mode === 'battle');
   const kills = battleGames.reduce((a, g) => a + ((g.players.find(p => p.id === playerId)?.kills || []).length), 0);
   const defeatedCount = battleGames.filter(g => g.players.find(p => p.id === playerId)?.defeated).length;
-
   return { games: playerGames.length, competitiveGames: competitiveGames.length, gamesWon, gamesTied, legsWon, winRate, tieRate, avg: totalDarts ? totalScore / totalDarts * 3 : 0, first9, highScore, highCheckout, n180, n140, tons, visits, dartsThrown, finishMin, finishMax, finishAvg, legsFinished: finishDartsList.length, kills, defeatedCount, battleGames: battleGames.length };
 }
 
-// Head-to-head win/tie rates: only games where both `playerId` and `opponentId`
-// played each other. Lets the stats screen compare player 1 specifically against
-// player 2 (and 3) instead of blending in games against everyone else.
 export function headToHeadStats(playerId: string, opponentId: string, games: GameRecord[]) {
   const shared = games.filter(g =>
     g.players.length >= 2 &&
@@ -478,6 +433,103 @@ import type { CustomTitle } from './types';
 import { COOP_CLASSES, classLevelFromXp } from './campaign/engine/classes';
 import type { CoopClassId } from './campaign/types';
 
+export function classStartHealth(classId: string | null | undefined, settings: Settings): number {
+  if (classId && settings.powerUpScaling.classStartHealth) {
+    const v = settings.powerUpScaling.classStartHealth[classId];
+    if (Number.isFinite(v)) return v;
+  }
+  return numOr(settings.powerUpScaling.attributeStartHealth, 0);
+}
+
+export function classStartArmor(classId: string | null | undefined, settings: Settings): number {
+  if (classId && settings.powerUpScaling.classStartArmor) {
+    const v = settings.powerUpScaling.classStartArmor[classId];
+    if (Number.isFinite(v)) return v;
+  }
+  return numOr(settings.powerUpScaling.attributeStartArmor, 0);
+}
+
+export function classStartPower(classId: string | null | undefined, settings: Settings): number {
+  if (classId && settings.powerUpScaling.classStartPower) {
+    const v = settings.powerUpScaling.classStartPower[classId];
+    if (Number.isFinite(v)) return v;
+  }
+  return numOr(settings.powerUpScaling.attributeStartPower, 0);
+}
+
+export function classHealthMax(classId: string | null | undefined, settings: Settings): number {
+  if (classId && settings.powerUpScaling.classHealthMax) {
+    const v = settings.powerUpScaling.classHealthMax[classId];
+    if (Number.isFinite(v)) return v;
+  }
+  return Number.isFinite(settings.powerUpScaling.healthMax) ? settings.powerUpScaling.healthMax : Number.MAX_SAFE_INTEGER;
+}
+
+export function classArmorMax(classId: string | null | undefined, settings: Settings): number {
+  if (classId && settings.powerUpScaling.classArmorMax) {
+    const v = settings.powerUpScaling.classArmorMax[classId];
+    if (Number.isFinite(v)) return v;
+  }
+  return Number.isFinite(settings.powerUpScaling.armorMax) ? settings.powerUpScaling.armorMax : Number.MAX_SAFE_INTEGER;
+}
+
+export function classPowerMax(classId: string | null | undefined, settings: Settings): number {
+  if (classId && settings.powerUpScaling.classPowerMax) {
+    const v = settings.powerUpScaling.classPowerMax[classId];
+    if (Number.isFinite(v)) return v;
+  }
+  return Number.isFinite(settings.powerUpScaling.powerMax) ? settings.powerUpScaling.powerMax : Number.MAX_SAFE_INTEGER;
+}
+
+export function defaultClassAttributes(classId: string | null | undefined, settings: Settings): ClassAttributes {
+  return {
+    health: classStartHealth(classId, settings),
+    armor: classStartArmor(classId, settings),
+    power: classStartPower(classId, settings),
+    pointsAvailable: 0,
+  };
+}
+
+export function effectiveAttributes(player: Player, settings: Settings): PlayerAttributes {
+  const classId = player.coopProgress?.classId;
+  if (classId && player.classAttributes && player.classAttributes[classId]) {
+    const ca = player.classAttributes[classId];
+    return {
+      health: ca.health,
+      armor: ca.armor,
+      power: ca.power,
+      pointsAvailable: ca.pointsAvailable,
+    };
+  }
+  return player.attributes || defaultAttributes(settings);
+}
+
+export function ensureClassAttributes(player: Player, settings: Settings): Player {
+  const classId = player.coopProgress?.classId || 'warrior';
+  const existing = player.classAttributes || {};
+  const next = { ...existing };
+  for (const cls of COOP_CLASSES) {
+    if (!next[cls.id]) {
+      if (cls.id === classId && player.attributes) {
+        next[cls.id] = {
+          health: Number.isFinite(player.attributes.health) ? player.attributes.health : classStartHealth(cls.id, settings),
+          armor: Number.isFinite(player.attributes.armor) ? player.attributes.armor : classStartArmor(cls.id, settings),
+          power: Number.isFinite(player.attributes.power) ? player.attributes.power : classStartPower(cls.id, settings),
+          pointsAvailable: Number.isFinite(player.attributes.pointsAvailable) ? player.attributes.pointsAvailable : 0,
+        };
+      } else {
+        next[cls.id] = defaultClassAttributes(cls.id, settings);
+      }
+    }
+  }
+  const activeAttrs = next[classId] || defaultClassAttributes(classId, settings);
+  return {
+    ...player,
+    classAttributes: next,
+    attributes: { ...activeAttrs },
+  };
+}
+
 function buildClassLevelsForPlayer(player: Player): Record<string, number> {
   const prog = player.coopProgress;
   if (!prog) return {};
@@ -504,19 +556,15 @@ export function computeUnlockedTitlesForPlayer(
     if (!pl) return;
     pl.visits.forEach(v => lifetimeVisits.push({ ...v, gameId: g.id, gameDate: g.date, practice: g.practice }));
   });
-
   const titles = [
     ...BUILTIN_TITLES,
     ...customTitles.map(t => ({ ...t, custom: true, check: buildTitleCheck(t) as any })),
   ];
   const unlocked = new Set<string>();
-
   const ctx: TitleCtx = { playerId, games: playerGames, gamesPlayed, gamesWon, lifetimeVisits, campaignProgress, classLevels };
-
   titles.forEach(t => {
     try { if (t.check(lifetimeVisits, [], null, ctx)) unlocked.add(t.id); } catch { /* ignore */ }
   });
-
   playerGames.forEach(g => {
     const pl = g.players.find(p => p.id === playerId);
     if (!pl) return;
@@ -527,7 +575,6 @@ export function computeUnlockedTitlesForPlayer(
       try { if (t.check(lifetimeVisits, gameVisits, gameLike, ctx)) unlocked.add(t.id); } catch { /* ignore */ }
     });
   });
-
   return Array.from(unlocked);
 }
 
