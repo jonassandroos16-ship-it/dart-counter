@@ -43,18 +43,18 @@ Live demo: https://jonassandroos16-ship-it.github.io/dart-counter/
 - **Team Mode** — Any of the above can be played as team vs team (2–4 teams)
 - **Card Mode (deck-builder)** — Players build a deck from collected cards (damage / spell / utility) and play them during a match; cards are drawn into a hand each turn, played to a used pile, and recycled from the graveyard when the deck runs out
 - **Co-op Campaign** — A JSON-driven PvE campaign. The party fights AI enemies with shields, armor, and accuracy. Party HP is recomputed per level from the combined `health` attribute of the selected players. Each level unlocks a coop power-up reward. A level is "beaten for everyone" only when every party member has cleared it (per-player progress).
-- **Dartlite (rogue-lite)** — Endless coop run through rounds of enemies from the campaign enemy database. Every 5th round is a mini-boss; every 10th is a boss. After each round the party chooses one of three boons: heal 20%, gain a stat, or get a random trinket. Trinkets and run-time stats do NOT carry over to new games. The run ends when the party dies.
+- **Dartlite (rogue-lite)** — Endless coop run through rounds of enemies from the campaign enemy database. Every 5th round is a mini-boss; every 10th is a boss. Enemy HP scales +10% per round (capped at +400%). After each round the party chooses one of three boons: heal 20%, gain a stat, or get a random trinket. Trinkets and run-time stats do NOT carry over to new games. The run ends when the party dies.
 
 ### Progression
 - **XP and leveling** — Earn XP from wins, visits, checkouts, and darts thrown
 - **70+ built-in titles** — From "First Win" to "Dart Legend", with custom title creation
 - **30+ badges** — In-game medals (Ton, Hat Trick, Slayer), post-game comparative awards (Top Scorer, Clutch, Comeback Kid), a dedicated power-up badge pool (Fully Charged, Unleashed, Wall Builder, Surge Rider, Thief, Cold Snap, Lucky Hand, Saved, Quad Squad), and coop-only badges
-- **Player attributes** — Health (base 100, cap 500), armor (flat per dart, cap 25), power (flat per dart, cap 30) used in Battle and Co-op modes. Attribute points are awarded on level-up and reconciled when scaling settings or developer mode change.
+- **Player attributes** — Health (base 300, cap 1000), armor (flat per dart, cap 25), power (flat per dart, cap 30) used in Battle and Co-op modes. Attribute points are awarded on level-up (5 per level) and reconciled when scaling settings or developer mode change.
 - **Competitive power-ups** — 7 power-ups (Fourth Dart, Blocker, Reroll, Surge, Steal, Freeze, Lucky Miss) that charge from doubles/triples/bullseyes
-- **Co-op classes & passives** — 3 classes (Warrior, Priest, Rogue), each with 5 tiers of 3 passives (15 per class, 45 total). Passives grant party-wide stat bonuses while the player is in the party. A player equips one passive at a time per class.
+- **Co-op classes & passives** — 3 classes (Warrior, Priest, Rogue), each with 5 tiers of 3 passives (15 per class, 45 total). Passives grant party-wide stat bonuses while the player is in the party. A player equips one passive at a time per class. Passive tiers unlock at player levels 1, 2, 4, 6, and 8, giving a smooth progression curve across all 10 levels.
 - **Co-op power-ups** — A separate pool of coop-only power-ups (starter and advanced tiers) unlocked by clearing campaign levels. Each player has their own charge orb during coop battles.
 - **Trinkets (Dartlite)** — 20 trinkets in 4 tiers. A run starts with 5 in the pool; new trinkets are added after each mini-boss (tier 2) and boss (tiers 3 & 4), shown via a popup. Trinkets last only for the run.
-- **Cards (deck-builder)** — Damage, spell, and utility cards with class restrictions (warrior/priest/rogue/any), rarity (common/rare/epic), and upgrade levels. Cards are gained on level-up (based on class) and as Dartlite rewards. Each card can be upgraded once.
+- **Cards (deck-builder)** — Damage, spell, and utility cards with class restrictions (warrior/priest/rogue/any), rarity (common/rare/epic), and upgrade levels. Cards are gained on level-up (based on class) and as Dartlite rewards. Each card can be upgraded up to 5 times, with each upgrade increasing damage or magnitude by 30%.
 - **Showdown backgrounds** — 10 selectable gradient backgrounds for the match intro animation
 - **Showdown stat titles** — Per-player highlight titles in the showdown intro (Top Scorer, Ton Master, Maximum King, Checkout Master, Winner, Fast Starter, Sharpshooter, The Finisher, Veteran) — each fires only when exactly one player leads that metric, plus a Champion crown for the highest-level player
 
@@ -350,7 +350,7 @@ Dartlite is an endless coop run using the campaign's enemy database and combat e
 
 Card mode lives in `cards/` and `play/boards/CardBoard.tsx`.
 
-- **Cards** — `cards/definitions.ts` defines `CARD_DEFS` with three types: damage (act as dart throws), spell (temporary buffs/debuffs), and utility (draw, reroll). Each card has a `mode` (competitive/coop/both), a `class` restriction (warrior/priest/rogue/any), a `rarity`, and a `levelRequired`. Cards can be upgraded once.
+- **Cards** — `cards/definitions.ts` defines `CARD_DEFS` with three types: damage (act as dart throws), spell (temporary buffs/debuffs), and utility (draw, reroll). Each card has a `mode` (competitive/coop/both), a `class` restriction (warrior/priest/rogue/any), a `rarity`, and a `levelRequired`. Cards can be upgraded up to 5 times, with each upgrade increasing damage or magnitude by 30%.
 - **Deck** — `cards/deck.ts` manages the player's collection. The deck-builder flow: collection → draw deck → hand (5 cards) → used pile (max 3 plays/turn) → graveyard. When the deck runs out, the graveyard is shuffled back in.
 - **Rewards** — Cards are gained on level-up (based on class, via `cardsForLevelUp`) and as Dartlite rewards (via `randomCardReward` and `randomCardUpgradeReward`).
 - **Management** — The `players/DeckTab.tsx` tab lets players view and manage their card collection and upgrades.
@@ -358,7 +358,7 @@ Card mode lives in `cards/` and `play/boards/CardBoard.tsx`.
 ### Battle Mode
 
 Battle mode uses player attributes (Health, Armor, Power) for HP-based combat:
-- Each player starts with HP equal to their Health attribute (base 300, cap 500).
+- Each player starts with HP equal to their Health attribute (base 300, cap 1000).
 - **Per-dart damage formula**: `(dartValue + power) − armor`, with a minimum of 1 damage on any successful hit.
 - Armor is a flat reduction applied to EVERY dart in a visit (base 0, cap 25).
 - Power is a flat bonus added to EVERY dart that hits (base 0, cap 30).
