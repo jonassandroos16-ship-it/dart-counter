@@ -475,12 +475,25 @@ export { ATC_TARGETS, atcLabel };
 
 import { BUILTIN_TITLES, buildTitleCheck, type TitleCtx } from './constants';
 import type { CustomTitle } from './types';
+import { COOP_CLASSES, classLevelFromXp } from './campaign/engine/classes';
+import type { CoopClassId } from './campaign/types';
+
+function buildClassLevelsForPlayer(player: Player): Record<string, number> {
+  const prog = player.coopProgress;
+  if (!prog) return {};
+  const out: Record<string, number> = {};
+  for (const cls of COOP_CLASSES) {
+    out[cls.id] = classLevelFromXp(prog, cls.id as CoopClassId, defaultSettings()).level;
+  }
+  return out;
+}
 
 export function computeUnlockedTitlesForPlayer(
   playerId: string,
   games: GameRecord[],
   customTitles: CustomTitle[] = [],
   campaignProgress: { highest_level_beaten: number } | null = null,
+  classLevels: Record<string, number> = {},
 ): string[] {
   const playerGames = games.filter(g => g.players.some(p => p.id === playerId));
   const gamesWon = playerGames.filter(g => g.players.length >= 2 && g.winner === playerId).length;
@@ -498,7 +511,7 @@ export function computeUnlockedTitlesForPlayer(
   ];
   const unlocked = new Set<string>();
 
-  const ctx: TitleCtx = { playerId, games: playerGames, gamesPlayed, gamesWon, lifetimeVisits, campaignProgress };
+  const ctx: TitleCtx = { playerId, games: playerGames, gamesPlayed, gamesWon, lifetimeVisits, campaignProgress, classLevels };
 
   titles.forEach(t => {
     try { if (t.check(lifetimeVisits, [], null, ctx)) unlocked.add(t.id); } catch { /* ignore */ }
@@ -525,7 +538,8 @@ export function retroUnlockPlayerTitles(
   campaignProgress: { highest_level_beaten: number } | null = null,
 ): Player {
   const existing = new Set(player.unlockedTitles || []);
-  const found = computeUnlockedTitlesForPlayer(player.id, games, customTitles, campaignProgress);
+  const classLevels = buildClassLevelsForPlayer(player);
+  const found = computeUnlockedTitlesForPlayer(player.id, games, customTitles, campaignProgress, classLevels);
   let changed = false;
   found.forEach(id => { if (!existing.has(id)) { existing.add(id); changed = true; } });
   return changed ? { ...player, unlockedTitles: Array.from(existing) } : player;
