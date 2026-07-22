@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Player, Settings } from './types';
 import { playerStats, levelFromXP, getPlayerXP, bucketAverages, filterGamesByDate, headToHeadStats } from './logic';
 import { LineChart, BarChart, DartboardHeatmap } from './Charts';
-import { CalendarPicker, filterForPeriod, type Period } from './CalendarPicker';
+import { CalendarPicker, filterForPeriod, describeFilter, type Period } from './CalendarPicker';
 import { loadDartliteGlobalStats } from './dartlite/stats';
 import { COOP_CLASSES, getClassXp } from './campaign/engine/classes';
 import type { CoopClassId } from './campaign/types';
@@ -67,13 +67,13 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
   const [pid, setPid] = useState<string>(players[0]?.id || '');
   const [compareId, setCompareId] = useState<string>('none');
   const [period, setPeriod] = useState<Period>('Overall');
-  const [customStart, setCustomStart] = useState<string | null>(null);
+  const [refDate, setRefDate] = useState<Date>(() => new Date());
 
   const player = players.find(p => p.id === pid) || players[0];
   const comparePlayer = compareId !== 'none' ? players.find(p => p.id === compareId) : null;
 
-  const filteredGames = useMemo(() => filterGamesByDate(games, filterForPeriod(period, customStart ? new Date(customStart) : new Date())), [games, period, customStart]);
-  void setPeriod; void setCustomStart;
+  const filter = period === 'Overall' ? null : filterForPeriod(period, refDate);
+  const filteredGames = useMemo(() => filterGamesByDate(games, filter), [games, filter]);
   const playerGames = useMemo(() => filteredGames.filter((g: any) => g.players.some((p: any) => p.id === pid)), [filteredGames, pid]);
   const compareGames = useMemo(() => comparePlayer ? filteredGames.filter((g: any) => g.players.some((p: any) => p.id === comparePlayer.id)) : [], [filteredGames, comparePlayer]);
 
@@ -88,7 +88,7 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
   if (!player) return <div style={{ padding: 20 }} className="muted">No players yet. Add one in the Players tab.</div>;
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: 20, paddingBottom: 60 }}>
+    <div className="view-scroll">
       <div className="row" style={{ gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <select value={pid} onChange={e => setPid(e.target.value)} style={{ flex: 1, minWidth: 120 }}>
           {players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -98,7 +98,20 @@ export function StatsView({ players, games, settings }: { players: Player[]; gam
           {players.filter(p => p.id !== pid).map(p => <option key={p.id} value={p.id}>vs {p.name}</option>)}
         </select>
       </div>
-      <CalendarPicker period={period as Exclude<Period, 'Overall'>} value={new Date()} onChange={() => {}} />
+      <div className="tabbar">
+        {(['Overall', 'Daily', 'Weekly', 'Monthly', 'Yearly'] as Period[]).map(t => (
+          <button key={t} className={t === period ? 'on' : ''} onClick={() => setPeriod(t)}>{t}</button>
+        ))}
+      </div>
+      {period !== 'Overall' && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div className="row between" style={{ marginBottom: 10 }}>
+            <h3 style={{ margin: 0 }}>Filter: {describeFilter(period, refDate)}</h3>
+            <button className="btn sm ghost" onClick={() => setRefDate(new Date())}>Today</button>
+          </div>
+          <CalendarPicker period={period} value={refDate} onChange={setRefDate} />
+        </div>
+      )}
 
       {stats && (
         <>
