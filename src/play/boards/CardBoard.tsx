@@ -16,6 +16,7 @@ import {
   initCardPlayState, startTurn,
   playCardFromHand, endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
   getPlayerCards, defaultPlayerCards,
+  redrawHand, recycleGraveyard,
 } from '../../cards/deck';
 
 const HIGH_SCORE_VISITS = 7;
@@ -125,18 +126,26 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         bust_protect: `🛡️ ${card.name} — Bust protection active!`,
         double_up: `🔁 ${card.name} — Opponent's double negated!`,
         extra_dart: `➕ ${card.name} — Extra throw granted!`,
-        reserve: `📥 ${card.name} — Card reserved!`,
+        redraw: `🔄 ${card.name} — Hand discarded, fresh cards drawn!`,
+        recycle: `♻️ ${card.name} — Graveyard shuffled into deck!`,
         revive: `❤️ ${card.name} — Party revived!`,
       };
       const msg = effectMsg[card.effect || ''] || `${card.name}: ${card.desc}`;
       toast(msg);
       Sound.play('powerup', {}, settings);
       // Move the card to used pile so it's consumed
-      const updated = playCardFromHand(state, handIdx);
-      if (updated) {
-        setGame({ ...game, cardState: { ...game.cardState, [p.id]: updated } });
-        force(n => n + 1);
+      let updated = playCardFromHand(state, handIdx);
+      if (!updated) return;
+
+      // Apply real deck-manipulation effects for the redesigned utility cards.
+      if (card.effect === 'redraw') {
+        updated = redrawHand(updated);
+      } else if (card.effect === 'recycle') {
+        updated = recycleGraveyard(updated);
       }
+
+      setGame({ ...game, cardState: { ...game.cardState, [p.id]: updated } });
+      force(n => n + 1);
       return;
     }
     if (game.darts.length >= MAX_PLAYS_PER_TURN) { toast(`Only ${MAX_PLAYS_PER_TURN} cards per visit`); return; }

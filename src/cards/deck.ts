@@ -16,7 +16,7 @@ import type { Player } from '../types';
 //   1 class utility
 // If no class is selected, the 'any' cards plus neutral fallbacks are used.
 const STARTER_SHARED_ATTACK = ['dmg_s20', 'dmg_d20', 'dmg_outer_bull'];
-const STARTER_SHARED_UTILITY = ['util_reroll', 'util_reserve'];
+const STARTER_SHARED_UTILITY = ['util_redraw', 'util_recycle'];
 
 const STARTER_CLASS_CARDS: Record<string, { specific: string[]; utility: string }> = {
   warrior: {
@@ -36,8 +36,8 @@ const STARTER_CLASS_CARDS: Record<string, { specific: string[]; utility: string 
 // Fallback for players without a class — extra shared cards fill the slots.
 const STARTER_NO_CLASS_FALLBACK: string[] = [
   'dmg_s20', 'dmg_d20', 'dmg_outer_bull', 'dmg_s20',
-  'util_reroll', 'util_reserve', 'util_reroll',
-  'dmg_s20', 'dmg_d20', 'util_reserve',
+  'util_redraw', 'util_recycle', 'util_redraw',
+  'dmg_s20', 'dmg_d20', 'util_recycle',
 ];
 
 export function defaultPlayerCards(classId?: string | null): PlayerCard[] {
@@ -286,5 +286,26 @@ export function endTurn(state: CardPlayState): CardPlayState {
     hand: [],
     used: [],
     graveyard: [...state.graveyard, ...state.used, ...state.hand],
+  };
+}
+
+// Redraw effect: discard the current hand to the graveyard and draw the
+// same number of fresh cards from the deck.
+export function redrawHand(state: CardPlayState): CardPlayState {
+  const count = state.hand.length;
+  const graveyard = [...state.graveyard, ...state.hand];
+  const cleared: CardPlayState = { deck: state.deck, hand: [], used: state.used, graveyard };
+  return drawCards(cleared, count);
+}
+
+// Recycle effect: shuffle the graveyard back into the deck.
+export function recycleGraveyard(state: CardPlayState): CardPlayState {
+  if (state.graveyard.length === 0) return state;
+  const recycled = shuffle(state.graveyard);
+  return {
+    deck: [...state.deck, ...recycled],
+    hand: state.hand,
+    used: state.used,
+    graveyard: [],
   };
 }

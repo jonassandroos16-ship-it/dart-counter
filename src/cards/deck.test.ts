@@ -17,8 +17,8 @@ describe('Deck Management', () => {
     expect(hasCard(cards, 'dmg_s20')).toBe(true);
     expect(hasCard(cards, 'dmg_d20')).toBe(true);
     expect(hasCard(cards, 'dmg_outer_bull')).toBe(true);
-    expect(hasCard(cards, 'util_reroll')).toBe(true);
-    expect(hasCard(cards, 'util_reserve')).toBe(true);
+    expect(hasCard(cards, 'util_redraw')).toBe(true);
+    expect(hasCard(cards, 'util_recycle')).toBe(true);
     expect(hasCard(cards, 'util_warrior_rage')).toBe(true);
   });
 

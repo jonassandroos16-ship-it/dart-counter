@@ -45,7 +45,7 @@ describe('Card Definitions', () => {
 
   it('cardDamage returns 0 for non-damage cards', () => {
     expect(cardDamage(getCard('spell_bust_protect')!)).toBe(0);
-    expect(cardDamage(getCard('util_reroll')!)).toBe(0);
+    expect(cardDamage(getCard('util_redraw')!)).toBe(0);
   });
 
   it('upgradedCardDef increases damage by 50%', () => {

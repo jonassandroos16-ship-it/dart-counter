@@ -27,8 +27,8 @@ export const CARD_DEFS: CardDef[] = [
   { id: 'dmg_outer_bull', name: 'Outer Bull', icon: '🟢', type: 'damage', mode: 'both', class: 'any', rarity: 'common', desc: 'Deal 25 damage.', base: 25, mult: 1, levelRequired: 1 },
 
   // ── Starter shared utility cards (Level 1, class 'any') ───────────
-  { id: 'util_reroll', name: 'Reroll', icon: '🎲', type: 'utility', mode: 'both', class: 'any', rarity: 'common', desc: 'Reroll your lowest dart throw this visit.', effect: 'reroll', levelRequired: 1 },
-  { id: 'util_reserve', name: 'Reserve', icon: '📥', type: 'utility', mode: 'both', class: 'any', rarity: 'common', desc: 'Reserve 1 modifier card for a future turn.', effect: 'reserve', levelRequired: 1 },
+  { id: 'util_redraw', name: 'Redraw', icon: '🔄', type: 'utility', mode: 'both', class: 'any', rarity: 'common', desc: 'Discard your hand and draw the same number of fresh cards.', effect: 'redraw', levelRequired: 1 },
+  { id: 'util_recycle', name: 'Recycle', icon: '♻️', type: 'utility', mode: 'both', class: 'any', rarity: 'common', desc: 'Shuffle your graveyard back into your deck.', effect: 'recycle', levelRequired: 1 },
 
   // ── Starter warrior cards (Level 1) ──────────────────────────────
   { id: 'dmg_warrior_slam', name: 'Mighty Slam', icon: '⚔️', type: 'damage', mode: 'both', class: 'warrior', rarity: 'common', desc: 'Deal 30 damage with brute force.', base: 30, mult: 1, levelRequired: 1 },
