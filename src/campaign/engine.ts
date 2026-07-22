@@ -22,6 +22,9 @@ export {
   addCoopXpForPlayer,
   reconcileCoopPassivesForPlayer,
   unlockedCoopPowerUps,
+  getClassXp,
+  addClassXp,
+  classLevelFromXp,
 } from './engine/classes';
 export type { PartyPassiveBonus } from './engine/classes';
 

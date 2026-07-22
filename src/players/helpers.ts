@@ -1,9 +1,14 @@
 import type { Player, Settings } from '../types';
 import { levelFromXP } from '../logic';
+import { classLevelFromXp } from '../campaign/engine/classes';
 
-// Resolve a player's effective level from XP (the source of truth) rather than
-// the cached `player.level` field, which can be stale on older saves/imports.
+// Resolve a player's effective level from their currently selected class's XP.
 export function effectiveLevel(player: Player, settings: Settings): number {
+  const classId = player.coopProgress?.classId;
+  if (classId) {
+    return classLevelFromXp(player.coopProgress, classId, settings).level;
+  }
+  // Fall back to legacy player.xp for players without a class
   return levelFromXP(player.xp ?? 0, settings).level;
 }
 

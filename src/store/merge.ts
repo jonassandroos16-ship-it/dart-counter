@@ -1,5 +1,6 @@
 import type { CustomTitle, GameRecord, Player, Settings } from '../types';
 import type { PlayerCard } from '../cards/types';
+import type { PlayerCoopProgress } from '../campaign/types';
 import { uid } from './format';
 
 function mergeCards(
@@ -28,6 +29,35 @@ function mergeCards(
     out[k] = Array.from(map.values());
   }
   return Object.keys(out).length ? out : undefined;
+}
+
+function mergeClassXp(
+  a: Record<string, number> | undefined,
+  b: Record<string, number> | undefined,
+): Record<string, number> | undefined {
+  if (!a && !b) return undefined;
+  const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+  const out: Record<string, number> = {};
+  for (const k of keys) {
+    out[k] = Math.max(a?.[k] || 0, b?.[k] || 0);
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+function mergeCoopProgress(
+  a: PlayerCoopProgress | undefined,
+  b: PlayerCoopProgress | undefined,
+): PlayerCoopProgress | undefined {
+  if (!a && !b) return undefined;
+  if (!a) return b;
+  if (!b) return a;
+  return {
+    ...a,
+    ...b,
+    classXp: mergeClassXp(a.classXp, b.classXp),
+    unlockedPassives: Array.from(new Set([...(a.unlockedPassives || []), ...(b.unlockedPassives || [])])),
+    equippedPassives: b.equippedPassives || a.equippedPassives,
+  };
 }
 
 export interface BackupShape {
@@ -68,6 +98,7 @@ function mergePlayers(existing: Player[], incoming: Player[]): Player[] {
         unlockedBadges: Array.from(new Set([...(idMatch.unlockedBadges || []), ...(p.unlockedBadges || [])])),
         badgeCounts: mergeBadgeCounts(idMatch.badgeCounts, p.badgeCounts),
         cards: mergeCards(idMatch.cards, p.cards),
+        coopProgress: mergeCoopProgress(idMatch.coopProgress, p.coopProgress),
       });
       byKey.set(matchPlayerKey(p), byId.get(p.id)!);
       continue;
@@ -84,6 +115,7 @@ function mergePlayers(existing: Player[], incoming: Player[]): Player[] {
         unlockedBadges: Array.from(new Set([...(keyMatch.unlockedBadges || []), ...(p.unlockedBadges || [])])),
         badgeCounts: mergeBadgeCounts(keyMatch.badgeCounts, p.badgeCounts),
         cards: mergeCards(keyMatch.cards, p.cards),
+        coopProgress: mergeCoopProgress(keyMatch.coopProgress, p.coopProgress),
       });
       continue;
     }

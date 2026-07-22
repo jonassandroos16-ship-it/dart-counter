@@ -1,11 +1,11 @@
 import type { Game, GamePlayer, GameRecord, Player, Settings } from '../types';
 import { BUILTIN_TITLES, buildTitleCheck, SCORE_POPUPS, MILESTONES } from '../constants';
-import { allVisitsFor, levelFromXP } from '../logic';
+import { allVisitsFor } from '../logic';
 import { Sound } from '../sound';
 import type { PopupControls } from '../Popups';
 import { computeGameBadges } from '../badges';
 import { addCard, cardsForLevelUpCompetitive, getPlayerCards, setPlayerCards } from '../cards/deck';
-import { reconcileCoopPassivesForPlayer } from '../campaign/engine/classes';
+import { reconcileCoopPassivesForPlayer, addClassXp, classLevelFromXp } from '../campaign/engine/classes';
 
 export function runMilestones(p: GamePlayer, remaining: number, visitScore: number, settings: Settings, popups: PopupControls, setPlayers: (updater: any) => void, game: Game, players: Player[], games: GameRecord[]) {
   if (settings.popups.scores) {
@@ -37,15 +37,17 @@ export function awardXP(playerId: string, amount: number, reason: string, settin
   if (amount <= 0) return;
   setPlayers((prev: Player[]) => prev.map(p => {
     if (p.id !== playerId) return p;
-    const oldLevel = p.level || 1;
-    const newXp = (p.xp || 0) + amount;
-    const li = levelFromXP(newXp, settings);
+    const classId = p.coopProgress?.classId || null;
+    const curProg = p.coopProgress;
+    const oldLevel = classLevelFromXp(curProg, classId, settings).level;
+    const updatedProg = addClassXp(curProg, classId, amount);
+    const li = classLevelFromXp(updatedProg, classId, settings);
     if (li.level > oldLevel && settings.popups.xp) { popups.setLevelUp({ level: li.level, name: p.name, xpGained: amount, reason }); Sound.play('levelup', {}, settings); }
-    let next: Player = { ...p, xp: newXp, level: li.level };
+    let next: Player = { ...p, coopProgress: updatedProg };
     if (li.level > oldLevel) {
       if (settings.gameMode === 'cards') {
         const curCards = getPlayerCards(next);
-        const newCards = cardsForLevelUpCompetitive(next.coopProgress?.classId || null, li.level, curCards);
+        const newCards = cardsForLevelUpCompetitive(classId, li.level, curCards);
         if (newCards.length > 0) {
           let updatedCards = curCards;
           for (const def of newCards) {
