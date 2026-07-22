@@ -10,12 +10,22 @@ export interface LevelUpInfo {
   newPassives: string[];
 }
 
+export interface XpAwardInfo {
+  playerId: string;
+  classId: string;
+  className: string;
+  classIcon: string;
+  xpGained: number;
+  newLevel: number;
+}
+
 export interface PostGameInfo {
   chapterId: string;
   levelId: number;
   stats: CampaignBattleState['stats'];
   rewardPowerUpId: string | null;
   coopXpGained?: number;
+  xpAwards?: XpAwardInfo[];
   levelUps?: LevelUpInfo[];
 }
 
@@ -26,7 +36,7 @@ export interface PostGameInfo {
 // below the stats. If this was the chapter's boss, the chapter outro is
 // shown as the story beat.
 export function PostGameOverlay({
-  chapter, levelName, isBoss, stats, rewardPowerUp, chapterComplete, coopXpGained, levelUps, players, onContinue,
+  chapter, levelName, isBoss, stats, rewardPowerUp, chapterComplete, coopXpGained, xpAwards, levelUps, players, onContinue,
 }: {
   chapter: CampaignChapter | null;
   levelName: string;
@@ -35,6 +45,7 @@ export function PostGameOverlay({
   rewardPowerUp: { name: string; icon: string; desc: string; tier: 'starter' | 'advanced' } | null;
   chapterComplete: boolean;
   coopXpGained?: number;
+  xpAwards?: XpAwardInfo[];
   levelUps?: LevelUpInfo[];
   players: Player[];
   onContinue: () => void;
@@ -47,97 +58,66 @@ export function PostGameOverlay({
     : chapter?.levels.find(l => l.name === levelName)?.story_bit;
   return (
     <div className="battle-overlay-bg" style={{ alignItems: 'center', justifyContent: 'center', background: `rgba(0,0,0,.65)` }}>
-      <div className="battle-overlay" style={{ maxWidth: 440, padding: 20, background: `linear-gradient(180deg, ${bg} 0%, var(--bg-2) 100%)` }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.18em', color: accent, textTransform: 'uppercase' }}>
-            {chapter?.name}
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4 }}>{levelName}</div>
-          <div style={{
-            margin: '10px auto 6px',
-            width: 80, height: 80, borderRadius: '50%',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 40,
-            background: `radial-gradient(circle at 30% 30%, color-mix(in srgb, ${accent} 45%, var(--bg-3)) 0%, var(--bg-3) 80%)`,
-            border: `2px solid ${accent}`,
-            boxShadow: `0 0 18px color-mix(in srgb, ${accent} 45%, transparent)`,
-          }}>
-            {isBoss ? '☠' : '✓'}
-          </div>
-          <div style={{ fontSize: 16, fontWeight: 900, color: accent, letterSpacing: '.04em' }}>
-            DEFEATED
-          </div>
+      <div className="card" style={{ maxWidth: 480, width: '90%', maxHeight: '85vh', overflowY: 'auto', borderColor: accent }}>
+        <div style={{ textAlign: 'center', marginBottom: 12 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: accent, letterSpacing: 2, textTransform: 'uppercase' }}>Level Cleared</div>
+          <h2 style={{ marginTop: 4 }}>{levelName}</h2>
+          {isBoss && <div style={{ fontSize: 32, marginTop: 4 }}>👑</div>}
         </div>
 
-        <div className="card" style={{ padding: 12, marginTop: 14, background: 'var(--bg-3)' }}>
-          <div className="muted small" style={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>Battle stats</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-            <Stat label="Visits" value={stats.visitsUsed} />
-            <Stat label="Darts" value={stats.dartsThrown} />
-            <Stat label="Damage" value={stats.damageDealt} />
-            <Stat label="Enemies" value={stats.enemiesDefeated} />
-            <Stat label="Power-ups" value={stats.powerUpsUsed} />
-            <Stat label="HP lost" value={stats.partyHpLost} />
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+          <Stat label="Visits" value={stats.visitsUsed} />
+          <Stat label="Darts" value={stats.dartsThrown} />
+          <Stat label="Damage" value={stats.damageDealt} />
+          <Stat label="Enemies" value={stats.enemiesDefeated} />
+          <Stat label="Power-ups" value={stats.powerUpsUsed} />
+          <Stat label="HP Lost" value={stats.partyHpLost} />
         </div>
-
-        {rewardPowerUp && (
-          <div className="card" style={{ marginTop: 12, padding: 14, background: `color-mix(in srgb, ${accent} 14%, var(--bg-3))`, borderColor: `color-mix(in srgb, ${accent} 50%, var(--border))` }}>
-            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: accent, textTransform: 'uppercase', marginBottom: 6 }}>
-              {isBoss ? 'Boss Reward Unlocked' : 'New Power-Up Unlocked'}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ fontSize: 32 }}>{rewardPowerUp.icon}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 900, fontSize: 16 }}>{rewardPowerUp.name}</div>
-                <div className="muted small" style={{ marginTop: 2, lineHeight: 1.4 }}>{rewardPowerUp.desc}</div>
-              </div>
-            </div>
-            <div className="muted small" style={{ marginTop: 8, fontStyle: 'italic' }}>
-              Equip it from Players → Power-Ups → Coop section.
-            </div>
-          </div>
-        )}
 
         {coopXpGained != null && coopXpGained > 0 && (
           <div className="card" style={{ marginTop: 12, padding: 12, background: 'var(--bg-3)' }}>
-            <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+            <div className="row" style={{ gap: 10, alignItems: 'center', marginBottom: xpAwards && xpAwards.length > 0 ? 10 : 0 }}>
               <div style={{ fontSize: 26 }}>✨</div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 800, fontSize: 14 }}>+{coopXpGained} XP earned</div>
-                <div className="muted small" style={{ marginTop: 2, lineHeight: 1.4 }}>Each party member gained unified XP toward leveling up. Level up to unlock new cards and class passives.</div>
+                <div className="muted small" style={{ marginTop: 2, lineHeight: 1.4 }}>Each party member gained XP toward their class progression. Level up to unlock new cards and class passives.</div>
               </div>
             </div>
+            {xpAwards && xpAwards.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {xpAwards.map(xa => {
+                  const pl = players.find(p => p.id === xa.playerId);
+                  return (
+                    <div key={xa.playerId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: 'var(--bg-2)', borderRadius: 6 }}>
+                      <span style={{ fontSize: 18 }}>{xa.classIcon}</span>
+                      <span style={{ flex: 1, fontWeight: 700, fontSize: 13 }}>{pl?.name || 'Player'} → {xa.className}</span>
+                      <span style={{ fontWeight: 900, fontSize: 14, color: 'var(--accent)' }}>+{xa.xpGained} XP</span>
+                      <span className="muted small">Lv {xa.newLevel}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
         {levelUps && levelUps.length > 0 && (
-          <div className="card" style={{ marginTop: 12, padding: 14, background: `color-mix(in srgb, ${accent} 14%, var(--bg-3))`, borderColor: `color-mix(in srgb, ${accent} 50%, var(--border))` }}>
-            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: accent, textTransform: 'uppercase', marginBottom: 8 }}>
-              Level Up!
-            </div>
+          <div className="card" style={{ marginTop: 12, padding: 12, background: 'var(--bg-3)' }}>
+            <h3 style={{ marginBottom: 8, fontSize: 16 }}>📈 Level Up!</h3>
             {levelUps.map(lu => {
               const pl = players.find(p => p.id === lu.playerId);
               return (
                 <div key={lu.playerId} style={{ marginBottom: 10 }}>
-                  <div style={{ fontWeight: 800, fontSize: 14 }}>
-                    {pl?.name || 'Player'} reached Level {lu.newLevel}
-                  </div>
+                  <div style={{ fontWeight: 800, fontSize: 14 }}>{pl?.name || 'Player'} → Level {lu.newLevel}</div>
                   {lu.newCards.length > 0 && (
-                    <div style={{ marginTop: 6 }}>
-                      <div className="muted small" style={{ fontWeight: 700, marginBottom: 4 }}>New cards unlocked:</div>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {lu.newCards.map(c => (
-                          <div key={c.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 8px', borderRadius: 8, background: 'var(--bg-3)', border: '1px solid var(--border)', minWidth: 56 }}>
-                            <span style={{ fontSize: 20 }}>{c.icon}</span>
-                            <span style={{ fontSize: 10, fontWeight: 800, textAlign: 'center' }}>{c.name}</span>
-                          </div>
-                        ))}
-                      </div>
+                    <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {lu.newCards.map(c => (
+                        <span key={c.id} style={{ padding: '2px 8px', background: 'var(--bg-2)', borderRadius: 4, fontSize: 12 }}>{c.icon} {c.name}</span>
+                      ))}
                     </div>
                   )}
                   {lu.newPassives.length > 0 && (
-                    <div className="muted small" style={{ marginTop: 4 }}>{lu.newPassives.length} new class passive{lu.newPassives.length > 1 ? 's' : ''} unlocked — check Players → Class.</div>
+                    <div style={{ marginTop: 4, fontSize: 12, color: 'var(--accent)' }}>New passives unlocked!</div>
                   )}
                 </div>
               );
@@ -145,21 +125,33 @@ export function PostGameOverlay({
           </div>
         )}
 
+        {rewardPowerUp && (
+          <div className="card" style={{ marginTop: 12, padding: 12, background: 'var(--bg-3)', borderColor: accent }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: accent, marginBottom: 6 }}>🎁 Reward Unlocked</div>
+            <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+              <div style={{ fontSize: 28 }}>{rewardPowerUp.icon}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 800, fontSize: 14 }}>{rewardPowerUp.name}</div>
+                <div className="muted small" style={{ marginTop: 2 }}>{rewardPowerUp.desc}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {storyBit && (
-          <div className="muted" style={{ marginTop: 14, fontSize: 13, lineHeight: 1.55, fontStyle: 'italic', textAlign: 'center' }}>
+          <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-3)', borderRadius: 8, borderLeft: `3px solid ${accent}`, fontSize: 14, lineHeight: 1.6, fontStyle: 'italic' }}>
             {storyBit}
           </div>
         )}
 
         {chapterComplete && (
-          <div className="pill" style={{ marginTop: 12, display: 'inline-flex', alignSelf: 'center', background: accent, color: '#04150a', borderColor: 'transparent' }}>
-            Chapter complete
+          <div style={{ marginTop: 12, textAlign: 'center', padding: 12, background: 'var(--bg-3)', borderRadius: 8 }}>
+            <div style={{ fontSize: 28, marginBottom: 4 }}>🎉</div>
+            <div style={{ fontWeight: 800, fontSize: 16 }}>Chapter Complete!</div>
           </div>
         )}
 
-        <button className="btn primary block" style={{ marginTop: 16 }} onClick={onContinue}>
-          Continue
-        </button>
+        <button onClick={onContinue} style={{ marginTop: 16, width: '100%' }}>Continue</button>
       </div>
     </div>
   );
@@ -167,9 +159,9 @@ export function PostGameOverlay({
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div style={{ textAlign: 'center' }}>
-      <div style={{ fontWeight: 900, fontSize: 18 }}>{value}</div>
-      <div className="muted small" style={{ marginTop: 2 }}>{label}</div>
+    <div style={{ padding: 8, background: 'var(--bg-3)', borderRadius: 6, textAlign: 'center' }}>
+      <div className="muted small">{label}</div>
+      <div style={{ fontWeight: 800, fontSize: 18 }}>{value}</div>
     </div>
   );
 }

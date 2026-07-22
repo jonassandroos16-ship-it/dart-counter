@@ -5,7 +5,19 @@ import { Sound } from '../sound';
 import type { PopupControls } from '../Popups';
 import { computeGameBadges } from '../badges';
 import { addCard, cardsForLevelUpCompetitive, getPlayerCards, setPlayerCards } from '../cards/deck';
-import { reconcileCoopPassivesForPlayer, addClassXp, classLevelFromXp } from '../campaign/engine/classes';
+import { reconcileCoopPassivesForPlayer, addClassXp, classLevelFromXp, getClassXp } from '../campaign/engine/classes';
+import { COOP_CLASSES } from '../campaign/engine/classes';
+import type { CoopClassId } from '../campaign/types';
+
+function buildClassLevels(player: Player | undefined, settings: Settings): Record<string, number> {
+  const prog = player?.coopProgress;
+  if (!prog) return {};
+  const out: Record<string, number> = {};
+  for (const cls of COOP_CLASSES) {
+    out[cls.id] = classLevelFromXp(prog, cls.id as CoopClassId, settings).level;
+  }
+  return out;
+}
 
 export function runMilestones(p: GamePlayer, remaining: number, visitScore: number, settings: Settings, popups: PopupControls, setPlayers: (updater: any) => void, game: Game, players: Player[], games: GameRecord[]) {
   if (settings.popups.scores) {
@@ -79,7 +91,7 @@ export function checkTitleUnlocks(pl: GamePlayer, settings: Settings, popups: Po
     const lifetimeVisits = [...historyVisits, ...(pl.visits || [])];
     const gamesPlayed = historyGames.length + (game.finished ? 1 : 0);
     const gamesWon = historyGames.filter(g => g.winner === pl.id).length + (game.finished && game.winner === pl.id ? 1 : 0);
-    const ctx = { playerId: pl.id, games: historyGames, gamesPlayed, gamesWon, lifetimeVisits };
+    const ctx = { playerId: pl.id, games: historyGames, gamesPlayed, gamesWon, lifetimeVisits, classLevels: buildClassLevels(player, settings) };
 
     titles.forEach(t => {
       if (unlocked.includes(t.id)) return;
