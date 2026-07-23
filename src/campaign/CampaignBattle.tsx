@@ -248,7 +248,7 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
   const thrower = state.players[state.playerTurnIdx];
 
   const onAdd = (base: number, m: number, labelOverride?: string, isBull?: boolean) => {
-    setState(prev => addDart(prev, base, m, labelOverride, isBull, settings));
+    setState(prev => addDart(prev, base, m, labelOverride, isBull, settings, maxDartsPerVisit));
     Sound.play('dart', { score: base * m }, settings);
     if (base > 0) Sound.play('impact', {}, settings);
     setMult(1);
