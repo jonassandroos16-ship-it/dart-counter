@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Game, GameRecord, Player, Settings } from '../types';
 import { getPowerUpInfo } from '../powerups';
 import { getBadgeInfo, getBadgeContext, buildCoopBadgeCtx } from '../badges';
@@ -42,9 +42,24 @@ export function BadgeAvatar({ playerId, players, games, size = 32, fontSize, col
   );
 }
 
-
-export function PowerUpOrb({ game, curIdx, settings, onActivate }: { game: Game; curIdx: number; settings: Settings; onActivate: () => void; toast: (m: string) => void }) {
+// ChargedPlayerIcon replaces the old standalone PowerUpOrb button. The
+// power-up charge is now rendered as a ring around the player's avatar
+// icon. When the charge reaches 100% the ring pulsates and tapping the
+// icon activates the power-up. A brief scale animation plays whenever
+// charge increases, giving visual feedback for each contributing dart.
+export function ChargedPlayerIcon({ game, curIdx, settings, players, games, onActivate, toast }: {
+  game: Game;
+  curIdx: number;
+  settings: Settings;
+  players: Player[];
+  games: GameRecord[];
+  onActivate: () => void;
+  toast: (m: string) => void;
+}) {
   const [open, setOpen] = useState(false);
+  const [gainAnim, setGainAnim] = useState(false);
+  const prevChargeRef = useRef<number>(0);
+
   if (!game.powerUpsEnabled) return null;
   const pl = game.players[curIdx];
   if (!pl) return null;
@@ -55,35 +70,45 @@ export function PowerUpOrb({ game, curIdx, settings, onActivate }: { game: Game;
   const ready = charge >= needed && !!pu && game.darts.length > 0;
   const chargedButWaiting = charge >= needed && !!pu && game.darts.length === 0;
   const uses = pl.powerUpUses || 0;
-  const R = 22;
+
+  // Trigger the charge-gain animation when charge increases.
+  const chargeForAnim = pl.powerUpCharge || 0;
+  useEffect(() => {
+    if (chargeForAnim > prevChargeRef.current) {
+      setGainAnim(true);
+      const t = setTimeout(() => setGainAnim(false), 450);
+      prevChargeRef.current = chargeForAnim;
+      return () => clearTimeout(t);
+    }
+    prevChargeRef.current = chargeForAnim;
+  }, [chargeForAnim]);
+
+  const size = 36;
+  const R = 20;
   const C = 2 * Math.PI * R;
   const dash = C * (pct / 100);
+
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        title={pu ? `${pu.name} (${pct}% charged${chargedButWaiting ? ' — throw a dart to activate' : ''})` : 'No power-up equipped'}
-        className={chargedButWaiting ? 'pu-orb-charged-waiting' : undefined}
-        style={{
-          position: 'relative', width: 52, height: 52, borderRadius: '50%',
-          background: ready || chargedButWaiting ? 'color-mix(in srgb,var(--accent) 18%,var(--bg-3))' : 'var(--bg-3)',
-          border: `2px solid ${ready || chargedButWaiting ? 'var(--accent)' : 'var(--border)'}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', padding: 0, color: 'inherit',
-          boxShadow: ready || chargedButWaiting ? '0 0 12px color-mix(in srgb,var(--accent) 50%,transparent)' : 'none',
-          transition: 'box-shadow .2s, border-color .2s',
-        }}
-      >
-        <svg width="52" height="52" viewBox="0 0 52 52" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
-          <circle cx="26" cy="26" r={R} fill="none" stroke="var(--border)" strokeWidth="3" />
-          <circle cx="26" cy="26" r={R} fill="none"
-            stroke={ready ? 'var(--accent)' : 'color-mix(in srgb,var(--accent) 60%,var(--bg-3))'}
-            strokeWidth="3" strokeDasharray={`${dash} ${C}`} strokeLinecap="round"
-            style={{ transition: 'stroke-dasharray .4s ease' }} />
-        </svg>
-        <span style={{ fontSize: 20, zIndex: 1 }}>{pu ? pu.icon : '🔒'}</span>
-        <span style={{ position: 'absolute', bottom: -3, right: -3, fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 8, background: ready ? 'var(--accent)' : 'var(--bg-2)', color: ready ? '#04150a' : 'var(--muted)', border: '1px solid var(--border)' }}>{pct}%</span>
-      </button>
+      <div className="pu-charge-wrap">
+        <div
+          className={`pu-charge-ring${ready ? ' ready' : ''}${gainAnim ? ' pu-charge-gain' : ''}`}
+          onClick={() => { if (ready) { onActivate(); } else { setOpen(true); } }}
+          title={pu ? `${pu.name} (${pct}% charged${chargedButWaiting ? ' — throw a dart to activate' : ''})` : 'No power-up equipped'}
+          style={{ width: size, height: size }}
+        >
+          <svg width={size} height={size} viewBox="0 0 52 52" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
+            <circle cx="26" cy="26" r={R + 2} fill="none" stroke="var(--border)" strokeWidth="2" />
+            <circle cx="26" cy="26" r={R} fill="none"
+              stroke={ready || chargedButWaiting ? 'var(--accent)' : 'color-mix(in srgb,var(--accent) 60%,var(--bg-3))'}
+              strokeWidth="2.5" strokeDasharray={`${dash} ${C}`} strokeLinecap="round"
+              style={{ transition: 'stroke-dasharray .4s ease, stroke .2s ease' }} />
+          </svg>
+          <BadgeAvatar playerId={pl.id} players={players} games={games} size={28} fontSize={13} color={pl.color} />
+          {pu && <span className="pu-charge-icon">{pu.icon}</span>}
+        </div>
+        <span className={`pu-charge-pct${ready || chargedButWaiting ? ' ready' : ''}`}>{pct}%</span>
+      </div>
       {open && pu ? (
         <Modal onClose={() => setOpen(false)}>
           <div style={{ textAlign: 'center', padding: 8 }}>
@@ -102,6 +127,21 @@ export function PowerUpOrb({ game, curIdx, settings, onActivate }: { game: Game;
       ) : null}
     </>
   );
+}
+
+// Backward-compat wrapper — renders ChargedPlayerIcon with the same props
+// the old PowerUpOrb accepted. Boards that haven't been migrated yet still
+// work.
+export function PowerUpOrb(props: { game: Game; curIdx: number; settings: Settings; onActivate: () => void; toast: (m: string) => void; players?: Player[]; games?: GameRecord[] }) {
+  return <ChargedPlayerIcon
+    game={props.game}
+    curIdx={props.curIdx}
+    settings={props.settings}
+    players={props.players || []}
+    games={props.games || []}
+    onActivate={props.onActivate}
+    toast={props.toast}
+  />;
 }
 
 export function AttributeStrip({ playerId, players, mode, settings }: { playerId: string; players: Player[]; mode: string; settings: Settings }) {
