@@ -16,11 +16,13 @@ export function applyTheme(settings: Settings) {
 export function withDefaults(parsed: Partial<Settings> | undefined | null): Settings {
   const base = defaultSettings();
   if (!parsed) return base;
-  return {
+  const merged: Settings = {
     ...base,
     ...parsed,
     powerUpScaling: { ...base.powerUpScaling, ...(parsed.powerUpScaling || {}) },
   };
+  if (!Array.isArray(merged.customTitles)) merged.customTitles = [];
+  return merged;
 }
 
 export function loadSettings(): Settings {
