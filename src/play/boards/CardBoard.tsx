@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import type { Game, GameRecord, Player, Settings, Dart } from '../../types';
+import type { Game, GameRecord, Player, Settings, Dart, PlayedCard } from '../../types';
 import { TEAM_COLORS, getTitleInfo, MODES, SCORE_POPUPS } from '../../constants';
 import { recordFromGame, checkoutHint, leadTrailBadge, visitAvg, levelFromXP, getPlayerXPById, computeBattleDartDamage } from '../../logic';
 import { Sound } from '../../sound';
@@ -31,9 +31,14 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
   const [selectedCardIdx, setSelectedCardIdx] = useState<number | null>(null);
   const [showDeck, setShowDeck] = useState(false);
   const [showGraveyard, setShowGraveyard] = useState(false);
+  const [showPlayed, setShowPlayed] = useState(false);
+  const [selectedPlayedCard, setSelectedPlayedCard] = useState<PlayedCard | null>(null);
+  const [playedPopupClosing, setPlayedPopupClosing] = useState(false);
   const [animatingOut, setAnimatingOut] = useState<number | null>(null);
   const [popupClosing, setPopupClosing] = useState(false);
+  const [cardPlayAnim, setCardPlayAnim] = useState<{ cardId: string; upgradeLevel: number; playerName: string; playerColor: string } | null>(null);
   const prevHandLen = useRef<number>(0);
+  const prevLastCardPlay = useRef<{ playerId: string; cardId: string; timestamp: number } | null>(null);
 
   const closeCardPopup = () => {
     if (popupClosing) return;
@@ -43,6 +48,42 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       setPopupClosing(false);
     }, 200);
   };
+
+  const closePlayedPopup = () => {
+    if (playedPopupClosing) return;
+    setPlayedPopupClosing(true);
+    setTimeout(() => {
+      setSelectedPlayedCard(null);
+      setPlayedPopupClosing(false);
+    }, 200);
+  };
+
+  // Detect when another device plays a card (lastCardPlay changes) to trigger animation + sound
+  useEffect(() => {
+    const lcp = game.lastCardPlay;
+    if (!lcp) return;
+    if (prevLastCardPlay.current &&
+        prevLastCardPlay.current.playerId === lcp.playerId &&
+        prevLastCardPlay.current.timestamp === lcp.timestamp) return;
+    prevLastCardPlay.current = { playerId: lcp.playerId, cardId: lcp.cardId, timestamp: lcp.timestamp };
+    // Only animate/sound on devices that are NOT the one playing the card
+    if (!isMyTurn) {
+      const player = game.players.find(pl => pl.id === lcp.playerId);
+      setCardPlayAnim({
+        cardId: lcp.cardId,
+        upgradeLevel: lcp.upgradeLevel,
+        playerName: player?.name || 'Player',
+        playerColor: player?.color || '#888',
+      });
+      const def = resolveCardDef({ cardId: lcp.cardId, upgradeLevel: lcp.upgradeLevel, upgraded: lcp.upgradeLevel > 0 });
+      if (def) {
+        const soundType = def.type === 'damage' ? 'card_damage' : def.type === 'spell' ? 'card_spell' : 'card_utility';
+        Sound.play(soundType, {}, settings);
+      }
+      const t = setTimeout(() => setCardPlayAnim(null), 1800);
+      return () => clearTimeout(t);
+    }
+  }, [game.lastCardPlay]);
 
   useEffect(() => {
     if (game.cardState && Object.keys(game.cardState).length === game.players.length) return;
@@ -143,7 +184,8 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       };
       const msg = effectMsg[card.effect || ''] || `${card.name}: ${card.desc}`;
       toast(msg);
-      Sound.play('powerup', {}, settings);
+      const soundType = card.type === 'spell' ? 'card_spell' : 'card_utility';
+      Sound.play(soundType, {}, settings);
       // Move the card to used pile so it's consumed
       let updated = playCardFromHand(state, handIdx);
       if (!updated) return;
@@ -155,7 +197,18 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         updated = recycleGraveyard(updated);
       }
 
-      setGame({ ...game, cardState: { ...game.cardState, [p.id]: updated } });
+      const playedCard: PlayedCard = {
+        playerId: p.id, playerName: p.name, playerColor: p.color,
+        cardId: card.id, upgradeLevel: state.hand[handIdx]?.upgradeLevel ?? 0,
+        turn: game.turn, timestamp: Date.now(),
+      };
+      const pc = state.hand[handIdx];
+      setGame({
+        ...game,
+        cardState: { ...game.cardState, [p.id]: updated },
+        playedCards: [...(game.playedCards || []), playedCard],
+        lastCardPlay: { playerId: p.id, cardId: card.id, upgradeLevel: pc?.upgradeLevel ?? 0, timestamp: playedCard.timestamp },
+      });
       force(n => n + 1);
       return;
     }
@@ -168,14 +221,22 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     const value = cardDamage(card);
     const label = card.name;
     const dart = { value, label, base, mult: isBull ? 2 : (base === 25 && value === 50 ? 2 : mult), isDouble: !!(isBull || (base === 25 && value === 50) || mult === 2), isOuter: false };
-    Sound.play('dart', { score: value }, settings);
+    Sound.play('card_damage', {}, settings);
     prevHandRef.current = handIdx;
     setSelectedCardIdx(null);
+    const playedCard: PlayedCard = {
+      playerId: p.id, playerName: p.name, playerColor: p.color,
+      cardId: card.id, upgradeLevel: state.hand[handIdx]?.upgradeLevel ?? 0,
+      turn: game.turn, timestamp: Date.now(),
+    };
+    const pc = state.hand[handIdx];
     setGame({
       ...game,
       darts: [...game.darts, dart],
       mult: 1,
       cardState: { ...game.cardState, [p.id]: updated },
+      playedCards: [...(game.playedCards || []), playedCard],
+      lastCardPlay: { playerId: p.id, cardId: card.id, upgradeLevel: pc?.upgradeLevel ?? 0, timestamp: playedCard.timestamp },
     });
     force(n => n + 1);
   };
@@ -644,12 +705,17 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       <div className="play-input">
         <div className="pad-card card-board-pad">
           <div className="card-pile-row">
-            <button className="card-pile-btn" onClick={() => setShowDeck(true)} title="View deck">
+            <button className="card-pile-btn" onClick={() => isMyTurn && setShowDeck(true)} title="View deck" disabled={!isMyTurn}>
               <span className="card-pile-icon">🂠</span>
               <span className="card-pile-label">Deck</span>
-              <span className="card-pile-count">{state.deck.length}</span>
+              <span className="card-pile-count">{isMyTurn ? state.deck.length : '—'}</span>
             </button>
-            <div className="card-hand-label">Your Hand — {p.name}</div>
+            <div className="card-hand-label">{isMyTurn ? `Your Hand — ${p.name}` : `${p.name}'s turn`}</div>
+            <button className="card-pile-btn" onClick={() => setShowPlayed(true)} title="View played cards">
+              <span className="card-pile-icon">📋</span>
+              <span className="card-pile-label">Played</span>
+              <span className="card-pile-count">{game.playedCards?.length || 0}</span>
+            </button>
             <button className="card-pile-btn" onClick={() => setShowGraveyard(true)} title="View graveyard">
               <span className="card-pile-icon">⚰️</span>
               <span className="card-pile-label">Graveyard</span>
@@ -661,32 +727,49 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
             {handDefs.length === 0 && (
               <div className="muted small" style={{ padding: '20px 0', textAlign: 'center' }}>No cards in hand. End turn to draw new cards.</div>
             )}
-            {handDefs.map((card, idx) => {
-              const tColor = cardTypeColor(card.type);
-              const rColor = cardRarityColor(card.rarity);
-              const isAnimatingOut = animatingOut === idx;
-              return (
-                <div
-                  key={`${idx}-${card.id}`}
-                  className={`card-tile ${isAnimatingOut ? 'card-anim-out' : 'card-anim-in'}`}
-                  style={{
-                    '--card-color': tColor,
-                    '--card-rarity': rColor,
-                    '--card-rot': `${(idx - (handDefs.length - 1) / 2) * 4}deg`,
-                    '--card-offset': `${Math.abs(idx - (handDefs.length - 1) / 2) * 6}px`,
-                  } as React.CSSProperties}
-                  onClick={() => setSelectedCardIdx(idx)}
-                >
-                  <div className="card-tile-inner">
-                    <div className="card-tile-top">
-                      <span className="card-tile-icon">{card.icon}</span>
+            {isMyTurn ? (
+              handDefs.map((card, idx) => {
+                const tColor = cardTypeColor(card.type);
+                const rColor = cardRarityColor(card.rarity);
+                const isAnimatingOut = animatingOut === idx;
+                return (
+                  <div
+                    key={`${idx}-${card.id}`}
+                    className={`card-tile ${isAnimatingOut ? 'card-anim-out' : 'card-anim-in'}`}
+                    style={{
+                      '--card-color': tColor,
+                      '--card-rarity': rColor,
+                      '--card-rot': `${(idx - (handDefs.length - 1) / 2) * 4}deg`,
+                      '--card-offset': `${Math.abs(idx - (handDefs.length - 1) / 2) * 6}px`,
+                    } as React.CSSProperties}
+                    onClick={() => setSelectedCardIdx(idx)}
+                  >
+                    <div className="card-tile-inner">
+                      <div className="card-tile-top">
+                        <span className="card-tile-icon">{card.icon}</span>
+                      </div>
+                      <div className="card-tile-name">{card.name}</div>
+                      <div className="card-tile-type">{card.type === 'damage' ? `${cardDamage(card)} dmg` : card.type}</div>
                     </div>
-                    <div className="card-tile-name">{card.name}</div>
-                    <div className="card-tile-type">{card.type === 'damage' ? `${cardDamage(card)} dmg` : card.type}</div>
+                  </div>
+                );
+              })
+            ) : (
+              state.hand.map((_, idx) => (
+                <div
+                  key={`back-${idx}`}
+                  className="card-tile card-back"
+                  style={{
+                    '--card-rot': `${(idx - (state.hand.length - 1) / 2) * 4}deg`,
+                    '--card-offset': `${Math.abs(idx - (state.hand.length - 1) / 2) * 6}px`,
+                  } as React.CSSProperties}
+                >
+                  <div className="card-tile-inner card-back-inner">
+                    <span className="card-back-icon">🂠</span>
                   </div>
                 </div>
-              );
-            })}
+              ))
+            )}
           </div>
 
           {usedDefs.length > 0 && (
@@ -701,10 +784,12 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
             </div>
           )}
 
-          <div className="row" style={{ gap: 8, marginTop: 8 }}>
-            <button className="btn block ghost" onClick={undoCard}>↶ Undo card</button>
-            <button className="btn block primary" onClick={enterVisit}>{isBattle ? 'Attack!' : 'Enter visit'}</button>
-          </div>
+          {isMyTurn && (
+            <div className="row" style={{ gap: 8, marginTop: 8 }}>
+              <button className="btn block ghost" onClick={undoCard}>↶ Undo card</button>
+              <button className="btn block primary" onClick={enterVisit}>{isBattle ? 'Attack!' : 'Enter visit'}</button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -818,6 +903,90 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
           </div>
         </div>
       )}
+
+      {showPlayed && (
+        <div className="card-popup-overlay" onClick={() => setShowPlayed(false)}>
+          <div className="card-pile-popup" onClick={e => e.stopPropagation()}>
+            <div className="card-pile-popup-header">
+              <h3>📋 Played ({game.playedCards?.length || 0})</h3>
+              <button className="btn sm ghost" onClick={() => setShowPlayed(false)}>Close</button>
+            </div>
+            <div className="card-pile-popup-grid">
+              {(!game.playedCards || game.playedCards.length === 0) && <div className="muted small" style={{ padding: 20 }}>No cards played yet.</div>}
+              {(game.playedCards || []).map((pc, idx) => {
+                const def = resolveCardDef({ cardId: pc.cardId, upgradeLevel: pc.upgradeLevel, upgraded: pc.upgradeLevel > 0 });
+                if (!def) return null;
+                return (
+                  <div
+                    key={idx}
+                    className="card-mini-tile clickable"
+                    style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))` }}
+                    onClick={() => { setSelectedPlayedCard(pc); setShowPlayed(false); }}
+                  >
+                    <span style={{ fontSize: 20 }}>{def.icon}</span>
+                    <span style={{ fontSize: 10, fontWeight: 800 }}>{def.name}</span>
+                    <span className="muted" style={{ fontSize: 9 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</span>
+                    <span style={{ fontSize: 8, color: pc.playerColor, fontWeight: 700, marginTop: 2 }}>{pc.playerName}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedPlayedCard && (() => {
+        const def = resolveCardDef({ cardId: selectedPlayedCard.cardId, upgradeLevel: selectedPlayedCard.upgradeLevel, upgraded: selectedPlayedCard.upgradeLevel > 0 });
+        if (!def) return null;
+        const tColor = cardTypeColor(def.type);
+        const rColor = cardRarityColor(def.rarity);
+        return (
+          <div className="card-popup-overlay" onClick={closePlayedPopup}>
+            <div
+              className={`card-detail-popup ${playedPopupClosing ? 'popup-closing' : ''}`}
+              onClick={e => e.stopPropagation()}
+              style={{ '--card-color': tColor, '--card-rarity': rColor } as React.CSSProperties}
+            >
+              <div className="card-detail-header">
+                <span className="card-detail-icon">{def.icon}</span>
+                <span className="card-detail-name">{def.name}</span>
+                <button className="btn sm ghost" onClick={closePlayedPopup}>Close</button>
+              </div>
+              <div className="card-detail-body">
+                <div className="card-detail-type" style={{ color: tColor }}>{def.type}</div>
+                <div className="card-detail-rarity" style={{ color: rColor }}>{def.rarity}</div>
+                {def.type === 'damage' && <div className="card-detail-stat">Damage: {cardDamage(def)}</div>}
+                <div className="card-detail-desc">{def.desc}</div>
+                <div className="card-detail-player" style={{ color: selectedPlayedCard.playerColor }}>
+                  Played by {selectedPlayedCard.playerName}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {cardPlayAnim && (() => {
+        const def = resolveCardDef({ cardId: cardPlayAnim.cardId, upgradeLevel: cardPlayAnim.upgradeLevel, upgraded: cardPlayAnim.upgradeLevel > 0 });
+        if (!def) return null;
+        const tColor = cardTypeColor(def.type);
+        const rColor = cardRarityColor(def.rarity);
+        return (
+          <div className="card-play-anim-overlay">
+            <div
+              className="card-play-anim-card"
+              style={{ '--card-color': tColor, '--card-rarity': rColor } as React.CSSProperties}
+            >
+              <div className="card-play-anim-icon">{def.icon}</div>
+              <div className="card-play-anim-name">{def.name}</div>
+              <div className="card-play-anim-type">{def.type === 'damage' ? `${cardDamage(def)} damage` : def.type}</div>
+              <div className="card-play-anim-player" style={{ color: cardPlayAnim.playerColor }}>
+                {cardPlayAnim.playerName}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
