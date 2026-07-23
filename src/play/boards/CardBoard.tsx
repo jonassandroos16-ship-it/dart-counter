@@ -21,10 +21,10 @@ import {
 
 const HIGH_SCORE_VISITS = 7;
 
-export function CardBoard({ game, setGame, settings, players, games, setGames, setPlayers, toast, music, onQuit, onGameOver, popups }: {
+export function CardBoard({ game, setGame, settings, players, games, setGames, setPlayers, toast, music, onQuit, onGameOver, popups, isMyTurn = true }: {
   game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[];
   setGames: (updater: any) => void; setPlayers: (updater: any) => void; toast: (m: string) => void;
-  music: MusicEngine; onQuit: () => void; onGameOver: () => void; popups: PopupControls;
+  music: MusicEngine; onQuit: () => void; onGameOver: () => void; popups: PopupControls; isMyTurn?: boolean;
 }) {
   const [, force] = useState(0);
   const [targetId, setTargetId] = useState<string | null>(null);
@@ -99,6 +99,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
   const prevHandRef = useRef<number | null>(null);
 
   const playCard = (handIdx: number) => {
+    if (!isMyTurn) return;
     const card = handDefs[handIdx];
     if (!card) return;
     if (card.type !== 'damage') {
@@ -170,6 +171,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
   };
 
   const undoCard = () => {
+    if (!isMyTurn) return;
     if (!game.darts.length) return;
     const lastDart = game.darts[game.darts.length - 1];
     const usedIdx = [...state.used].reverse().findIndex(pc => {
@@ -193,6 +195,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
   };
 
   const enterVisit = () => {
+    if (!isMyTurn) return;
     if (!game.darts.length) { toast('Play at least one damage card'); return; }
     const scored = game.darts.reduce((a, d) => a + d.value, 0);
     const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);

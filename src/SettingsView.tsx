@@ -19,6 +19,8 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
   const previewRef = useRef<MusicEngine | null>(null);
   const [previewing, setPreviewing] = useState<string | null>(null);
 
+  const mpHosting = localStorage.getItem('mp_hosting') === '1';
+
   if (!previewRef.current) previewRef.current = new MusicEngine();
 
   useEffect(() => () => { previewRef.current?.stop(); }, []);
@@ -60,26 +62,31 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
       <h2 style={{ marginBottom: 12 }}>Settings</h2>
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="muted small" style={{ marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Game Mode</div>
+        {mpHosting && (
+          <div className="muted small" style={{ marginBottom: 10, padding: '8px 12px', borderRadius: 8, background: 'color-mix(in srgb, var(--warning) 15%, var(--bg-3))', border: '1px solid color-mix(in srgb, var(--warning) 40%, var(--border))' }}>
+            ⚠ You are hosting a multiplayer lobby. Game mode is locked — change it from the lobby room.
+          </div>
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <button onClick={() => { update({ gameMode: 'dartboard' }); toast('Dart Board mode selected'); }}
+          <button onClick={() => { if (!mpHosting) { update({ gameMode: 'dartboard' }); toast('Dart Board mode selected'); } }} disabled={mpHosting}
             style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: 16, borderRadius: 12,
               background: settings.gameMode === 'dartboard' ? 'color-mix(in srgb,var(--accent) 22%,var(--bg-3))' : 'var(--bg-3)',
               border: `2px solid ${settings.gameMode === 'dartboard' ? 'var(--accent)' : 'var(--border)'}`,
               boxShadow: settings.gameMode === 'dartboard' ? '0 0 12px color-mix(in srgb,var(--accent) 35%,transparent)' : 'none',
-              cursor: 'pointer', color: 'inherit',
+              cursor: mpHosting ? 'not-allowed' : 'pointer', color: 'inherit', opacity: mpHosting ? 0.5 : 1,
             }}>
             <Target size={32} color={settings.gameMode === 'dartboard' ? 'var(--accent)' : 'var(--muted)'} />
             <div style={{ fontWeight: 800, fontSize: 15 }}>Dart Board</div>
             <div className="muted" style={{ fontSize: 11, textAlign: 'center' }}>Classic dart-throwing gameplay</div>
           </button>
-          <button onClick={() => { update({ gameMode: 'cards' }); toast('Card Based mode selected'); }}
+          <button onClick={() => { if (!mpHosting) { update({ gameMode: 'cards' }); toast('Card Based mode selected'); } }} disabled={mpHosting}
             style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: 16, borderRadius: 12,
               background: settings.gameMode === 'cards' ? 'color-mix(in srgb,var(--accent) 22%,var(--bg-3))' : 'var(--bg-3)',
               border: `2px solid ${settings.gameMode === 'cards' ? 'var(--accent)' : 'var(--border)'}`,
               boxShadow: settings.gameMode === 'cards' ? '0 0 12px color-mix(in srgb,var(--accent) 35%,transparent)' : 'none',
-              cursor: 'pointer', color: 'inherit',
+              cursor: mpHosting ? 'not-allowed' : 'pointer', color: 'inherit', opacity: mpHosting ? 0.5 : 1,
             }}>
             <Layers size={32} color={settings.gameMode === 'cards' ? 'var(--accent)' : 'var(--muted)'} />
             <div style={{ fontWeight: 800, fontSize: 15 }}>Card Based</div>
