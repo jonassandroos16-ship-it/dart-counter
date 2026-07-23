@@ -39,7 +39,7 @@ export const CARD_DEFS: CardDef[] = [
   { id: 'dmg_priest_smite', name: 'Holy Smite', icon: '✨', type: 'damage', mode: 'both', class: 'priest', rarity: 'common', desc: 'Deal 35 damage with divine power.', base: 35, mult: 1, levelRequired: 1 },
   { id: 'dmg_priest_judgment', name: 'Divine Judgment', icon: '⚖️', type: 'damage', mode: 'both', class: 'priest', rarity: 'common', desc: 'Deal 50 damage with holy judgment.', base: 50, mult: 1, levelRequired: 1 },
   { id: 'spell_heal', name: 'Healing Light', icon: '✨', type: 'spell', mode: 'both', class: 'priest', rarity: 'common', desc: 'Restore 80 HP to the party.', effect: 'heal', magnitude: 80, levelRequired: 1 },
-  { id: 'spell_accuracy_buff', name: 'Eagle Eye', icon: '🦅', type: 'spell', mode: 'both', class: 'priest', rarity: 'common', desc: 'Party gains +20% accuracy for 3 turns.', effect: 'accuracy_buff', magnitude: 20, levelRequired: 1 },
+  { id: 'spell_accuracy_buff', name: 'Divine Foresight', icon: '🔮', type: 'spell', mode: 'both', class: 'priest', rarity: 'common', desc: 'Bless the party with divine sight: +20% hit chance for 3 turns.', effect: 'accuracy_buff', magnitude: 20, levelRequired: 1 },
   { id: 'util_priest_blessing', name: 'Divine Blessing', icon: '🙏', type: 'utility', mode: 'both', class: 'priest', rarity: 'common', desc: 'Restore 40 HP and draw 1 extra card.', effect: 'blessing', magnitude: 40, levelRequired: 1 },
   // ── Starter rogue cards (Level 1) ────────────────────────────────
   { id: 'dmg_rogue_backstab', name: 'Backstab', icon: '🗡️', type: 'damage', mode: 'both', class: 'rogue', rarity: 'common', desc: 'Deal 40 damage from the shadows.', base: 40, mult: 1, levelRequired: 1 },
@@ -55,8 +55,8 @@ export const CARD_DEFS: CardDef[] = [
   { id: 'dmg_s19', name: 'Single 19', icon: '🎯', type: 'damage', mode: 'both', class: 'any', rarity: 'common', desc: 'Deal 19 damage.', base: 19, mult: 1, levelRequired: 2 },
   { id: 'dmg_s18', name: 'Single 18', icon: '🎯', type: 'damage', mode: 'both', class: 'any', rarity: 'common', desc: 'Deal 18 damage.', base: 18, mult: 1, levelRequired: 2 },
   // ── Level 2 — Spells & utility ────────────────────────────────────
-  { id: 'spell_bust_protect', name: 'Bust Protect', icon: '🛡️', type: 'spell', mode: 'both', class: 'any', rarity: 'rare', desc: 'Prevents going over 0 if you overscore.', effect: 'bust_protect', levelRequired: 2 },
-  { id: 'spell_double_up', name: 'Double Up', icon: '🔁', type: 'spell', mode: 'both', class: 'any', rarity: 'rare', desc: "Forces an opponent's next Double to count as a miss.", effect: 'double_up', levelRequired: 2 },
+  { id: 'spell_bust_protect', name: 'Soul Barrier', icon: '🛡️', type: 'spell', mode: 'both', class: 'any', rarity: 'rare', desc: 'A protective ward absorbs overflow damage, preventing self-harm from overkill strikes.', effect: 'bust_protect', levelRequired: 2 },
+  { id: 'spell_double_up', name: 'Spell Disruption', icon: '🌀', type: 'spell', mode: 'both', class: 'any', rarity: 'rare', desc: 'Disrupt enemy focus: their next empowered strike fizzles to nothing.', effect: 'double_up', levelRequired: 2 },
   { id: 'util_draw', name: 'Quick Draw', icon: '🃏', type: 'utility', mode: 'both', class: 'any', rarity: 'rare', desc: 'Draw an extra card next turn.', effect: 'draw', magnitude: 1, levelRequired: 2 },
   // ── Level 2 — Class-specific cards ────────────────────────────────
   { id: 'dmg_warrior_mighty_blow', name: 'Mighty Blow', icon: '💥', type: 'damage', mode: 'both', class: 'warrior', rarity: 'rare', desc: 'Deal 70 damage with overwhelming force.', base: 70, mult: 1, levelRequired: 2 },

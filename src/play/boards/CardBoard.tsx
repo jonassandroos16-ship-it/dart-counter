@@ -172,15 +172,15 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         surge: `⚡ ${card.name} — Next visit scores double!`,
         hot_streak: `🔥 ${card.name} — Cumulative bonus active!`,
         power_buff: `💪 ${card.name} — Party power increased!`,
-        accuracy_buff: `🦅 ${card.name} — Party accuracy boosted!`,
+        accuracy_buff: `🔮 ${card.name} — Divine sight granted to the party!`,
         armor_buff: `🏰 ${card.name} — Party armor fortified!`,
         reflect: `🪞 ${card.name} — Damage reflection active!`,
         draw: `🃏 ${card.name} — Extra cards drawn!`,
         reroll: `🎲 ${card.name} — Reroll available!`,
         shadowstep: `🌑 ${card.name} — Shadowstep active!`,
         blessing: `🙏 ${card.name} — Blessed!`,
-        bust_protect: `🛡️ ${card.name} — Bust protection active!`,
-        double_up: `🔁 ${card.name} — Opponent's double negated!`,
+        bust_protect: `🛡️ ${card.name} — Soul barrier active!`,
+        double_up: `🌀 ${card.name} — Enemy strike disrupted!`,
         extra_dart: `➕ ${card.name} — Extra throw granted!`,
         redraw: `🔄 ${card.name} — Hand discarded, fresh cards drawn!`,
         recycle: `♻️ ${card.name} — Graveyard shuffled into deck!`,
@@ -670,7 +670,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         playedCount={game.playedCards?.length || 0}
         onCardClick={setSelectedCardIdx}
         onShowDeck={() => setShowDeck(true)}
-        onShowGraveyard={() => setShowGraveyard(true)}
+        onShowGraveyard={() => setShowGrareyard(true)}
         onShowPlayed={() => setShowPlayed(true)}
         onUndo={undoCard}
         onEnterVisit={enterVisit}
