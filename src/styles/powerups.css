@@ -4,6 +4,68 @@
   50% { box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 70%, transparent); }
 }
 
+/* ── Charged player icon (power-up charge ring around avatar) ──────── */
+.pu-charge-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+.pu-charge-ring {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  transition: filter .2s ease;
+}
+.pu-charge-ring.ready {
+  cursor: pointer;
+  animation: puChargePulse 1.2s ease-in-out infinite;
+}
+@keyframes puChargePulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 40%, transparent));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 14px color-mix(in srgb, var(--accent) 80%, transparent));
+    transform: scale(1.06);
+  }
+}
+.pu-charge-gain {
+  animation: puChargeGain .45s ease-out;
+}
+@keyframes puChargeGain {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+.pu-charge-pct {
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  transition: color .2s ease;
+}
+.pu-charge-pct.ready { color: var(--accent); }
+.pu-charge-icon {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  font-size: 12px;
+  line-height: 1;
+  background: var(--bg-2);
+  border-radius: 50%;
+  padding: 1px;
+  border: 1px solid var(--border);
+  z-index: 2;
+}
+
 .pu-banner {
   width: 100%;
   box-sizing: border-box;
