@@ -7,7 +7,7 @@ import type { MusicEngine } from '../../music';
 import type { PopupControls } from '../../Popups';
 import { AttributeStrip, BadgeAvatar } from '../common';
 import {
-  initCardPlayState, startTurn,
+  initCardPlayState, startTurn, drawCards, HAND_SIZE,
   endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
   getPlayerCards, defaultPlayerCards,
 } from '../../cards/deck';
@@ -101,8 +101,21 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     const state = game.cardState[p.id];
     if (!state) return;
     if (state.hand.length === 0 && state.used.length === 0) {
-      const next = startTurn(state);
-      setGame({ ...game, cardState: { ...game.cardState, [p.id]: next } });
+      let next = startTurn(state);
+      const extraDraw = (game.nextTurnDraws || {})[p.id] ?? 0;
+      const extraSlot = (game.nextTurnSlots || {})[p.id] ?? 0;
+      if (extraDraw > 0) next = drawCards(next, HAND_SIZE + extraDraw);
+      const updatedGame: Game = { ...game, cardState: { ...game.cardState, [p.id]: next } };
+      if (extraDraw > 0 || extraSlot > 0) {
+        const nd = { ...updatedGame.nextTurnDraws || {} };
+        delete nd[p.id];
+        const ns = { ...updatedGame.nextTurnSlots || {} };
+        delete ns[p.id];
+        updatedGame.nextTurnDraws = nd;
+        updatedGame.nextTurnSlots = ns;
+      }
+      if (extraSlot > 0) updatedGame.bonusSlots = (updatedGame.bonusSlots || 0) + extraSlot;
+      setGame(updatedGame);
     }
   }, [game.turn, game.cardState]);
 

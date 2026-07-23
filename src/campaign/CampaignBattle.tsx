@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CampaignBattleState, CampaignProgress, CoopPowerUpId } from './types';
 import type { CardPlayState, PlayerCard } from '../cards/types';
-import { initCardPlayState, startTurn, endTurn, getPlayerCards, MAX_PLAYS_PER_TURN, resolveCardDef, playCardFromHand, redrawHand, recycleGraveyard } from '../cards/deck';
+import { initCardPlayState, startTurn, endTurn, getPlayerCards, MAX_PLAYS_PER_TURN, resolveCardDef, playCardFromHand, redrawHand, recycleGraveyard, drawCards, HAND_SIZE } from '../cards/deck';
 import { CardHand } from '../cards/CardHand';
 import {
   addDart, undoDart, resolvePlayerVisit,
@@ -117,8 +117,8 @@ function applyUtilityCard(state: CampaignBattleState, card: CardDef, _settings: 
     return { ...state, partyHp: Math.max(state.partyHp, Math.round(state.partyMaxHp * 0.25)) };
   }
 
-  // Draw / shadowstep / redraw / recycle — no-op in coop (no deck system)
-  if (effect === 'draw' || effect === 'shadowstep' || effect === 'redraw' || effect === 'recycle') {
+  // Draw / shadowstep / redraw / recycle — handled in playCampaignCard (deck operations)
+  if (effect === 'draw' || effect === 'shadowstep' || effect === 'redraw' || effect === 'recycle' || effect === 'extra_slot' || effect === 'blessing') {
     return state;
   }
 
@@ -158,6 +158,8 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
   // ── Card mode state ──────────────────────────────────────────────────
   const [cardStates, setCardStates] = useState<Record<string, CardPlayState>>({});
   const [bonusSlots, setBonusSlots] = useState(0);
+  const [nextTurnDraws, setNextTurnDraws] = useState<Record<string, number>>({});
+  const [nextTurnSlots, setNextTurnSlots] = useState<Record<string, number>>({});
   const cardMode = settings.gameMode === 'cards';
 
   useEffect(() => {
@@ -179,10 +181,16 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
     const cs = cardStates[thrower.id];
     if (!cs) return;
     if (cs.hand.length === 0 && cs.used.length === 0) {
-      const next = startTurn(cs);
+      const extraDraw = nextTurnDraws[thrower.id] ?? 0;
+      const extraSlot = nextTurnSlots[thrower.id] ?? 0;
+      let next = startTurn(cs);
+      if (extraDraw > 0) next = drawCards(next, HAND_SIZE + extraDraw);
       setCardStates(prev => ({ ...prev, [thrower.id]: next }));
+      if (extraSlot > 0) setBonusSlots(b => b + extraSlot);
+      setNextTurnDraws(prev => { const c = { ...prev }; delete c[thrower.id]; return c; });
+      setNextTurnSlots(prev => { const c = { ...prev }; delete c[thrower.id]; return c; });
     }
-  }, [state.phase, state.playerTurnIdx, cardMode, cardStates]);
+  }, [state.phase, state.playerTurnIdx, cardMode, cardStates, nextTurnDraws, nextTurnSlots]);
 
   const enemyNumberMap: Record<string, number> = {};
   let enemyCounter = 0;
@@ -267,6 +275,22 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
         updated = recycleGraveyard(updated);
       } else if (card.effect === 'extra_dart') {
         setBonusSlots(b => b + 1);
+      } else if (card.effect === 'extra_slot') {
+        setNextTurnSlots(prev => ({ ...prev, [thrower.id]: (prev[thrower.id] ?? 0) + (card.magnitude ?? 1) }));
+      } else if (card.effect === 'draw') {
+        setNextTurnDraws(prev => ({ ...prev, [thrower.id]: (prev[thrower.id] ?? 0) + (card.magnitude ?? 1) }));
+      } else if (card.effect === 'blessing') {
+        setNextTurnDraws(prev => ({ ...prev, [thrower.id]: (prev[thrower.id] ?? 0) + 1 }));
+      } else if (card.effect === 'shadowstep') {
+        setNextTurnDraws(prev => ({ ...prev, [thrower.id]: (prev[thrower.id] ?? 0) + (card.magnitude ?? 1) }));
+        if (updated.used.length > 0) {
+          const swapBack = updated.used[updated.used.length - 1];
+          updated = {
+            ...updated,
+            hand: [...updated.hand, swapBack],
+            used: updated.used.slice(0, -1),
+          };
+        }
       }
       setState(prev => applyUtilityCard(prev, card, settings));
       Sound.play('powerup', {}, settings);
