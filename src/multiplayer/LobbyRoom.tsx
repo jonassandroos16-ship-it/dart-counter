@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
-import { Users, Play, Copy, Check, LogOut, Target, Layers, Swords, Dice5 } from 'lucide-react';
+import { Users, Play, Copy, Check, LogOut, Target, Layers, Swords, Dice5, Gamepad2 } from 'lucide-react';
 import type { Player, Settings } from '../types';
-import type { Lobby, LobbyPlayer, GameConfig, MultiplayerGameMode } from './client';
-import { getDeviceId, setLobbyGameMode, updateLobbyConfig } from './client';
+import type { Lobby, LobbyPlayer, GameConfig, MultiplayerGameMode, InputMode } from './client';
+import { getDeviceId, setLobbyGameMode, setLobbyInputMode, updateLobbyConfig } from './client';
 import { createGame } from '../logic';
 import { initials } from '../store';
 import { MODES, TEAM_COLORS } from '../constants';
@@ -30,10 +30,16 @@ export function LobbyRoom({ lobby, players, localPlayers, settings, isHost, onSt
   const joinedRef = useRef(false);
 
   const lobbyGameMode: MultiplayerGameMode = lobby.game_mode ?? settings.gameMode;
+  const lobbyInputMode: InputMode = lobby.input_mode ?? (lobbyGameMode === 'cards' ? 'cards' : 'dartboard');
 
   const handleSetGameMode = (gm: MultiplayerGameMode) => {
     if (!isHost) return;
     void setLobbyGameMode(lobby.id, gm);
+  };
+
+  const handleSetInputMode = (im: InputMode) => {
+    if (!isHost) return;
+    void setLobbyInputMode(lobby.id, im);
   };
 
   const allLobbyPlayers = players;
@@ -93,7 +99,7 @@ export function LobbyRoom({ lobby, players, localPlayers, settings, isHost, onSt
     const teamAssignment = teamMode ? allLobbyPlayers.map((_, i) => teams[i] ?? (i % teamCount)) : [];
     const config: GameConfig = { mode, doubleOut, legs, teamMode, teamAssignment, powerUps };
     if (lobbyGameMode === 'coop' || lobbyGameMode === 'dartlite') {
-      onStartGame(config, { _multiplayerCoop: true, _coopMode: lobbyGameMode, players: gamePlayers } as any);
+      onStartGame(config, { _multiplayerCoop: true, _coopMode: lobbyGameMode, players: gamePlayers, _inputMode: lobbyInputMode } as any);
       return;
     }
     const game = createGame(mode, playerIds, gamePlayers, doubleOut, legs, teamMode, teamAssignment, powerUps, settings);
@@ -131,7 +137,7 @@ export function LobbyRoom({ lobby, players, localPlayers, settings, isHost, onSt
 
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Game Mode (set by host)</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
             <button
               onClick={() => handleSetGameMode('dartboard')}
               disabled={!isHost}
@@ -141,20 +147,8 @@ export function LobbyRoom({ lobby, players, localPlayers, settings, isHost, onSt
                 border: `2px solid ${lobbyGameMode === 'dartboard' ? 'var(--accent)' : 'var(--border)'}`,
                 cursor: isHost ? 'pointer' : 'default', opacity: isHost ? 1 : 0.7, color: 'inherit',
               }}>
-              <Target size={24} color={lobbyGameMode === 'dartboard' ? 'var(--accent)' : 'var(--muted)'} />
-              <div style={{ fontWeight: 700, fontSize: 13 }}>Dart Board</div>
-            </button>
-            <button
-              onClick={() => handleSetGameMode('cards')}
-              disabled={!isHost}
-              style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: 12, borderRadius: 10,
-                background: lobbyGameMode === 'cards' ? 'color-mix(in srgb,var(--accent) 22%,var(--bg-3))' : 'var(--bg-3)',
-                border: `2px solid ${lobbyGameMode === 'cards' ? 'var(--accent)' : 'var(--border)'}`,
-                cursor: isHost ? 'pointer' : 'default', opacity: isHost ? 1 : 0.7, color: 'inherit',
-              }}>
-              <Layers size={24} color={lobbyGameMode === 'cards' ? 'var(--accent)' : 'var(--muted)'} />
-              <div style={{ fontWeight: 700, fontSize: 13 }}>Card Based</div>
+              <Gamepad2 size={24} color={lobbyGameMode === 'dartboard' ? 'var(--accent)' : 'var(--muted)'} />
+              <div style={{ fontWeight: 700, fontSize: 13 }}>Standard</div>
             </button>
             <button
               onClick={() => handleSetGameMode('coop')}
@@ -182,6 +176,37 @@ export function LobbyRoom({ lobby, players, localPlayers, settings, isHost, onSt
             </button>
           </div>
           {!isHost && <div className="muted small" style={{ marginTop: 6, textAlign: 'center' }}>The host determines the game mode for this lobby.</div>}
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Input Mode (set by host)</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <button
+              onClick={() => handleSetInputMode('dartboard')}
+              disabled={!isHost}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: 12, borderRadius: 10,
+                background: lobbyInputMode === 'dartboard' ? 'color-mix(in srgb,var(--accent) 22%,var(--bg-3))' : 'var(--bg-3)',
+                border: `2px solid ${lobbyInputMode === 'dartboard' ? 'var(--accent)' : 'var(--border)'}`,
+                cursor: isHost ? 'pointer' : 'default', opacity: isHost ? 1 : 0.7, color: 'inherit',
+              }}>
+              <Target size={24} color={lobbyInputMode === 'dartboard' ? 'var(--accent)' : 'var(--muted)'} />
+              <div style={{ fontWeight: 700, fontSize: 13 }}>Dart Board</div>
+            </button>
+            <button
+              onClick={() => handleSetInputMode('cards')}
+              disabled={!isHost}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: 12, borderRadius: 10,
+                background: lobbyInputMode === 'cards' ? 'color-mix(in srgb,var(--accent) 22%,var(--bg-3))' : 'var(--bg-3)',
+                border: `2px solid ${lobbyInputMode === 'cards' ? 'var(--accent)' : 'var(--border)'}`,
+                cursor: isHost ? 'pointer' : 'default', opacity: isHost ? 1 : 0.7, color: 'inherit',
+              }}>
+              <Layers size={24} color={lobbyInputMode === 'cards' ? 'var(--accent)' : 'var(--muted)'} />
+              <div style={{ fontWeight: 700, fontSize: 13 }}>Card Based</div>
+            </button>
+          </div>
+          {!isHost && <div className="muted small" style={{ marginTop: 6, textAlign: 'center' }}>The host determines the input method for this lobby.</div>}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
@@ -292,12 +317,12 @@ export function LobbyRoom({ lobby, players, localPlayers, settings, isHost, onSt
 
             {lobbyGameMode === 'coop' && (
               <div className="muted small" style={{ padding: '10px 0', lineHeight: 1.5 }}>
-                Coop Campaign: Team up against AI enemies across a level-based campaign. All lobby players play together on the host's device.
+                Coop Campaign: Team up against AI enemies across a level-based campaign. All lobby players play together across their devices.
               </div>
             )}
             {lobbyGameMode === 'dartlite' && (
               <div className="muted small" style={{ padding: '10px 0', lineHeight: 1.5 }}>
-                Dartlite: Rogue-lite endless run. Choose boons, collect trinkets, survive as long as you can. All lobby players play together on the host's device.
+                Dartlite: Rogue-lite endless run. Choose boons, collect trinkets, survive as long as you can. All lobby players play together across their devices.
               </div>
             )}
 
@@ -351,7 +376,7 @@ export function LobbyRoom({ lobby, players, localPlayers, settings, isHost, onSt
               </>
             ) : (
               <div className="muted small" style={{ padding: '10px 0', lineHeight: 1.5 }}>
-                {lobbyGameMode === 'coop' ? 'Coop Campaign: Team up against AI enemies across a level-based campaign.' : 'Dartlite: Rogue-lite endless run with boons and trinkets.'} All lobby players play together on the host's device.
+                {lobbyGameMode === 'coop' ? 'Coop Campaign: Team up against AI enemies across a level-based campaign.' : 'Dartlite: Rogue-lite endless run with boons and trinkets.'} All lobby players play together across their devices.
               </div>
             )}
             <div className="muted small center" style={{ padding: '8px 0' }}>
