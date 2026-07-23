@@ -18,6 +18,8 @@ import {
   getPlayerCards, defaultPlayerCards,
   redrawHand, recycleGraveyard,
 } from '../../cards/deck';
+import { QuitButton, PowerUpBanners, calcScored, clearCurFlags, checkScoreMilestones, advanceSimpleTurn } from '../boardUtils';
+import { CardPilePopup, CardDetailPopup } from './CardPopups';
 
 const HIGH_SCORE_VISITS = 7;
 
@@ -33,6 +35,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
   const [showGraveyard, setShowGraveyard] = useState(false);
   const [animatingOut, setAnimatingOut] = useState<number | null>(null);
   const prevHandLen = useRef<number>(0);
+  const prevHandRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (game.cardState && Object.keys(game.cardState).length === game.players.length) return;
@@ -45,7 +48,6 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     setGame({ ...game, cardState });
   }, [game.players.length]);
 
-  // Ensure the current player has a hand drawn for their turn.
   useEffect(() => {
     if (!game.cardState) return;
     const p = game.players[game.turn];
@@ -84,7 +86,6 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     }
   }, [game.turn, aliveOthers.length, isBattle]);
 
-  // Track hand length changes for enter/exit animations.
   useEffect(() => {
     const curLen = state.hand.length;
     if (curLen < prevHandLen.current && prevHandRef.current !== null) {
@@ -96,54 +97,47 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     prevHandLen.current = curLen;
   }, [state.hand.length]);
 
-  const prevHandRef = useRef<number | null>(null);
-
   const playCard = (handIdx: number) => {
     const card = handDefs[handIdx];
     if (!card) return;
     if (card.type !== 'damage') {
-      // Spell/utility cards: provide themed UI feedback based on effect type
       const effectMsg: Record<string, string> = {
-        heal: `✨ ${card.name} — Party healed!`,
-        heal_over_time: `💚 ${card.name} — Party regenerating HP!`,
-        party_shield_flat: `🛡️ ${card.name} — Party shielded from flat damage!`,
-        party_shield: `🛡️ ${card.name} — Party takes less damage!`,
-        enemy_curse: `🔮 ${card.name} — Enemies cursed!`,
-        enemy_debuff: `💀 ${card.name} — Enemies weakened!`,
-        enemy_miss: `🌀 ${card.name} — Enemies debuffed, may miss!`,
-        bleed: `🩸 ${card.name} — Enemies bleeding!`,
-        freeze: `❄️ ${card.name} — Enemies frozen!`,
-        surge: `⚡ ${card.name} — Next visit scores double!`,
-        hot_streak: `🔥 ${card.name} — Cumulative bonus active!`,
-        power_buff: `💪 ${card.name} — Party power increased!`,
-        accuracy_buff: `🦅 ${card.name} — Party accuracy boosted!`,
-        armor_buff: `🏰 ${card.name} — Party armor fortified!`,
-        reflect: `🪞 ${card.name} — Damage reflection active!`,
-        draw: `🃏 ${card.name} — Extra cards drawn!`,
-        reroll: `🎲 ${card.name} — Reroll available!`,
-        shadowstep: `🌑 ${card.name} — Shadowstep active!`,
-        blessing: `🙏 ${card.name} — Blessed!`,
-        bust_protect: `🛡️ ${card.name} — Bust protection active!`,
-        double_up: `🔁 ${card.name} — Opponent's double negated!`,
-        extra_dart: `➕ ${card.name} — Extra throw granted!`,
-        redraw: `🔄 ${card.name} — Hand discarded, fresh cards drawn!`,
-        recycle: `♻️ ${card.name} — Graveyard shuffled into deck!`,
-        revive: `❤️ ${card.name} — Party revived!`,
+        heal: `\u2728 ${card.name} \u2014 Party healed!`,
+        heal_over_time: `\u{1F9A1} ${card.name} \u2014 Party regenerating HP!`,
+        party_shield_flat: `\u{1F6E1}\uFE0F ${card.name} \u2014 Party shielded from flat damage!`,
+        party_shield: `\u{1F6E1}\uFE0F ${card.name} \u2014 Party takes less damage!`,
+        enemy_curse: `\u{1F52E} ${card.name} \u2014 Enemies cursed!`,
+        enemy_debuff: `\u{1F480} ${card.name} \u2014 Enemies weakened!`,
+        enemy_miss: `\u{1F300} ${card.name} \u2014 Enemies debuffed, may miss!`,
+        bleed: `\u{1FA78} ${card.name} \u2014 Enemies bleeding!`,
+        freeze: `\u2744\uFE0F ${card.name} \u2014 Enemies frozen!`,
+        surge: `\u26A1 ${card.name} \u2014 Next visit scores double!`,
+        hot_streak: `\u{1F525} ${card.name} \u2014 Cumulative bonus active!`,
+        power_buff: `\u{1F4AA} ${card.name} \u2014 Party power increased!`,
+        accuracy_buff: `\u{1F9A0} ${card.name} \u2014 Party accuracy boosted!`,
+        armor_buff: `\u{1F3F0} ${card.name} \u2014 Party armor fortified!`,
+        reflect: `\u{1FA9E} ${card.name} \u2014 Damage reflection active!`,
+        draw: `\u{1F0CF} ${card.name} \u2014 Extra cards drawn!`,
+        reroll: `\u{1F3B2} ${card.name} \u2014 Reroll available!`,
+        shadowstep: `\u{1F311} ${card.name} \u2014 Shadowstep active!`,
+        blessing: `\u{1F64F} ${card.name} \u2014 Blessed!`,
+        bust_protect: `\u{1F6E1}\uFE0F ${card.name} \u2014 Bust protection active!`,
+        double_up: `\u{1F501} ${card.name} \u2014 Opponent's double negated!`,
+        extra_dart: `\u2795 ${card.name} \u2014 Extra throw granted!`,
+        redraw: `\u{1F504} ${card.name} \u2014 Hand discarded, fresh cards drawn!`,
+        recycle: `\u267B\uFE0F ${card.name} \u2014 Graveyard shuffled into deck!`,
+        revive: `\u2764\uFE0F ${card.name} \u2014 Party revived!`,
       };
       const msg = effectMsg[card.effect || ''] || `${card.name}: ${card.desc}`;
       toast(msg);
       Sound.play('powerup', {}, settings);
-      // Move the card to used pile so it's consumed
       let updated = playCardFromHand(state, handIdx);
       if (!updated) return;
-
-      // Apply real deck-manipulation effects for the redesigned utility cards.
       if (card.effect === 'redraw') {
         updated = redrawHand(updated);
       } else if (card.effect === 'recycle') {
         updated = recycleGraveyard(updated);
       }
-
       setGame({ ...game, cardState: { ...game.cardState, [p.id]: updated } });
       force(n => n + 1);
       return;
@@ -194,9 +188,11 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
 
   const enterVisit = () => {
     if (!game.darts.length) { toast('Play at least one damage card'); return; }
-    const scored = game.darts.reduce((a, d) => a + d.value, 0);
+    const cur0 = game.players[game.turn] as any;
+    const scored = isBattle ? game.darts.reduce((a, d) => a + d.value, 0) : calcScored(game.darts, cur0);
     const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
     const cur = newPlayers[game.turn] as any;
+    clearCurFlags(cur);
     const endedState = endTurn(state);
 
     if (game.practice) {
@@ -238,9 +234,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         popups.setKill({ killer: cur.name, victim: victim.name });
         Sound.play('kill', {}, settings);
       }
-      if (settings.popups.scores) {
-        for (const sp of SCORE_POPUPS) { if (scored >= sp.min) { popups.setMilestone({ emoji: sp.emoji, title: sp.title, sub: sp.sub }); Sound.play('milestone', {}, settings); break; } }
-      }
+      checkScoreMilestones(scored, settings, popups);
       const finishedState: Game = { ...game, players: newPlayers, darts: [], mult: 1 };
       const remainingAlive = newPlayers.filter((pl: any) => !pl.defeated);
       if (remainingAlive.length <= 1) {
@@ -248,8 +242,15 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         setTimeout(() => finishSimpleGame(finishedState, winner, settings, setGame, setGames, setPlayers, popups, music, [], []), 200);
         return;
       }
-      const next = advanceTurn({ ...finishedState, cardState: { ...game.cardState, [p.id]: endedState } });
-      setGame(next);
+      const result = advanceSimpleTurn(
+        { ...finishedState, cardState: { ...game.cardState, [p.id]: endedState } },
+        newPlayers,
+        (pl: any) => pl.defeated,
+        (pl: any) => pl.hp,
+        'battle',
+        popups, toast,
+      );
+      setGame({ ...finishedState, turn: result.turn, cardState: { ...game.cardState, [p.id]: endedState } });
       return;
     }
 
@@ -287,8 +288,15 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       }
       Sound.play('enter', {}, settings);
       if (killedThisVisit) popups.setKill(killedThisVisit);
-      const next = advanceTurn({ ...finishedState, cardState: { ...game.cardState, [p.id]: endedState } });
-      setGame(next);
+      const result = advanceSimpleTurn(
+        { ...finishedState, cardState: { ...game.cardState, [p.id]: endedState } },
+        newPlayers,
+        (pl: any) => pl.eliminated,
+        (pl: any) => pl.lives,
+        'killer',
+        popups, toast,
+      );
+      setGame({ ...finishedState, turn: result.turn, cardState: { ...game.cardState, [p.id]: endedState } });
       return;
     }
 
@@ -297,9 +305,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       cur.visits.push({ darts: [...game.darts], scored, remaining: cur.score, leg: 1, mode: 'highscore', date: new Date().toISOString() });
       cur.dartsThrown += game.darts.length;
       Sound.play('enter', {}, settings);
-      if (settings.popups.scores) {
-        for (const sp of SCORE_POPUPS) { if (scored >= sp.min) { popups.setMilestone({ emoji: sp.emoji, title: sp.title, sub: sp.sub }); Sound.play('milestone', {}, settings); break; } }
-      }
+      checkScoreMilestones(scored, settings, popups);
       const allDone = newPlayers.every(pl => pl.visits.length >= HIGH_SCORE_VISITS);
       const finishedState = { ...game, players: newPlayers, darts: [], mult: 1 };
       if (allDone) {
@@ -309,8 +315,15 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         finishSimpleGame(finishedState, winner, settings, setGame, setGames, setPlayers, popups, music, [], []);
         return;
       }
-      const next = advanceTurn({ ...finishedState, cardState: { ...game.cardState, [p.id]: endedState } });
-      setGame(next);
+      const result = advanceSimpleTurn(
+        { ...finishedState, cardState: { ...game.cardState, [p.id]: endedState } },
+        newPlayers,
+        (pl: any) => pl.visits.length >= HIGH_SCORE_VISITS,
+        (pl: any) => pl.score,
+        'highscore',
+        popups, toast,
+      );
+      setGame({ ...finishedState, turn: result.turn, cardState: { ...game.cardState, [p.id]: endedState } });
       return;
     }
 
@@ -424,7 +437,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
           const visits = [...frozenPl.visits, { darts: [], scored: 0, remaining: isBattle ? frozenPl.hp : isKiller ? frozenPl.lives : frozenPl.score, leg: g.leg, frozen: true, mode: modeLabel, date: new Date().toISOString() }];
           g = { ...g, players: g.players.map((pl, i) => i === turn ? { ...pl, visits } : pl), thrownThisRound: [...(g.thrownThisRound || []), frozenPl.id] };
           popups.setFrozen({ name: frozenPl.name });
-          toast(`${frozenPl.name} is frozen — visit skipped.`);
+          toast(`${frozenPl.name} is frozen \u2014 visit skipped.`);
           turn = (turn + 1) % g.players.length;
           guards++;
         } else {
@@ -493,7 +506,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
 
   return (
     <div className="view-noscroll">
-      <button className="btn danger sm quit-float" onClick={() => { if (confirm('Quit this game? Progress will not be saved.')) onQuit(); }}>Quit</button>
+      <QuitButton onQuit={onQuit} />
       <div className="play-current" style={game.teamMode ? { borderColor: curTeamColor, boxShadow: `0 0 0 2px ${curTeamColor}33` } : {}}>
         <div className="pc-header">
           <div className="row" style={{ gap: 8 }}>
@@ -507,17 +520,17 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
           <div className="row" style={{ gap: 6 }}>
             {!game.teamMode && game.legsBestOf > 1 && !isBattle && !isKiller && !isHighScore ? <span className="pill">{p.legsWon} legs</span> : null}
             <span className="muted small">
-              {isBattle ? `BATTLE · ${aliveCount} ALIVE` :
-               isKiller ? `KILLER · ${aliveCount} ALIVE` :
-               isHighScore ? `HIGH SCORE · VISIT ${(p.visits.length || 0) + 1}/${HIGH_SCORE_VISITS}` :
-               game.practice ? 'PRACTICE' : `LEG ${game.leg} · ${game.doubleOut ? 'DOUBLE OUT' : 'STRAIGHT OUT'}`}
+              {isBattle ? `BATTLE \u00B7 ${aliveCount} ALIVE` :
+               isKiller ? `KILLER \u00B7 ${aliveCount} ALIVE` :
+               isHighScore ? `HIGH SCORE \u00B7 VISIT ${(p.visits.length || 0) + 1}/${HIGH_SCORE_VISITS}` :
+               game.practice ? 'PRACTICE' : `LEG ${game.leg} \u00B7 ${game.doubleOut ? 'DOUBLE OUT' : 'STRAIGHT OUT'}`}
             </span>
           </div>
         </div>
         {isBattle ? (
           <>
             <div className="pc-remaining" style={{ fontSize: 28 }}>{p.hp} HP</div>
-            <div className="checkout-hint center">{'\u2764\uFE0F'} {p.hp}/{p.maxHp} · {'\u{1F6E1}\uFE0F'} {p.armorPct}% armor · {'\u26A1'} {p.powerPct} power</div>
+            <div className="checkout-hint center">{'\u2764\uFE0F'} {p.hp}/{p.maxHp} {'\u00B7'} {'\u{1F6E1}\uFE0F'} {p.armorPct}% armor {'\u00B7'} {'\u26A1'} {p.powerPct} power</div>
             <div style={{ width: '100%', height: 8, borderRadius: 4, background: 'var(--bg-3)', overflow: 'hidden', margin: '4px 0' }}>
               <div style={{ height: '100%', width: `${hpPct(p)}%`, background: p.color, transition: 'width .3s' }} />
             </div>
@@ -525,7 +538,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         ) : isKiller ? (
           <>
             <div className="pc-remaining" style={{ fontSize: 28 }}>
-              {(p.killerHits || 0) >= 5 ? '🎯 Aim at opponents' : `Hit ${p.killerNumber}`}
+              {(p.killerHits || 0) >= 5 ? {'\u{1F3AF}'} Aim at opponents' : `Hit ${p.killerNumber}`}
             </div>
             <div className="checkout-hint center">
               {(p.killerHits || 0) < 5 ? `Become a Killer: ${p.killerHits || 0}/5 hits on ${p.killerNumber}` : 'Hit opponent numbers to eliminate them'}
@@ -535,7 +548,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         ) : isHighScore ? (
           <>
             <div className="pc-remaining">{p.score + buffScored}</div>
-            <div className="checkout-hint center">{(p.visits.length || 0) + 1 >= HIGH_SCORE_VISITS ? 'Final visit — go big!' : 'Score as high as you can!'}</div>
+            <div className="checkout-hint center">{(p.visits.length || 0) + 1 >= HIGH_SCORE_VISITS ? 'Final visit \u2014 go big!' : 'Score as high as you can!'}</div>
           </>
         ) : (
           <>
@@ -543,12 +556,13 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
             <div className="checkout-hint center">{checkoutHint(game.practice ? null : projected, game.doubleOut, game.practice)}</div>
           </>
         )}
+        <PowerUpBanners game={game} p={p} />
         <div className="pc-slots">
           {Array.from({ length: MAX_PLAYS_PER_TURN }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '\u2013'}</div>; })}
         </div>
         <div className="muted small">
-          This visit: <b style={{ color: 'var(--text)' }}>{buffScored}</b> · Cards played: <b style={{ color: 'var(--text)' }}>{game.darts.length}</b>/{MAX_PLAYS_PER_TURN}
-          {isBattle && <span style={{ marginLeft: 8 }}> · {buffScored} dmg</span>}
+          This visit: <b style={{ color: 'var(--text)' }}>{buffScored}</b> {'\u00B7'} Cards played: <b style={{ color: 'var(--text)' }}>{game.darts.length}</b>/{MAX_PLAYS_PER_TURN}
+          {isBattle && <span style={{ marginLeft: 8 }}>{' \u00B7'} {buffScored} dmg</span>}
         </div>
         {isBattle && aliveOthers.length > 1 && (
           <div style={{ width: '100%', marginTop: 6 }}>
@@ -603,12 +617,12 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
                     <div style={{ marginTop: 4, height: 6, borderRadius: 3, background: 'var(--bg-3)', overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: `${hpPct(pl)}%`, background: pl.color, transition: 'width .3s' }} />
                     </div>
-                    <div className="po-sub">{'\u{1F6E1}\uFE0F'} {pl.armorPct}% · {'\u26A1'} {pl.powerPct}{pl.damageDealt ? ` · {'\u{1F4A5}'} ${pl.damageDealt}` : ''}</div>
+                    <div className="po-sub">{'\u{1F6E1}\uFE0F'} {pl.armorPct}% {'\u00B7'} {'\u26A1'} {pl.powerPct}{pl.damageDealt ? ` {'\u00B7'} {'\u{1F4A5}'} ${pl.damageDealt}` : ''}</div>
                   </>
                 ) : isKiller ? (
                   <>
                     <div className="po-score">#{pl.killerNumber}</div>
-                    <div className="po-sub">{(pl.killerHits || 0) >= 5 ? 'Killer' : `${pl.killerHits || 0}/5 to kill`} · {pl.kills?.length || 0} kills</div>
+                    <div className="po-sub">{(pl.killerHits || 0) >= 5 ? 'Killer' : `${pl.killerHits || 0}/5 to kill`} {'\u00B7'} {pl.kills?.length || 0} kills</div>
                   </>
                 ) : isHighScore ? (
                   <>
@@ -618,7 +632,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
                 ) : (
                   <>
                     <div className="po-score">{pl.score}</div>
-                    <div className="po-sub">avg {visitAvg(pl).toFixed(1)} · {pl.visits.reduce((a, v) => a + v.darts.length, 0)} {'\u{1F3AF}'} · L{li.level}{ti ? ` · ${ti.icon || ''} ${ti.name}` : ''}</div>
+                    <div className="po-sub">avg {visitAvg(pl).toFixed(1)} {'\u00B7'} {pl.visits.reduce((a, v) => a + v.darts.length, 0)} {'\u{1F3AF}'} {'\u00B7'} L{li.level}{ti ? ` {'\u00B7'} ${ti.icon || ''} ${ti.name}` : ''}</div>
                     <AttributeStrip playerId={pl.id} players={players} mode={game.mode} settings={settings} />
                   </>
                 )}
@@ -636,7 +650,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
               <span className="card-pile-label">Deck</span>
               <span className="card-pile-count">{state.deck.length}</span>
             </button>
-            <div className="card-hand-label">Your Hand — {p.name}</div>
+            <div className="card-hand-label">Your Hand {'\u2014'} {p.name}</div>
             <button className="card-pile-btn" onClick={() => setShowGraveyard(true)} title="View graveyard">
               <span className="card-pile-icon">{'\u26B0\uFE0F'}</span>
               <span className="card-pile-label">Graveyard</span>
@@ -696,114 +710,31 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       </div>
 
       {selectedCard && (
-        <div className="card-popup-overlay" onClick={() => setSelectedCardIdx(null)}>
-          <div className="card-popup" onClick={e => e.stopPropagation()} style={{ '--card-color': cardTypeColor(selectedCard.type), '--card-rarity': cardRarityColor(selectedCard.rarity) } as React.CSSProperties}>
-            <div className="card-popup-header">
-              <span className="card-popup-icon">{selectedCard.icon}</span>
-              <span className="card-popup-name">{selectedCard.name}</span>
-              <span className="card-popup-rarity" style={{ color: cardRarityColor(selectedCard.rarity) }}>{selectedCard.rarity}</span>
-            </div>
-            <div className="card-popup-body">
-              <div className="card-popup-type" style={{ color: cardTypeColor(selectedCard.type) }}>
-                {selectedCard.type === 'damage' ? `Damage — ${cardDamage(selectedCard)} points` : selectedCard.type === 'spell' ? 'Spell' : 'Utility'}
-              </div>
-              <div className="card-popup-desc">{selectedCard.desc}</div>
-              {selectedCard.class !== 'any' && <div className="card-popup-class">Class: {selectedCard.class}</div>}
-            </div>
-            <div className="card-popup-actions">
-              <button className="btn block ghost" onClick={() => setSelectedCardIdx(null)}>Cancel</button>
-              <button
-                className="btn block primary"
-                disabled={selectedCard.type === 'damage' && !canPlayMore}
-                onClick={() => playCard(selectedCardIdx!)}
-              >
-                {selectedCard.type === 'damage' ? 'Play' : 'Use'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <CardDetailPopup
+          card={selectedCard}
+          cardIdx={selectedCardIdx!}
+          canPlay={canPlayMore}
+          onPlay={() => playCard(selectedCardIdx!)}
+          onCancel={() => setSelectedCardIdx(null)}
+        />
       )}
 
       {showDeck && (
-        <div className="card-popup-overlay" onClick={() => setShowDeck(false)}>
-          <div className="card-pile-popup" onClick={e => e.stopPropagation()}>
-            <div className="card-pile-popup-header">
-              <h3>{'\u{1F0A0}'} Deck ({state.deck.length})</h3>
-              <button className="btn sm ghost" onClick={() => setShowDeck(false)}>Close</button>
-            </div>
-            {state.deck.length === 0 ? (
-              <div className="muted small" style={{ padding: 20 }}>Deck is empty. Graveyard will be shuffled in on next draw.</div>
-            ) : (
-              <>
-                {/* Starter cards */}
-                <div style={{ marginBottom: 12 }}>
-                  <div className="muted small" style={{ fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em', fontSize: 10 }}>Starter Cards</div>
-                  <div className="card-pile-popup-grid">
-                    {state.deck.filter(pc => { const def = resolveCardDef(pc); return def && (def.levelRequired ?? 1) === 1; }).map((pc, idx) => {
-                      const def = resolveCardDef(pc);
-                      if (!def) return null;
-                      return (
-                        <div key={idx} className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))` }}>
-                          <span style={{ fontSize: 20 }}>{def.icon}</span>
-                          <span style={{ fontSize: 10, fontWeight: 800 }}>{def.name}</span>
-                          <span className="muted" style={{ fontSize: 9 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                {/* Leveled cards — split by level */}
-                {Array.from(new Set(state.deck.map(pc => resolveCardDef(pc)?.levelRequired ?? 1).filter(lvl => lvl > 1))).sort((a, b) => a - b).map(lvl => {
-                  const levelCards = state.deck.filter(pc => { const def = resolveCardDef(pc); return def && (def.levelRequired ?? 1) === lvl; });
-                  if (levelCards.length === 0) return null;
-                  return (
-                    <div key={lvl} style={{ marginBottom: 12 }}>
-                      <div className="muted small" style={{ fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em', fontSize: 10 }}>Level {lvl} Cards</div>
-                      <div className="card-pile-popup-grid">
-                        {levelCards.map((pc, idx) => {
-                          const def = resolveCardDef(pc);
-                          if (!def) return null;
-                          return (
-                            <div key={idx} className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))` }}>
-                              <span style={{ fontSize: 20 }}>{def.icon}</span>
-                              <span style={{ fontSize: 10, fontWeight: 800 }}>{def.name}</span>
-                              <span className="muted" style={{ fontSize: 9 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </>
-            )}
-          </div>
-        </div>
+        <CardPilePopup
+          title="Deck"
+          icon={'\u{1F0A0}'}
+          cards={state.deck}
+          onClose={() => setShowDeck(false)}
+        />
       )}
 
       {showGraveyard && (
-        <div className="card-popup-overlay" onClick={() => setShowGraveyard(false)}>
-          <div className="card-pile-popup" onClick={e => e.stopPropagation()}>
-            <div className="card-pile-popup-header">
-              <h3>{'\u26B0\uFE0F'} Graveyard ({state.graveyard.length})</h3>
-              <button className="btn sm ghost" onClick={() => setShowGraveyard(false)}>Close</button>
-            </div>
-            <div className="card-pile-popup-grid">
-              {state.graveyard.length === 0 && <div className="muted small" style={{ padding: 20 }}>Graveyard is empty.</div>}
-              {state.graveyard.map((pc, idx) => {
-                const def = resolveCardDef(pc);
-                if (!def) return null;
-                return (
-                  <div key={idx} className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))` }}>
-                    <span style={{ fontSize: 20 }}>{def.icon}</span>
-                    <span style={{ fontSize: 10, fontWeight: 800 }}>{def.name}</span>
-                    <span className="muted" style={{ fontSize: 9 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <CardPilePopup
+          title="Graveyard"
+          icon={'\u26B0\uFE0F'}
+          cards={state.graveyard}
+          onClose={() => setShowGraveyard(false)}
+        />
       )}
     </div>
   );
