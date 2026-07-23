@@ -16,6 +16,7 @@ import type { DartliteRun, ChoiceOption } from './engine';
 import { isMiniBossRound, isBossRound, applyPlayerChoice, applyBossTrinketChoice } from './engine';
 import { getTrinket } from './trinkets';
 import { ChoiceScreen } from './ChoiceScreen';
+import { ownsPlayer } from '../multiplayer/client';
 import { DeckUpgradeScreen } from './DeckUpgradeScreen';
 import { ProgressScreen } from './ProgressScreen';
 import { PlayerDetailModal } from './PlayerDetailModal';
@@ -36,9 +37,13 @@ interface Props {
   onBattleEnd: (won: boolean) => void;
   onChoice: (run: DartliteRun) => void;
   onQuit: () => void;
+  /** When provided, this is the list of lobby players for multiplayer mode.
+   *  Used to gate interaction to only the device that owns the current
+   *  chooser player. */
+  lobbyPlayers?: { player_id: string; device_id: string }[];
 }
 
-export function DartliteBattle({ run, players, settings, music, onBattleEnd, onChoice, onQuit }: Props) {
+export function DartliteBattle({ run, players, settings, music, onBattleEnd, onChoice, onQuit, lobbyPlayers }: Props) {
   const battle = run.battle!;
   const [state, setState] = useState<CampaignBattleState | null>(battle);
   useEffect(() => { if (battle) setState(battle); }, [battle]);
@@ -52,9 +57,17 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   const [showDeckUpgrade, setShowDeckUpgrade] = useState(false);
   const [deckUpgradeOption, setDeckUpgradeOption] = useState<ChoiceOption | null>(null);
 
+  // Multiplayer: determine if this device owns the current chooser player.
+  const isMultiplayer = !!lobbyPlayers?.length;
+  const chooserIdx = run.phase === 'choice' ? run.choicePlayerIdx : (run.phase === 'boss_victory' ? 0 : -1);
+  const chooserPlayerId = chooserIdx >= 0 ? run.playerIds[chooserIdx] : null;
+  const canChoose = !isMultiplayer || (chooserPlayerId != null && ownsPlayer(lobbyPlayers!, chooserPlayerId));
+
+  // Multiplayer: determine if this device owns the current thrower.
+  const throwerId = state?.players?.[state.playerTurnIdx]?.id;
+  const canThrow = !isMultiplayer || (throwerId != null && ownsPlayer(lobbyPlayers!, throwerId));
+
   // ── Card mode state ──────────────────────────────────────────────────
-  // Per-player card play state (deck, hand, used, graveyard), keyed by
-  // player ID. Only used when run.cardMode is true.
   const [cardStates, setCardStates] = useState<Record<string, CardPlayState>>({});
   const [selectedCardIdx, setSelectedCardIdx] = useState<number | null>(null);
   const [bonusSlots, setBonusSlots] = useState(0);
@@ -65,7 +78,6 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   const prevHandRef = useRef<number | null>(null);
   const cardMode = run.cardMode;
 
-  // Initialize card play state for all players when a new battle starts.
   useEffect(() => {
     if (!cardMode || !battle) return;
     const cs: Record<string, CardPlayState> = {};
@@ -78,7 +90,6 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [battle, cardMode]);
 
-  // Ensure the current thrower has a hand drawn for their turn.
   useEffect(() => {
     if (!cardMode || !state || state.phase !== 'player') return;
     const thrower = state.players[state.playerTurnIdx];
@@ -91,7 +102,6 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     }
   }, [state?.phase, state?.playerTurnIdx, cardMode, cardStates]);
 
-  // Track hand length changes for enter/exit animations.
   useEffect(() => {
     if (!cardMode || !state || state.phase !== 'player') return;
     const thrower = state.players[state.playerTurnIdx];
@@ -159,36 +169,22 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
       const thrower = state.players[state.playerTurnIdx];
       if (thrower) {
         const cs = cardStates[thrower.id];
-        if (cs && cs.used.length > 0) {
-          const lastUsed = cs.used[cs.used.length - 1];
-          const lastDef = resolveCardDef(lastUsed);
-          if (lastDef && lastDef.type !== 'damage') {
+        if (cs && state.darts.length > 0) {
+          const lastDart = state.darts[state.darts.length - 1];
+          const usedIdx = [...cs.used].reverse().findIndex(pc => {
+            const def = resolveCardDef(pc);
+            return def?.name === lastDart.label;
+          });
+          if (usedIdx !== -1) {
+            const realIdx = cs.used.length - 1 - usedIdx;
+            const card = cs.used[realIdx];
             const updated: CardPlayState = {
               deck: cs.deck,
-              hand: [...cs.hand, lastUsed],
-              used: cs.used.slice(0, -1),
+              hand: [...cs.hand, card],
+              used: cs.used.filter((_, i) => i !== realIdx),
               graveyard: cs.graveyard,
             };
             setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
-            return;
-          }
-          if (state.darts.length > 0) {
-            const lastDart = state.darts[state.darts.length - 1];
-            const usedIdx = [...cs.used].reverse().findIndex(pc => {
-              const def = resolveCardDef(pc);
-              return def?.name === lastDart.label;
-            });
-            if (usedIdx !== -1) {
-              const realIdx = cs.used.length - 1 - usedIdx;
-              const card = cs.used[realIdx];
-              const updated: CardPlayState = {
-                deck: cs.deck,
-                hand: [...cs.hand, card],
-                used: cs.used.filter((_, i) => i !== realIdx),
-                graveyard: cs.graveyard,
-              };
-              setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
-            }
           }
         }
       }
@@ -196,21 +192,21 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     setState(prev => prev ? undoDart(prev, settings) : prev);
   };
   const onEnter = () => {
-    if (cardMode) {
-      if (!thrower) return;
-      const cs = cardStates[thrower.id];
-      if (!cs || cs.used.length === 0) return;
-      const endedState = endTurn(cs);
-      setCardStates(prev => ({ ...prev, [thrower.id]: endedState }));
-      setBonusSlots(0);
-      setState(prev => prev ? resolvePlayerVisit(prev) : prev);
-      return;
-    }
     if (!state.darts.length) return;
+    if (cardMode) {
+      const thrower = state.players[state.playerTurnIdx];
+      if (thrower) {
+        const cs = cardStates[thrower.id];
+        if (cs) {
+          const endedState = endTurn(cs);
+          setCardStates(prev => ({ ...prev, [thrower.id]: endedState }));
+        }
+      }
+      setBonusSlots(0);
+    }
     setState(prev => prev ? resolvePlayerVisit(prev) : prev);
   };
 
-  // ── Card mode helpers ───────────────────────────────────────────────
   const playCard = (handIdx: number) => {
     if (!state || !cardMode) return;
     const thrower = state.players[state.playerTurnIdx];
@@ -237,7 +233,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
       setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
       return;
     }
-    if (totalCardsPlayed >= MAX_PLAYS_PER_TURN + bonusSlots) return;
+    if (state.darts.length >= MAX_PLAYS_PER_TURN + bonusSlots) return;
     const updated = playCardFromHand(cs, handIdx);
     if (!updated) return;
     const base = card.base ?? 0;
@@ -263,9 +259,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   const partyHpPct = Math.max(0, Math.min(100, (state.partyHp / state.partyMaxHp) * 100));
   const maxDartsPerVisit = cardMode ? MAX_PLAYS_PER_TURN + bonusSlots : 3;
   const totalCardsPlayed = cardMode && thrower ? (cardStates[thrower.id]?.used.length ?? 0) : 0;
-  const playerVisitDone = state.phase === 'player'
-    && (cardMode ? totalCardsPlayed >= maxDartsPerVisit : state.darts.length >= maxDartsPerVisit)
-    && state.outcome === 'ongoing';
+  const playerVisitDone = state.phase === 'player' && state.darts.length >= maxDartsPerVisit && state.outcome === 'ongoing';
   const showingFrozen = state.phase === 'enemy'
     && state.pendingEnemyAttacks.length === 0
     && state.appliedEnemyAttacks.length === 0
@@ -302,7 +296,9 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
         <BossVictoryScreen
           run={run}
           players={players}
+          canChoose={canChoose}
           onPick={(trinketId) => {
+            if (!canChoose) return;
             const next = applyBossTrinketChoice(run, trinketId);
             setChosenRun(next);
             setShowRewardReveal(true);
@@ -313,7 +309,10 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
           run={run}
           players={players}
           options={run.pendingChoice}
+          canChoose={canChoose}
+          chooserPlayerId={chooserPlayerId}
           onPick={(opt) => {
+            if (!canChoose) return;
             if (opt.kind === 'deck_upgrade') {
               setDeckUpgradeOption(opt);
               setShowDeckUpgrade(true);
@@ -425,7 +424,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             {state.enemies.map((e, i) => {
               const hpPct = Math.max(0, Math.min(100, (e.hp / e.maxHp) * 100));
               const isTarget = i === state.targetIdx && !e.defeated;
-              const canTarget = state.phase === 'player' && !e.defeated && (cardMode ? totalCardsPlayed < maxDartsPerVisit : state.darts.length < maxDartsPerVisit) && state.outcome === 'ongoing';
+              const canTarget = state.phase === 'player' && !e.defeated && state.darts.length < maxDartsPerVisit && state.outcome === 'ongoing';
               return (
                 <div key={e.id} className="play-other" onClick={() => canTarget && setState(prev => prev ? setTarget(prev, e.id) : prev)}
                   style={{ cursor: canTarget ? 'pointer' : 'default', opacity: e.defeated ? 0.4 : 1, borderColor: isTarget ? 'var(--accent)' : 'var(--border)', boxShadow: isTarget ? '0 0 0 2px var(--accent)' : 'none', background: e.defeated ? 'var(--bg-3)' : 'var(--bg-2)' }}>
@@ -446,7 +445,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             })}
           </div>
 
-          {state.phase === 'player' && state.outcome === 'ongoing' && (cardMode ? totalCardsPlayed < (MAX_PLAYS_PER_TURN + bonusSlots) : state.darts.length < 3) && (
+          {state.phase === 'player' && state.outcome === 'ongoing' && state.darts.length < (cardMode ? MAX_PLAYS_PER_TURN + bonusSlots : 3) && canThrow && (
             cardMode && thrower ? (() => {
               const cs = cardStates[thrower.id];
               if (!cs) return null;
@@ -514,8 +513,8 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
                       </div>
                     )}
                     <div className="row" style={{ gap: 8, marginTop: 8 }}>
-                      <button className="btn block ghost" onClick={onUndo} disabled={!totalCardsPlayed && !state.darts.length}>{'\u21B6'} Undo card</button>
-                      <button className="btn block primary" onClick={onEnter} disabled={cardMode ? totalCardsPlayed === 0 : !state.darts.length}>End visit</button>
+                      <button className="btn block ghost" onClick={onUndo} disabled={!state.darts.length}>{'\u21B6'} Undo card</button>
+                      <button className="btn block primary" onClick={onEnter} disabled={!state.darts.length}>End visit</button>
                     </div>
                   </div>
                 </div>
@@ -721,8 +720,6 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
           const trinket = choice?.trinketId ? getTrinket(choice.trinketId) : null;
           return { name: p?.name || `Player ${i + 1}`, color: p?.color || '#7c3aed', choice, trinket };
         }).filter(c => c.choice);
-        // Boss victory path: playerChoices are null, but a boss trinket was
-        // claimed. Show the boss trinket as the reward instead.
         if (!choosers.length && chosenRun.bossVictory && chosenRun.bossVictory.claimedTrinket) {
           const t = getTrinket(chosenRun.bossVictory.claimedTrinket);
           if (t) {
