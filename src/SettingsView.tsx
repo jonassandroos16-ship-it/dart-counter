@@ -118,6 +118,12 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
           {syncing ? 'Syncing…' : 'Sync now'}
         </button>
         {(upToDate && hasDatabase && connected) && <div className="muted small center">Up to date{lastSyncLabel ? ` · ${lastSyncLabel}` : ''}</div>}
+        <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: 'var(--bg-3)', border: '1px solid var(--border)', fontSize: 11, lineHeight: 1.5, wordBreak: 'break-all' }}>
+          <div className="muted small" style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Connection</div>
+          <div className="muted small">URL: <code style={{ color: 'var(--text)' }}>{import.meta.env.VITE_SUPABASE_URL || 'not configured'}</code></div>
+          <div className="muted small">Key: <code style={{ color: 'var(--text)' }}>{import.meta.env.VITE_SUPABASE_ANON_KEY ? `${import.meta.env.VITE_SUPABASE_ANON_KEY.slice(0, 12)}…${import.meta.env.VITE_SUPABASE_ANON_KEY.slice(-6)}` : 'not configured'}</code></div>
+          <div className="muted small">Client: <code style={{ color: 'var(--text)' }}>{hasDatabase ? 'active' : 'null (local-only mode)'}</code></div>
+        </div>
       </div>
 
       <div className="card">
@@ -368,7 +374,7 @@ function EditCustomTitleModal({ onClose, onSave }: { onClose: () => void; onSave
     { base: 1, mult: 1 },
     { base: 20, mult: 1 },
     { base: 6, mult: 1 },
-  ]);
+  ]);}
 
   const numOptions = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,25,50];
 
@@ -390,7 +396,7 @@ function EditCustomTitleModal({ onClose, onSave }: { onClose: () => void; onSave
             <select value={base} onChange={e => setBase(+e.target.value)}>{numOptions.map(n => <option key={n} value={n}>{n === 50 ? 'Bull' : n === 25 ? '25' : n}</option>)}</select>
           </label>
           <label className="field"><span>Multiplier</span>
-            <select value={mult} onChange={e => setMult(+e.target.value)}><option value={1}>Single</option><option value={2}>Double</option><option value={3}>Triple</option></select>
+            <select value={mult} onChange={e => setMult(+e.target.value)}><option value="1">Single</option><option value="2">Double</option><option value="3">Triple</option></select>
           </label>
           <label className="field"><span>Times needed (in one game)</span><input type="number" value={count} min={1} max={50} onChange={e => setCount(+e.target.value || 1)} /></label>
         </div>
@@ -400,7 +406,7 @@ function EditCustomTitleModal({ onClose, onSave }: { onClose: () => void; onSave
           {seqDarts.map((d, i) => (
             <div key={i} className="row" style={{ gap: 6, marginBottom: 6 }}>
               <select style={{ flex: 1 }} value={d.base} onChange={e => { const n = [...seqDarts]; n[i] = { ...n[i], base: +e.target.value }; setSeqDarts(n); }}>{numOptions.map(n => <option key={n} value={n}>{n === 50 ? 'Bull' : n === 25 ? '25' : n}</option>)}</select>
-              <select style={{ flex: 1 }} value={d.mult} onChange={e => { const n = [...seqDarts]; n[i] = { ...n[i], mult: +e.target.value }; setSeqDarts(n); }}><option value={1}>Single</option><option value={2}>Double</option><option value={3}>Triple</option></select>
+              <select style={{ flex: 1 }} value={d.mult} onChange={e => { const n = [...seqDarts]; n[i] = { ...n[i], mult: +e.target.value }; setSeqDarts(n); }}><option value="1">Single</option><option value="2">Double</option><option value="3">Triple</option></select>
               <button className="btn danger sm" onClick={() => setSeqDarts(seqDarts.length > 1 ? seqDarts.filter((_, j) => j !== i) : seqDarts)} disabled={seqDarts.length <= 1}>✕</button>
             </div>
           ))}
