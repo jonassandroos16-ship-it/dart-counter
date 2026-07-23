@@ -5,7 +5,7 @@ import { recordFromGame, checkoutHint, leadTrailBadge, visitAvg, levelFromXP, ge
 import { Sound } from '../../sound';
 import type { MusicEngine } from '../../music';
 import type { PopupControls } from '../../Popups';
-import { PowerUpOrb, AttributeStrip, BadgeAvatar } from '../common';
+import { ChargedPlayerIcon, AttributeStrip, BadgeAvatar } from '../common';
 import { addDartToGame, undoDart, KeypadPad, clearVisitPowerUpFlags, tickShield } from '../dart';
 import { activatePowerUp } from '../powerups';
 import { runMilestones, awardXP, checkTitleUnlocks, awardBadges } from '../rewards';
@@ -263,9 +263,22 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
         <div className="pc-header">
           <div className="row" style={{ gap: 8 }}>
             <span className={`turn-order-badge${game.turn === game.roundStartTurn ? ' starter' : ''}`}>{throwOrder(game.turn) + 1}</span>
-            <BadgeAvatar playerId={p.id} players={players} games={games} size={32} fontSize={16} color={p.color} />
+            {game.powerUpsEnabled ? (
+              <ChargedPlayerIcon game={game} curIdx={game.turn} settings={settings} players={players} games={games} toast={toast} onActivate={() => {
+                activatePowerUp(game, game.turn, settings, toast, {
+                  popups,
+                  onReroll: (plan) => new Promise<boolean>((resolve) => {
+                    setReroll(plan);
+                    setRerollResolve(() => resolve);
+                  }),
+                }).then((next) => { if (next) setGame(next); });
+              }} />
+            ) : (
+              <BadgeAvatar playerId={p.id} players={players} games={games} size={32} fontSize={16} color={p.color} />
+            )}
             <span className="pc-name">{p.name}</span>
             {game.teamMode && <span className="pill" style={{ background: curTeamColor, color: '#04150a' }}>Team {curTeam + 1}</span>}
+            {!game.teamMode && !game.practice && (() => { const badge = leadTrailBadge(p, game); return badge ? <span className={`lead-badge ${badge.startsWith('+') ? 'lead' : 'trail'}`}>{badge}</span> : null; })()}
           </div>
           <div className="row" style={{ gap: 6 }}>
             {game.teamMode && game.legsBestOf > 1 ? <span className="pill" style={{ background: curTeamColor, color: '#04150a' }}>{(game.teamLegsWon || [])[curTeam] || 0} legs</span> : null}
@@ -310,17 +323,6 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
         </div>
         <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{buffScored}</b> · Darts thrown: <b style={{ color: 'var(--text)' }}>{(p.visits.reduce((a, v) => a + v.darts.length, 0)) + game.darts.length}</b></div>
         <AttributeStrip playerId={p.id} players={players} mode={game.mode} settings={settings} />
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
-          <PowerUpOrb game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
-            activatePowerUp(game, game.turn, settings, toast, {
-              popups,
-              onReroll: (plan) => new Promise<boolean>((resolve) => {
-                setReroll(plan);
-                setRerollResolve(() => resolve);
-              }),
-            }).then((next) => { if (next) setGame(next); });
-          }} />
-        </div>
       </div>
 
       {game.players.length > 1 && (
