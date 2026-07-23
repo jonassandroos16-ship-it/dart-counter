@@ -11,8 +11,8 @@ import { GameOver } from '../GameOver';
 import { RerollOverlay } from '../RerollOverlay';
 import type { RerollPlan } from '../../powerups';
 
-export function KillerBoard({ game, setGame, settings, players, games, toast, music, onQuit, setGames, setPlayers, popups, onGameOver }: {
-  game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[]; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void;
+export function KillerBoard({ game, setGame, settings, players, games, toast, music, onQuit, setGames, setPlayers, popups, onGameOver, isMyTurn = true }: {
+  game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[]; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void; isMyTurn?: boolean;
 }) {
   const [reroll, setReroll] = useState<RerollPlan | null>(null);
   const [rerollResolve, setRerollResolve] = useState<((v: boolean) => void) | null>(null);
@@ -185,21 +185,21 @@ export function KillerBoard({ game, setGame, settings, players, games, toast, mu
       <div className="play-input">
         <div className="pad-card">
           <div className="mult">
-            <button className={game.mult === 1 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 1 })}>Single</button>
-            <button className={game.mult === 2 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 2 })}>Double</button>
-            <button className={game.mult === 3 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 3 })}>Triple</button>
+            <button className={game.mult === 1 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 1 })} disabled={!isMyTurn}>Single</button>
+            <button className={game.mult === 2 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 2 })} disabled={!isMyTurn}>Double</button>
+            <button className={game.mult === 3 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 3 })} disabled={!isMyTurn}>Triple</button>
           </div>
           <div className="keypad">
             {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20].map(n => (
-              <button key={n} className={`key${n === p.killerNumber ? ' killer-target' : ''}`} onClick={() => addDart(n, game.mult)}>{n}</button>
+              <button key={n} className={`key${n === p.killerNumber ? ' killer-target' : ''}`} onClick={() => addDart(n, game.mult)} disabled={!isMyTurn}>{n}</button>
             ))}
-            <button className="key" style={{ background: 'color-mix(in srgb,var(--accent) 20%,var(--bg-3))' }} onClick={() => addDart(25, game.mult === 2 ? 2 : 1)}>25</button>
-            <button className="key" style={{ gridColumn: 'span 2', background: 'color-mix(in srgb,var(--accent) 30%,var(--bg-3))' }} onClick={() => addDart(50, 1, 'Bull', true)}>Bull<br /><small>50</small></button>
-            <button className="key" style={{ gridColumn: 'span 2', color: 'var(--muted)' }} onClick={() => addDart(0, 1, '0')}>Miss</button>
+            <button className="key" style={{ background: 'color-mix(in srgb,var(--accent) 20%,var(--bg-3))' }} onClick={() => addDart(25, game.mult === 2 ? 2 : 1)} disabled={!isMyTurn}>25</button>
+            <button className="key" style={{ gridColumn: 'span 2', background: 'color-mix(in srgb,var(--accent) 30%,var(--bg-3))' }} onClick={() => addDart(50, 1, 'Bull', true)} disabled={!isMyTurn}>Bull<br /><small>50</small></button>
+            <button className="key" style={{ gridColumn: 'span 2', color: 'var(--muted)' }} onClick={() => addDart(0, 1, '0')} disabled={!isMyTurn}>Miss</button>
           </div>
           <div className="row" style={{ gap: 8, marginTop: 8 }}>
-            <button className="btn block ghost" onClick={() => setGame(undoDart(game))}>↶ Undo dart</button>
-            <button className="btn block primary" onClick={enterVisit}>Enter visit</button>
+            <button className="btn block ghost" onClick={() => setGame(undoDart(game))} disabled={!isMyTurn}>↶ Undo dart</button>
+            <button className="btn block primary" onClick={enterVisit} disabled={!isMyTurn}>Enter visit</button>
           </div>
         </div>
       </div>
