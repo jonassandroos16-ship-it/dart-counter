@@ -43,7 +43,7 @@ interface Props {
 }
 
 export function CoopFlow({ players, settings, music, setPlayers, toast, onExitToMenu, skipSetup, lobbyId, lobbyPlayers, isHost, remoteRun }: Props) {
-  const [stage, setStage] = useState<CoopStage>(skipSetup ? 'chapters' : 'setup');
+  const [stage, setStage] = useState<CoopStage>(skipSetup ? 'chapters' : 'none');
   const [playerIds, setPlayerIds] = useState<string[]>(skipSetup ? players.map(p => p.id) : []);
   const [chapterId, setChapterId] = useState<string | null>(null);
   const [levelId, setLevelId] = useState<number | null>(null);
@@ -172,8 +172,10 @@ export function CoopFlow({ players, settings, music, setPlayers, toast, onExitTo
   }
 
   if (stage === 'chapters') {
+    const coopPlayers = playerIds.map(id => players.find(p => p.id === id)).filter(Boolean) as Player[];
     return <ChapterSelect
       progress={progress}
+      players={coopPlayers}
       onPick={(id) => { setChapterId(id); setStage('map'); }}
       onBack={() => { setStage('setup'); music.startContext('setup', settings); }}
     />;

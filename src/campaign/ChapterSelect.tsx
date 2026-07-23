@@ -1,5 +1,7 @@
 import type { CampaignProgress, CampaignChapter } from './types';
+import type { Player } from '../types';
 import { CAMPAIGN_CHAPTERS, isChapterComplete, isChapterUnlocked } from './campaignLevels';
+import { playerCampaignProgress } from './engine/progress';
 
 // Chapter selection screen shown before the mission (level) selection.
 // Chapters unlock sequentially — chapter N requires chapter N-1's boss to
@@ -7,10 +9,12 @@ import { CAMPAIGN_CHAPTERS, isChapterComplete, isChapterUnlocked } from './campa
 // completion status.
 export function ChapterSelect({
   progress,
+  players,
   onPick,
   onBack,
 }: {
   progress: CampaignProgress;
+  players: Player[];
   onPick: (chapterId: string) => void;
   onBack: () => void;
 }) {
@@ -28,14 +32,18 @@ export function ChapterSelect({
         {CAMPAIGN_CHAPTERS.map((ch, i) => {
           const unlocked = isChapterUnlocked(i, progress);
           const complete = isChapterComplete(ch.id, progress);
-          const cleared = progress.chapters?.[ch.id] ?? 0;
+          const playerProgress = players.map(p => ({
+            name: p.name,
+            color: p.color,
+            cleared: playerCampaignProgress(p).chapters?.[ch.id] ?? 0,
+          }));
           return (
             <ChapterCard
               key={ch.id}
               chapter={ch}
               unlocked={unlocked}
               complete={complete}
-              cleared={cleared}
+              playerProgress={playerProgress}
               onPick={() => unlocked && onPick(ch.id)}
             />
           );
@@ -46,15 +54,18 @@ export function ChapterSelect({
 }
 
 function ChapterCard({
-  chapter, unlocked, complete, cleared, onPick,
+  chapter, unlocked, complete, playerProgress, onPick,
 }: {
   chapter: CampaignChapter;
   unlocked: boolean;
   complete: boolean;
-  cleared: number;
+  playerProgress: { name: string; color: string; cleared: number }[];
   onPick: () => void;
 }) {
   const total = chapter.levels.length;
+  const allSame = playerProgress.length > 0 && playerProgress.every(p => p.cleared === playerProgress[0].cleared);
+  const singleCount = playerProgress[0]?.cleared ?? 0;
+  const allComplete = allSame && singleCount >= total;
   return (
     <button
       className="card"
@@ -105,9 +116,20 @@ function ChapterCard({
         <span className="pill" style={{ fontSize: 10, background: 'var(--bg-3)', color: 'var(--muted)', borderColor: 'transparent' }}>
           {chapter.levels.length} levels · {total} rewards
         </span>
-        <span className="muted small">
-          {complete ? 'Chapter complete' : `${cleared}/${total} cleared`}
-        </span>
+        {allSame ? (
+          <span className="muted small">
+            {allComplete ? 'Chapter complete' : `${singleCount}/${total} cleared`}
+          </span>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-end' }}>
+            {playerProgress.map(p => (
+              <span key={p.name} className="muted small" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: p.color, flex: '0 0 auto' }} />
+                {p.name}: {p.cleared}/{total}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </button>
   );
