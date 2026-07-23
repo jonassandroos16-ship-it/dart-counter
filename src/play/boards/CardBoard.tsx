@@ -120,6 +120,10 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
   const isBattle = game.mode === 'battle';
   const isKiller = game.mode === 'killer';
   const isHighScore = game.mode === 'highscore';
+  const bonusSlots = game.bonusSlots || 0;
+  const maxPlays = MAX_PLAYS_PER_TURN + bonusSlots;
+  const totalCardsPlayed = state.used.length;
+  const canPlayMore = totalCardsPlayed < maxPlays;
   const buffScored = game.darts.reduce((a, d) => a + d.value, 0);
   const projected = game.practice ? p.score + buffScored : p.score - buffScored;
   const others = [...game.players.slice(game.turn + 1), ...game.players.slice(0, game.turn)];
@@ -153,6 +157,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     if (!isMyTurn) return;
     const card = handDefs[handIdx];
     if (!card) return;
+    if (totalCardsPlayed >= maxPlays) { toast(`Only ${maxPlays} cards per visit`); return; }
     if (card.type !== 'damage') {
       // Spell/utility cards: provide themed UI feedback based on effect type
       const effectMsg: Record<string, string> = {
@@ -195,6 +200,9 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         updated = redrawHand(updated);
       } else if (card.effect === 'recycle') {
         updated = recycleGraveyard(updated);
+      } else if (card.effect === 'extra_dart') {
+        // Grant a bonus slot for this turn
+        setGame({ ...game, bonusSlots: bonusSlots + 1 });
       }
 
       const playedCard: PlayedCard = {
@@ -212,7 +220,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       force(n => n + 1);
       return;
     }
-    if (game.darts.length >= MAX_PLAYS_PER_TURN) { toast(`Only ${MAX_PLAYS_PER_TURN} cards per visit`); return; }
+    if (game.darts.length >= maxPlays) { toast(`Only ${maxPlays} cards per visit`); return; }
     const updated = playCardFromHand(state, handIdx);
     if (!updated) return;
     const base = card.base ?? 0;
@@ -272,12 +280,13 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
     const cur = newPlayers[game.turn] as any;
     const endedState = endTurn(state);
+    const resetBonus = { ...game, bonusSlots: 0 };
 
     if (game.practice) {
       cur.score += scored;
       cur.visits.push({ darts: [...game.darts], scored, remaining: cur.score, leg: 1, date: new Date().toISOString() });
       Sound.play('enter', {}, settings);
-      const next = advanceTurn({ ...game, players: newPlayers, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
+      const next = advanceTurn({ ...resetBonus, players: newPlayers, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
       setGame(next);
       runMilestones(cur, cur.score, scored, settings, popups, setPlayers, { ...game, players: newPlayers }, players, games);
       return;
@@ -315,7 +324,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       if (settings.popups.scores) {
         for (const sp of SCORE_POPUPS) { if (scored >= sp.min) { popups.setMilestone({ emoji: sp.emoji, title: sp.title, sub: sp.sub }); Sound.play('milestone', {}, settings); break; } }
       }
-      const finishedState: Game = { ...game, players: newPlayers, darts: [], mult: 1 };
+      const finishedState: Game = { ...resetBonus, players: newPlayers, darts: [], mult: 1 };
       const remainingAlive = newPlayers.filter((pl: any) => !pl.defeated);
       if (remainingAlive.length <= 1) {
         const winner = remainingAlive[0] || null;
@@ -352,7 +361,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       cur.visits.push({ darts: [...game.darts], scored, remaining: cur.lives, leg: 1, mode: 'killer', date: new Date().toISOString(), hits: (cur.kills || []).length });
       cur.dartsThrown += game.darts.length;
       const remainingAlive = newPlayers.filter(pl => !pl.eliminated);
-      const finishedState = { ...game, players: newPlayers, darts: [], mult: 1 };
+      const finishedState = { ...resetBonus, players: newPlayers, darts: [], mult: 1 };
       if (remainingAlive.length <= 1) {
         const winner = remainingAlive[0] || null;
         if (killedThisVisit) popups.setKill(killedThisVisit);
@@ -375,7 +384,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         for (const sp of SCORE_POPUPS) { if (scored >= sp.min) { popups.setMilestone({ emoji: sp.emoji, title: sp.title, sub: sp.sub }); Sound.play('milestone', {}, settings); break; } }
       }
       const allDone = newPlayers.every(pl => pl.visits.length >= HIGH_SCORE_VISITS);
-      const finishedState = { ...game, players: newPlayers, darts: [], mult: 1 };
+      const finishedState = { ...resetBonus, players: newPlayers, darts: [], mult: 1 };
       if (allDone) {
         const maxScore = Math.max(...newPlayers.map(pl => pl.score));
         const winners = newPlayers.filter(pl => pl.score === maxScore);
@@ -403,7 +412,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         const legsToWin = Math.ceil(game.legsBestOf / 2);
         const teamWonMatch = teamLegs[cur.team!] >= (game.legsBestOf === 1 ? 1 : legsToWin);
         if (teamWonMatch) {
-          finishGame({ ...game, players: newPlayers, teamLegsWon: teamLegs, darts: [], mult: 1, winningTeam: cur.team, cardState: { ...game.cardState, [p.id]: endedState } }, null, null);
+          finishGame({ ...resetBonus, players: newPlayers, teamLegsWon: teamLegs, darts: [], mult: 1, winningTeam: cur.team, cardState: { ...game.cardState, [p.id]: endedState } }, null, null);
           return;
         }
         const nextLeg = game.leg + 1;
@@ -416,7 +425,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         const nextTurn = ros[nextTeam][cursors[nextTeam] % ros[nextTeam].length];
         Sound.play('win', {}, settings);
         toast(`Team ${cur.team! + 1} wins leg ${game.leg}`);
-        setGame({ ...game, players: newPlayers, leg: nextLeg, turn: nextTurn, teamTurn: nextTeam, teamLegsWon: teamLegs, roundStartTurn: nextTurn, checkedOutThisRound: [], thrownThisRound: [], darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
+        setGame({ ...resetBonus, players: newPlayers, leg: nextLeg, turn: nextTurn, teamTurn: nextTeam, teamLegsWon: teamLegs, roundStartTurn: nextTurn, checkedOutThisRound: [], thrownThisRound: [], darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
         return;
       }
       const checkedOut = [...game.checkedOutThisRound, cur.id];
@@ -430,12 +439,12 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         if (playersLeft.length > 0 && canTie.length === playersLeft.length) {
           toast(`${cur.name} checked out! ${playersLeft.length} player${playersLeft.length > 1 ? 's' : ''} left to tie.`);
           Sound.play('win', {}, settings);
-          const next = advanceTurn({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
+          const next = advanceTurn({ ...resetBonus, players: newPlayers, checkedOutThisRound: checkedOut, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
           setGame(next);
           return;
         }
-        if (checkedOut.length > 1) { finishGame({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } }, null, checkedOut); return; }
-        finishGame({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } }, cur, null);
+        if (checkedOut.length > 1) { finishGame({ ...resetBonus, players: newPlayers, checkedOutThisRound: checkedOut, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } }, null, checkedOut); return; }
+        finishGame({ ...resetBonus, players: newPlayers, checkedOutThisRound: checkedOut, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } }, cur, null);
         return;
       }
       const nextLeg = game.leg + 1;
@@ -444,7 +453,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       if (game.powerUpsEnabled) newPlayers[game.turn] = tickShield(newPlayers[game.turn]);
       Sound.play('win', {}, settings);
       toast(`${cur.name} wins leg ${game.leg}`);
-      setGame({ ...game, players: newPlayers, leg: nextLeg, turn: nextTurn, roundStartTurn: nextTurn, checkedOutThisRound: [], thrownThisRound: [], darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
+      setGame({ ...resetBonus, players: newPlayers, leg: nextLeg, turn: nextTurn, roundStartTurn: nextTurn, checkedOutThisRound: [], thrownThisRound: [], darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
       return;
     }
 
@@ -453,7 +462,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       Sound.play('bust', {}, settings);
       toast('Bust!');
       const thrown = [...game.thrownThisRound, cur.id];
-      const next = advanceTurn({ ...game, players: newPlayers, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
+      const next = advanceTurn({ ...resetBonus, players: newPlayers, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
       setGame(next);
       return;
     }
@@ -463,7 +472,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     cur.visits.push({ darts: [...game.darts], scored, remaining, leg: game.leg, date: new Date().toISOString() });
     Sound.play('enter', {}, settings);
     const thrown = [...game.thrownThisRound, cur.id];
-    const next = advanceTurn({ ...game, players: newPlayers, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
+    const next = advanceTurn({ ...resetBonus, players: newPlayers, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
     setGame(next);
     runMilestones(cur, remaining, scored, settings, popups, setPlayers, { ...game, players: newPlayers }, players, games);
   };
@@ -563,7 +572,6 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
   const aliveCount = isBattle ? game.players.filter(pl => !pl.defeated).length : isKiller ? game.players.filter(pl => !pl.eliminated).length : 0;
 
   const selectedCard = selectedCardIdx !== null ? handDefs[selectedCardIdx] : null;
-  const canPlayMore = game.darts.length < MAX_PLAYS_PER_TURN;
 
   return (
     <div className="view-noscroll">
@@ -618,10 +626,11 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
           </>
         )}
         <div className="pc-slots">
-          {Array.from({ length: MAX_PLAYS_PER_TURN }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
+          {Array.from({ length: maxPlays }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
+          {bonusSlots > 0 && Array.from({ length: bonusSlots }).map((_, i) => <div key={`bonus-${i}`} className="pc-slot" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>+</div>)}
         </div>
         <div className="muted small">
-          This visit: <b style={{ color: 'var(--text)' }}>{buffScored}</b> · Cards played: <b style={{ color: 'var(--text)' }}>{game.darts.length}</b>/{MAX_PLAYS_PER_TURN}
+          This visit: <b style={{ color: 'var(--text)' }}>{buffScored}</b> · Cards played: <b style={{ color: 'var(--text)' }}>{totalCardsPlayed}</b>/{maxPlays}{bonusSlots > 0 ? ` (incl. ${bonusSlots} bonus)` : ''}
           {isBattle && <span style={{ marginLeft: 8 }}> · {buffScored} dmg</span>}
         </div>
         {isBattle && aliveOthers.length > 1 && (
@@ -812,7 +821,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
               <button className="btn block ghost" onClick={closeCardPopup}>Cancel</button>
               <button
                 className="btn block primary"
-                disabled={selectedCard.type === 'damage' && !canPlayMore}
+                disabled={!canPlayMore}
                 onClick={() => playCard(selectedCardIdx!)}
               >
                 {selectedCard.type === 'damage' ? 'Play' : 'Use'}
