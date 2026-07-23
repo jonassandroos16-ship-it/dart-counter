@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CampaignBattleState, CampaignProgress, CoopPowerUpId } from './types';
 import type { CardPlayState, PlayerCard } from '../cards/types';
-import { initCardPlayState, startTurn, getPlayerCards, MAX_PLAYS_PER_TURN } from '../cards/deck';
+import { initCardPlayState, startTurn, getPlayerCards, MAX_PLAYS_PER_TURN, resolveCardDef } from '../cards/deck';
 import {
   addDart, undoDart, resolvePlayerVisit,
   prepareEnemyTurn, applyNextEnemyAttack, setTarget, startBattle, getLevel,
@@ -117,7 +117,6 @@ function applyUtilityCard(state: CampaignBattleState, card: CardDef, _settings: 
   }
 
   // Draw / shadowstep / redraw / recycle — no-op in coop (no deck system)
-  // These effects are handled by the deck system in CardBoard/Dartlite modes.
   if (effect === 'draw' || effect === 'shadowstep' || effect === 'redraw' || effect === 'recycle') {
     return state;
   }
@@ -156,13 +155,10 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
   const [showInfo, setShowInfo] = useState(false);
 
   // ── Card mode state ──────────────────────────────────────────────────
-  // Per-player card play state (deck, hand, used, graveyard), keyed by
-  // player ID. Only used when settings.gameMode === 'cards'.
   const [cardStates, setCardStates] = useState<Record<string, CardPlayState>>({});
   const [bonusSlots, setBonusSlots] = useState(0);
   const cardMode = settings.gameMode === 'cards';
 
-  // Initialize card play state for all players when a new battle starts.
   useEffect(() => {
     if (!cardMode) return;
     const cs: Record<string, CardPlayState> = {};
@@ -175,7 +171,6 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cardMode]);
 
-  // Ensure the current thrower has a hand drawn for their turn.
   useEffect(() => {
     if (!cardMode || state.phase !== 'player') return;
     const thrower = state.players[state.playerTurnIdx];
@@ -188,8 +183,6 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
     }
   }, [state.phase, state.playerTurnIdx, cardMode, cardStates]);
 
-  // Build a stable enemy index map (defId → enemy number) so each enemy
-  // gets a consistent number badge across renders. Bosses use ☠ instead.
   const enemyNumberMap: Record<string, number> = {};
   let enemyCounter = 0;
   for (const e of state.enemies) {
@@ -205,7 +198,6 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
     return `${enemyNumberMap[defId]}`;
   };
 
-  // Start coop campaign music when the battle begins.
   useEffect(() => {
     music.startContext('coop', settings);
     return () => { music.stop(); };
@@ -263,7 +255,7 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
       const cs = cardStates[thrower.id];
       if (!cs || cs.used.length === 0) return;
       setBonusSlots(0);
-      setState(prev => resolvePlayerVisit(prev));
+      setState(prev => resolvePlayerVisit(prev, true));
       return;
     }
     if (!state.darts.length) return;
@@ -591,6 +583,8 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
           onEndVisit={onEnter}
           settings={settings}
           enemyIcon={enemyIcon}
+          playerVisitDone={playerVisitDone}
+          playedCards={cardMode && thrower ? (cardStates[thrower.id]?.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[] ?? []) : undefined}
         />
       )}
 
