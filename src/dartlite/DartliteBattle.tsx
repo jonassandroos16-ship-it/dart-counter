@@ -18,13 +18,14 @@ import { getTrinket } from './trinkets';
 import { ChoiceScreen } from './ChoiceScreen';
 import { ownsPlayer, type LobbyPlayer } from '../multiplayer/client';
 import { DeckUpgradeScreen } from './DeckUpgradeScreen';
+import { BOSS_INTRO_STORIES, MINIBOSS_INTRO_STORIES } from './bossStories';
 import { ProgressScreen } from './ProgressScreen';
 import { PlayerDetailModal } from './PlayerDetailModal';
 import { BossVictoryScreen } from './BossVictoryScreen';
 import type { PlayerCard, CardDef, CardPlayState } from '../cards/types';
 import { cardDamage, cardRarityColor, cardTypeColor } from '../cards/definitions';
 import {
-  initCardPlayState, startTurn,
+  initCardPlayState, startTurn, drawCards, HAND_SIZE,
   playCardFromHand, endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
   getPlayerCards, redrawHand, recycleGraveyard,
 } from '../cards/deck';
@@ -34,7 +35,7 @@ interface Props {
   players: Player[];
   settings: Settings;
   music: MusicEngine;
-  onBattleEnd: (won: boolean, finalBattle: CampaignBattleState | null) => void;
+  onBattleEnd: (won: boolean) => void;
   onChoice: (run: DartliteRun) => void;
   onQuit: () => void;
   lobbyPlayers?: LobbyPlayer[];
@@ -72,12 +73,35 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   const prevHandRef = useRef<number | null>(null);
   const cardMode = run.cardMode;
 
+  // Per-player next-turn effects: extra draws and extra play slots.
+  const [nextTurnDraws, setNextTurnDraws] = useState<Record<string, number>>({});
+  const [nextTurnSlots, setNextTurnSlots] = useState<Record<string, number>>({});
+
+  // Boss/mini-boss intro popup
+  const [showBossIntro, setShowBossIntro] = useState(false);
+  const [bossIntroText, setBossIntroText] = useState('');
+
+  useEffect(() => {
+    if (!state) return;
+    if (state.phase !== 'player') return;
+    if (!isBossRound(run.round) && !isMiniBossRound(run.round)) return;
+    if (state.visitNumber > 1) return;  // already shown
+    const enemy = state.enemies[0];
+    if (!enemy) return;
+    const isBoss = isBossRound(run.round);
+    const stories = isBoss ? BOSS_INTRO_STORIES : MINIBOSS_INTRO_STORIES;
+    const story = stories[Math.floor(Math.random() * stories.length)];
+    setBossIntroText(story.replace('{name}', enemy.name));
+    setShowBossIntro(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.phase, run.round, state?.visitNumber]);
+
   useEffect(() => {
     if (!cardMode || !battle) return;
     const cs: Record<string, CardPlayState> = {};
     for (const rp of run.runPlayers) {
       const playerData = players.find(p => p.id === rp.id);
-      const collection: PlayerCard[] = playerData ? getPlayerCards(playerData) : [];
+      const collection: PlayerCard[] = rp.cards?.length ? rp.cards : (playerData ? getPlayerCards(playerData) : []);
       cs[rp.id] = initCardPlayState(collection);
     }
     setCardStates(cs);
@@ -91,8 +115,14 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     const cs = cardStates[thrower.id];
     if (!cs) return;
     if (cs.hand.length === 0 && cs.used.length === 0) {
-      const next = startTurn(cs);
+      const extraDraw = nextTurnDraws[thrower.id] ?? 0;
+      const extraSlot = nextTurnSlots[thrower.id] ?? 0;
+      let next = startTurn(cs);
+      if (extraDraw > 0) next = drawCards(next, HAND_SIZE + extraDraw);
       setCardStates(prev => ({ ...prev, [thrower.id]: next }));
+      if (extraSlot > 0) setBonusSlots(b => b + extraSlot);
+      setNextTurnDraws(prev => { const c = { ...prev }; delete c[thrower.id]; return c; });
+      setNextTurnSlots(prev => { const c = { ...prev }; delete c[thrower.id]; return c; });
     }
   }, [state?.phase, state?.playerTurnIdx, cardMode, cardStates]);
 
@@ -126,10 +156,10 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     if (!state) return;
     if (state.outcome === 'victory') {
       Sound.play('win', {}, settings);
-      onBattleEnd(true, state);
+      onBattleEnd(true);
     } else if (state.outcome === 'defeat') {
       Sound.play('kill', {}, settings);
-      onBattleEnd(false, state);
+      onBattleEnd(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state?.outcome]);
@@ -215,12 +245,55 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     if (card.type !== 'damage') {
       let updated = playCardFromHand(cs, handIdx);
       if (!updated) return;
-      if (card.effect === 'redraw') {
+      const mag = card.magnitude ?? 0;
+      const effect = card.effect ?? '' as string;
+      if (effect === 'redraw') {
         updated = redrawHand(updated);
-      } else if (card.effect === 'recycle') {
+      } else if (effect === 'recycle') {
         updated = recycleGraveyard(updated);
-      } else if (card.effect === 'extra_dart') {
+      } else if (effect === 'extra_dart') {
         setBonusSlots(b => b + 1);
+      } else if (effect === 'extra_slot') {
+        setNextTurnSlots(prev => ({ ...prev, [thrower.id]: (prev[thrower.id] ?? 0) + mag }));
+      } else if (effect === 'draw') {
+        setNextTurnDraws(prev => ({ ...prev, [thrower.id]: (prev[thrower.id] ?? 0) + mag }));
+      } else if (effect === 'shadowstep') {
+        setNextTurnDraws(prev => ({ ...prev, [thrower.id]: (prev[thrower.id] ?? 0) + mag }));
+        if (updated.used.length > 0) {
+          const swapBack = updated.used[updated.used.length - 1];
+          updated = {
+            ...updated,
+            hand: [...updated.hand, swapBack],
+            used: updated.used.slice(0, -1),
+          };
+        }
+      } else if (effect === 'heal' || effect === 'blessing') {
+        const heal = effect === 'blessing' ? Math.min(mag, 40) : mag;
+        setState(prev => prev ? { ...prev, partyHp: Math.min(prev.partyMaxHp, prev.partyHp + heal) } : prev);
+      } else if (effect === 'heal_over_time') {
+        const buffId = `regen_${Date.now()}`;
+        setState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'regen' as const, amount: mag, turnsLeft: 3, source: thrower.id }] })) } : prev);
+      } else if (effect === 'party_shield_flat' || effect === 'party_shield') {
+        const buffId = `shield_${Date.now()}`;
+        setState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'shield' as const, amount: mag, turnsLeft: 2, source: thrower.id }] })) } : prev);
+      } else if (effect === 'enemy_curse' || effect === 'enemy_debuff' || effect === 'enemy_miss' || effect === 'accuracy_buff') {
+        setState(prev => prev ? { ...prev, enemies: prev.enemies.map(e => e.defeated ? e : { ...e, distractedTurns: Math.max(e.distractedTurns, 3), distractAmount: Math.max(e.distractAmount, mag / 100) }) } : prev);
+      } else if (effect === 'bleed') {
+        const buffId = `bleed_${Date.now()}`;
+        setState(prev => prev ? { ...prev, enemies: prev.enemies.map(e => e.defeated ? e : { ...e, buffs: [...(e as any).buffs, { id: buffId, kind: 'bleed', amount: mag, turnsLeft: 3 }] }) } : prev);
+      } else if (effect === 'freeze') {
+        setState(prev => prev ? { ...prev, enemies: prev.enemies.map(e => e.defeated ? e : { ...e, frozenTurns: Math.max(e.frozenTurns, 1) }) } : prev);
+      } else if (effect === 'power_buff') {
+        const buffId = `power_${Date.now()}`;
+        setState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'power' as const, amount: mag, turnsLeft: 3, source: thrower.id }] })) } : prev);
+      } else if (effect === 'armor_buff') {
+        const buffId = `armor_${Date.now()}`;
+        setState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'armor' as const, amount: mag, turnsLeft: 3, source: thrower.id }] })) } : prev);
+      } else if (effect === 'surge' || effect === 'hot_streak' || effect === 'bust_protect' || effect === 'double_up' || effect === 'reflect') {
+        const buffId = `${effect}_${Date.now()}`;
+        setState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: effect as any, amount: mag, turnsLeft: 2, source: thrower.id }] })) } : prev);
+      } else if (effect === 'revive') {
+        setState(prev => prev ? { ...prev, partyHp: Math.max(prev.partyHp, Math.round(prev.partyMaxHp * 0.25)) } : prev);
       }
       Sound.play('powerup', {}, settings);
       setSelectedCardIdx(null);
@@ -280,6 +353,29 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     : `Round ${run.round}`;
 
   const allTrinkets = run.runPlayers.flatMap(p => p.trinkets);
+
+  if (showBossIntro) {
+    const isBoss = isBossRound(run.round);
+    return (
+      <div className="view-scroll" style={{ minHeight: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isBoss ? 'radial-gradient(ellipse at center, color-mix(in srgb,#dc2626 20%,var(--bg)) 0%, var(--bg) 70%)' : 'radial-gradient(ellipse at center, color-mix(in srgb,#f59e0b 15%,var(--bg)) 0%, var(--bg) 70%)' }}>
+        <div className="card" style={{ maxWidth: 520, margin: '0 auto', textAlign: 'center', padding: 32, border: '2px solid ' + (isBoss ? '#dc2626' : '#f59e0b') }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>{isBoss ? '☠' : '⚔'}</div>
+          <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: '.14em', color: isBoss ? '#fca5a5' : '#fcd34d', textTransform: 'uppercase' }}>
+            {isBoss ? 'Boss Battle' : 'Mini-Boss Battle'}
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 900, marginTop: 8, color: isBoss ? '#ef4444' : '#f59e0b' }}>
+            {state?.enemies[0]?.name ?? 'Unknown'}
+          </div>
+          <div style={{ marginTop: 16, fontSize: 15, lineHeight: 1.6, color: 'var(--text)', fontStyle: 'italic' }}>
+            {bossIntroText}
+          </div>
+          <button className="btn block primary" style={{ marginTop: 24 }} onClick={() => setShowBossIntro(false)}>
+            {isBoss ? 'Face the Boss' : 'Begin the Fight'}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="view-noscroll coop-battle" style={{ position: 'relative', background: 'radial-gradient(ellipse at top, color-mix(in srgb,#7c3aed 15%,var(--bg)) 0%, var(--bg) 70%)', borderRadius: 14, overflow: 'hidden' }}>
@@ -476,7 +572,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
                   <div style={{ marginTop: 4, height: 6, borderRadius: 3, background: 'var(--bg-3)', overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${hpPct}%`, background: e.defeated ? 'var(--muted)' : '#ef4444', transition: 'width .4s' }} />
                   </div>
-                  <div className="po-sub">🛡 {e.armor}% · 🎯 {Math.round(e.accuracy * 100)}% acc{e.shields.length ? ` · 🛡 ${e.shields.length} shield${e.shields.length === 1 ? '' : 's'}` : ''}</div>
+                  <div className="po-sub">🛡 {e.armor}% · 🎯 {Math.round(e.accuracy * 100)}% acc · 🎯 {Math.round(e.precision * 100)}% prec{e.shields.length ? ` · 🛡 ${e.shields.length} shield${e.shields.length === 1 ? '' : 's'}` : ''}</div>
                 </div>
               );
             })}
