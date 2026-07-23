@@ -22,6 +22,7 @@ import { BOSS_INTRO_STORIES, MINIBOSS_INTRO_STORIES } from './bossStories';
 import { ProgressScreen } from './ProgressScreen';
 import { PlayerDetailModal } from './PlayerDetailModal';
 import { BossVictoryScreen } from './BossVictoryScreen';
+import { RewardRevealOverlay } from './RewardRevealOverlay';
 import type { PlayerCard, CardDef, CardPlayState } from '../cards/types';
 import { cardDamage, cardRarityColor, cardTypeColor } from '../cards/definitions';
 import {
@@ -29,6 +30,7 @@ import {
   playCardFromHand, endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
   getPlayerCards, redrawHand, recycleGraveyard,
 } from '../cards/deck';
+import { applyCardEffect } from './cardEffects';
 
 interface Props {
   run: DartliteRun;
@@ -73,11 +75,9 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   const prevHandRef = useRef<number | null>(null);
   const cardMode = run.cardMode;
 
-  // Per-player next-turn effects: extra draws and extra play slots.
   const [nextTurnDraws, setNextTurnDraws] = useState<Record<string, number>>({});
   const [nextTurnSlots, setNextTurnSlots] = useState<Record<string, number>>({});
 
-  // Boss/mini-boss intro popup
   const [showBossIntro, setShowBossIntro] = useState(false);
   const [bossIntroText, setBossIntroText] = useState('');
 
@@ -85,7 +85,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     if (!state) return;
     if (state.phase !== 'player') return;
     if (!isBossRound(run.round) && !isMiniBossRound(run.round)) return;
-    if (state.visitNumber > 1) return;  // already shown
+    if (state.visitNumber > 1) return;
     const enemy = state.enemies[0];
     if (!enemy) return;
     const isBoss = isBossRound(run.round);
@@ -182,12 +182,16 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   const aliveEnemies = state.enemies.filter(e => !e.defeated);
   const thrower = state.players[state.playerTurnIdx];
 
+  const maxDartsPerVisit = cardMode ? MAX_PLAYS_PER_TURN + bonusSlots : 3;
+  const totalCardsPlayed = cardMode && thrower ? (cardStates[thrower.id]?.used.length ?? 0) : 0;
+
   const onAdd = (base: number, m: number, labelOverride?: string, isBull?: boolean) => {
     setState(prev => prev ? addDart(prev, base, m, labelOverride, isBull, settings, maxDartsPerVisit) : prev);
     Sound.play('dart', { score: base * m }, settings);
     if (base > 0) Sound.play('impact', {}, settings);
     setMult(1);
   };
+
   const onUndo = () => {
     if (cardMode && state && state.phase === 'player') {
       const thrower = state.players[state.playerTurnIdx];
@@ -215,6 +219,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     }
     setState(prev => prev ? undoDart(prev, settings) : prev);
   };
+
   const onEnter = () => {
     if (cardMode ? totalCardsPlayed === 0 : !state.darts.length) return;
     if (cardMode) {
@@ -243,58 +248,10 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     const maxPlays = MAX_PLAYS_PER_TURN + bonusSlots;
     if (cs.used.length >= maxPlays) return;
     if (card.type !== 'damage') {
-      let updated = playCardFromHand(cs, handIdx);
-      if (!updated) return;
-      const mag = card.magnitude ?? 0;
-      const effect = card.effect ?? '' as string;
-      if (effect === 'redraw') {
-        updated = redrawHand(updated);
-      } else if (effect === 'recycle') {
-        updated = recycleGraveyard(updated);
-      } else if (effect === 'extra_dart') {
-        setBonusSlots(b => b + 1);
-      } else if (effect === 'extra_slot') {
-        setNextTurnSlots(prev => ({ ...prev, [thrower.id]: (prev[thrower.id] ?? 0) + mag }));
-      } else if (effect === 'draw') {
-        setNextTurnDraws(prev => ({ ...prev, [thrower.id]: (prev[thrower.id] ?? 0) + mag }));
-      } else if (effect === 'shadowstep') {
-        setNextTurnDraws(prev => ({ ...prev, [thrower.id]: (prev[thrower.id] ?? 0) + mag }));
-        if (updated.used.length > 0) {
-          const swapBack = updated.used[updated.used.length - 1];
-          updated = {
-            ...updated,
-            hand: [...updated.hand, swapBack],
-            used: updated.used.slice(0, -1),
-          };
-        }
-      } else if (effect === 'heal' || effect === 'blessing') {
-        const heal = effect === 'blessing' ? Math.min(mag, 40) : mag;
-        setState(prev => prev ? { ...prev, partyHp: Math.min(prev.partyMaxHp, prev.partyHp + heal) } : prev);
-      } else if (effect === 'heal_over_time') {
-        const buffId = `regen_${Date.now()}`;
-        setState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'regen' as const, amount: mag, turnsLeft: 3, source: thrower.id }] })) } : prev);
-      } else if (effect === 'party_shield_flat' || effect === 'party_shield') {
-        const buffId = `shield_${Date.now()}`;
-        setState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'shield' as const, amount: mag, turnsLeft: 2, source: thrower.id }] })) } : prev);
-      } else if (effect === 'enemy_curse' || effect === 'enemy_debuff' || effect === 'enemy_miss' || effect === 'accuracy_buff') {
-        setState(prev => prev ? { ...prev, enemies: prev.enemies.map(e => e.defeated ? e : { ...e, distractedTurns: Math.max(e.distractedTurns, 3), distractAmount: Math.max(e.distractAmount, mag / 100) }) } : prev);
-      } else if (effect === 'bleed') {
-        const buffId = `bleed_${Date.now()}`;
-        setState(prev => prev ? { ...prev, enemies: prev.enemies.map(e => e.defeated ? e : { ...e, buffs: [...(e as any).buffs, { id: buffId, kind: 'bleed', amount: mag, turnsLeft: 3 }] }) } : prev);
-      } else if (effect === 'freeze') {
-        setState(prev => prev ? { ...prev, enemies: prev.enemies.map(e => e.defeated ? e : { ...e, frozenTurns: Math.max(e.frozenTurns, 1) }) } : prev);
-      } else if (effect === 'power_buff') {
-        const buffId = `power_${Date.now()}`;
-        setState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'power' as const, amount: mag, turnsLeft: 3, source: thrower.id }] })) } : prev);
-      } else if (effect === 'armor_buff') {
-        const buffId = `armor_${Date.now()}`;
-        setState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'armor' as const, amount: mag, turnsLeft: 3, source: thrower.id }] })) } : prev);
-      } else if (effect === 'surge' || effect === 'hot_streak' || effect === 'bust_protect' || effect === 'double_up' || effect === 'reflect') {
-        const buffId = `${effect}_${Date.now()}`;
-        setState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: effect as any, amount: mag, turnsLeft: 2, source: thrower.id }] })) } : prev);
-      } else if (effect === 'revive') {
-        setState(prev => prev ? { ...prev, partyHp: Math.max(prev.partyHp, Math.round(prev.partyMaxHp * 0.25)) } : prev);
-      }
+      const updated = applyCardEffect({
+        card, handIdx, state: cs, battleState: state, throwerId: thrower.id,
+        bonusSlots, setBonusSlots, setNextTurnSlots, setNextTurnDraws, setBattleState: setState as any,
+      });
       Sound.play('powerup', {}, settings);
       setSelectedCardIdx(null);
       setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
@@ -312,6 +269,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
     onAdd(base, isBull ? 2 : (base === 25 && cardMult === 2 ? 2 : cardMult), label, isBull);
   };
+
   const onContinue = () => {
     if (state.pendingEnemyAttacks.length) {
       setState(prev => prev ? applyNextEnemyAttack(prev) : prev);
@@ -324,8 +282,6 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   };
 
   const partyHpPct = Math.max(0, Math.min(100, (state.partyHp / state.partyMaxHp) * 100));
-  const maxDartsPerVisit = cardMode ? MAX_PLAYS_PER_TURN + bonusSlots : 3;
-  const totalCardsPlayed = cardMode && thrower ? (cardStates[thrower.id]?.used.length ?? 0) : 0;
   const playerVisitDone = state.phase === 'player' && (cardMode ? totalCardsPlayed >= maxDartsPerVisit : state.darts.length >= 3) && state.outcome === 'ongoing';
   const showingFrozen = state.phase === 'enemy'
     && state.pendingEnemyAttacks.length === 0
@@ -846,63 +802,13 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
         />
       )}
 
-      {showRewardReveal && chosenRun && (() => {
-        const choosers = chosenRun.playerIds.map((pid, i) => {
-          const p = players.find(pl => pl.id === pid);
-          const choice = chosenRun.playerChoices[i];
-          const trinket = choice?.trinketId ? getTrinket(choice.trinketId) : null;
-          return { name: p?.name || `Player ${i + 1}`, color: p?.color || '#7c3aed', choice, trinket };
-        }).filter(c => c.choice);
-        if (!choosers.length && chosenRun.bossVictory && chosenRun.bossVictory.claimedTrinket) {
-          const t = getTrinket(chosenRun.bossVictory.claimedTrinket);
-          if (t) {
-            return (
-              <div onClick={() => { setShowRewardReveal(false); setShowProgress(true); }}
-                style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.82)', cursor: 'pointer' }}>
-                <div style={{ textAlign: 'center', maxWidth: 440, padding: 24 }}>
-                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#fbbf24', textTransform: 'uppercase' }}>Boss Trinket Claimed</div>
-                  <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, background: 'color-mix(in srgb,#f59e0b 18%, var(--bg-3))', border: '1px solid #f59e0b' }}>
-                    <span style={{ fontSize: 28 }}>{t.icon}</span>
-                    <div style={{ textAlign: 'left', flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14 }}>{t.name}</div>
-                      <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>{t.desc}</div>
-                    </div>
-                  </div>
-                  <div className="muted small" style={{ marginTop: 28, fontStyle: 'italic' }}>Tap anywhere to continue</div>
-                </div>
-              </div>
-            );
-          }
-        }
-        if (!choosers.length) return null;
-        return (
-          <div onClick={() => { setShowRewardReveal(false); setShowProgress(true); }}
-            style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.82)', cursor: 'pointer' }}>
-            <div style={{ textAlign: 'center', maxWidth: 440, padding: 24 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#c4b5fd', textTransform: 'uppercase' }}>Rewards Chosen</div>
-              <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
-                {choosers.map((c, i) => {
-                  const icon = c.trinket ? c.trinket.icon : c.choice!.icon;
-                  const label = c.trinket ? c.trinket.name : c.choice!.label;
-                  const desc = c.trinket ? c.trinket.desc : c.choice!.desc;
-                  return (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, background: `color-mix(in srgb, ${c.color} 18%, var(--bg-3))`, border: `1px solid ${c.color}` }}>
-                      <span className="avatar" style={{ background: c.color, width: 24, height: 24, fontSize: 11 }}>{initials(c.name)}</span>
-                      <span style={{ fontWeight: 800, fontSize: 14, minWidth: 64, textAlign: 'left' }}>{c.name}</span>
-                      <span style={{ fontSize: 28 }}>{icon}</span>
-                      <div style={{ textAlign: 'left', flex: 1 }}>
-                        <div style={{ fontWeight: 700, fontSize: 14 }}>{label}</div>
-                        <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>{desc}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="muted small" style={{ marginTop: 28, fontStyle: 'italic' }}>Tap anywhere to continue</div>
-            </div>
-          </div>
-        );
-      })()}
+      {showRewardReveal && chosenRun && (
+        <RewardRevealOverlay
+          run={chosenRun}
+          players={players}
+          onContinue={() => { setShowRewardReveal(false); setShowProgress(true); }}
+        />
+      )}
     </div>
   );
 }
