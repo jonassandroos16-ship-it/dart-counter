@@ -1,149 +1,17 @@
-// ── Co-op Campaign data model ─────────────────────────────────────────
+// Coop Campaign type definitions.
 //
-// The campaign is JSON-driven. Static content (levels, enemy stats, shield
-// definitions) lives in `campaignLevels.ts` and `enemyDatabase.ts`. Player
-// progress is the highest level beaten. Party HP is now per-level — each
-// level recomputes the party's max HP from the combined `health` attribute
-// of the selected players, so adding more (or higher-level) players raises
-// the party HP pool for that level only.
-//
-// The combat engine in `engine.ts` is pure: it takes a campaign state and a
-// player action and returns the next state, so the UI stays a thin shell.
+// This module is the single source of truth for the shape of coop campaign
+// runtime state, persisted progress, classes/passives, and power-ups. The
+// engine module (`engine/index.ts`) re-exports the public engine API and the
+// types it needs; components import types directly from here.
 
-export type Difficulty = 'Easy' | 'Hard' | 'Boss';
+import type { CardDef } from '../cards/types';
 
-// A shield layer is either a broad "span" (e.g. TOP_HALF of the board, or
-// ANY_DOUBLE) or an "exact" segment (e.g. Single 20, Triple 15, Bull).
-export type ShieldType = 'span' | 'exact';
+// ── Power-ups ─────────────────────────────────────────────────────────
 
-export type SpanTarget =
-  | 'TOP_HALF'
-  | 'BOTTOM_HALF'
-  | 'LEFT_HALF'
-  | 'RIGHT_HALF'
-  | 'ANY_DOUBLE'
-  | 'ANY_TRIPLE'
-  | 'ANY_BULL';
-
-// Exact targets are encoded as a string of the form
-//   "20"      — single 20
-//   "D20"     — double 20
-//   "T15"     — triple 15
-//   "25"      — outer bull (25)
-//   "Bull"    — bullseye (50)
-export type ExactTarget = string;
-
-export interface ShieldLayer {
-  type: ShieldType;
-  target_value: SpanTarget | ExactTarget;
-}
-
-export interface EnemyDef {
-  name: string;
-  difficulty: Difficulty;
-  max_hp: number;
-  armor: number;
-  accuracy: number;   // 0..1 — chance the AI hits its intended sector
-  precision: number;  // 0..1 — clustering; high → adjacent numbers, low → random scatter
-  shields: ShieldLayer[];
-}
-
-export interface EnemyDatabase {
-  [enemy_id: string]: EnemyDef;
-}
-
-export interface CampaignLevel {
-  level_id: number;
-  name: string;
-  is_boss: boolean;
-  enemies: string[]; // enemy ids into the EnemyDatabase
-  // Coop power-up id unlocked the first time this level is beaten. The
-  // boss level (last level) carries the strongest advanced power-up.
-  reward_power_up?: string;
-  // Short story beat shown on the post-game screen after this level is
-  // cleared. Optional; falls back to the chapter's outro for the boss.
-  story_bit?: string;
-}
-
-export interface CampaignConfig {
-  levels: CampaignLevel[];
-}
-
-// ── Chapters ──────────────────────────────────────────────────────────
-//
-// The campaign is split into chapters. Each chapter has its own theme
-// (background palette), story (intro shown on the chapter-select screen,
-// outro shown after the boss is defeated), and a linear set of levels.
-// Chapters unlock sequentially — chapter N requires chapter N-1's boss
-// to be defeated (i.e. the previous chapter's last level cleared).
-
-export type ChapterThemeId = 'crimson' | 'ice' | 'jungle';
-
-export interface ChapterTheme {
-  id: ChapterThemeId;
-  name: string;
-  // CSS background applied to the chapter's screens (map, battle, post-game).
-  background: string;
-  // Accent color used for headers, pills, and highlights.
-  accent: string;
-  // Soft tint used for card backgrounds.
-  cardTint: string;
-}
-
-export interface CampaignChapter {
-  id: string;
-  name: string;
-  subtitle: string;
-  theme: ChapterTheme;
-  // Short overall story for the chapter — intro shown on chapter select,
-  // outro shown on the post-game screen after the boss is defeated.
-  story: {
-    intro: string;
-    outro: string;
-  };
-  levels: CampaignLevel[];
-}
-
-// ── Coop power-ups ────────────────────────────────────────────────────
-//
-// Coop power-ups are single-use abilities the party can activate during a
-// player's turn (before throwing). They cost one charge from the party's
-// shared pool, which fills as the party lands doubles/triples/bulls.
-//
-// Power-ups come in two tiers:
-//   - 'starter': the original five, available from the start of every game.
-//   - 'advanced': five stronger, flashier power-ups unlocked as rewards for
-//     clearing specific Coop campaign levels. The strongest sits on the
-//     boss level. Each is more powerful than the one before it.
 export type CoopPowerUpTier = 'starter' | 'advanced';
 
-export type CoopPowerUpId =
-  // Starter (always available)
-  | 'coop_heal'        // Restore party HP
-  | 'coop_buff_power'  // Give all players +power for N turns
-  | 'coop_buff_acc'    // Distract enemies: -accuracy & -precision for N turns
-  | 'coop_freeze'      // Freeze all enemies for N turns (skip their attacks)
-  | 'coop_shield'      // Add a temporary shield that absorbs one enemy hit
-  // Advanced — Chapter 1 (unlocked as level rewards)
-  | 'coop_meteor'      // L1: Massive AoE damage to every enemy
-  | 'coop_phantom'    // L2: Next 3 darts auto-bullseye
-  | 'coop_time_warp'  // L3: Enemies take 3 turns of double damage
-  | 'coop_ressurect'  // L4: Full party HP + clear all debuffs
-  | 'coop_apocalypse' // L5 (boss): Devastating nuke + freeze + heal combo
-  // Advanced — Chapter 2 (Frozen Throne rewards)
-  | 'coop_blizzard'     // C2 L1: Damage + freeze all enemies for 1 turn
-  | 'coop_frostbite'    // C2 L2: Enemies take -accuracy for 3 turns and 40 dmg
-  | 'coop_ice_lance'    // C2 L3: 120 damage to a single targeted enemy, ignoring shields
-  | 'coop_winter_veil'  // C2 L4: Party takes half damage for 3 turns (shield + heal)
-  | 'coop_glacial_doom' // C2 L5 (boss): 180 dmg to all + freeze 3 turns + full heal
-  // Advanced — Chapter 3 (Verdant Maw rewards)
-  | 'coop_vine_grasp'    // C3 L1: Root all enemies — 50 dmg + freeze 1 turn
-  | 'coop_spore_burst'   // C3 L2: 60 dmg + distract (-30% acc) for 3 turns
-  | 'coop_thorn_lance'   // C3 L3: 160 dmg to one enemy, ignoring shields
-  | 'coop_verdant_bloom' // C3 L4: Heal 100 + clear enemy shields + party +5 power 3 turns
-  | 'coop_heart_of_maw'; // C3 L5 (boss): 220 dmg to all + freeze 3 + full heal + clear shields
-
-export interface CoopPowerUpDef {
+export interface CoopPowerUp {
   id: CoopPowerUpId;
   name: string;
   icon: string;
@@ -155,7 +23,18 @@ export interface CoopPowerUpDef {
 // A buff currently active on a player (e.g. +power for 2 more turns).
 export interface PlayerBuff {
   id: string;
-  kind: 'power' | 'accuracy';
+  kind:
+    | 'power'
+    | 'accuracy'
+    | 'regen'
+    | 'shield'
+    | 'armor'
+    | 'surge'
+    | 'hot_streak'
+    | 'bust_protect'
+    | 'double_up'
+    | 'extra_dart'
+    | 'reflect';
   amount: number;
   turnsLeft: number;
   source: string; // player id who granted it
