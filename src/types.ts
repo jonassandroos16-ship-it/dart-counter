@@ -155,6 +155,8 @@ export interface Game {
   playedCards?: PlayedCard[]; // cards played this match, visible to everyone (card mode)
   lastCardPlay?: { playerId: string; cardId: string; upgradeLevel: number; timestamp: number } | null; // last card played, for cross-device animation
   bonusSlots?: number; // extra card slots granted this turn by cards like Extra Throw
+  nextTurnDraws?: Record<string, number>; // per-player extra cards to draw next turn (card mode)
+  nextTurnSlots?: Record<string, number>; // per-player extra card slots next turn (card mode)
 }
 
 export interface GameRecord {

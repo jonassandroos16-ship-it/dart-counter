@@ -70,12 +70,47 @@ export function playCard(params: PlayCardParams): void {
     let updated = playCardFromHand(state, handIdx);
     if (!updated) return;
 
+    let gameUpdates: Partial<Game> = {};
+    const applyGame = (updates: Partial<Game>) => { gameUpdates = { ...gameUpdates, ...updates }; };
+
     if (card.effect === 'redraw') {
       updated = redrawHand(updated);
     } else if (card.effect === 'recycle') {
       updated = recycleGraveyard(updated);
     } else if (card.effect === 'extra_dart') {
-      setGame({ ...game, bonusSlots: bonusSlots + 1 });
+      applyGame({ bonusSlots: bonusSlots + 1 });
+    } else if (card.effect === 'extra_slot') {
+      const slots = { ...(game.nextTurnSlots || {}) };
+      slots[p.id] = (slots[p.id] ?? 0) + (card.magnitude ?? 1);
+      applyGame({ nextTurnSlots: slots });
+    } else if (card.effect === 'draw' || card.effect === 'blessing') {
+      const drawCount = card.effect === 'blessing' ? 1 : (card.magnitude ?? 1);
+      const draws1 = { ...(game.nextTurnDraws || {}) };
+      draws1[p.id] = (draws1[p.id] ?? 0) + drawCount;
+      applyGame({ nextTurnDraws: draws1 });
+    } else if (card.effect === 'shadowstep') {
+      const drawCount = card.magnitude ?? 1;
+      const draws2 = { ...(game.nextTurnDraws || {}) };
+      draws2[p.id] = (draws2[p.id] ?? 0) + drawCount;
+      applyGame({ nextTurnDraws: draws2 });
+      if (updated.used.length > 0) {
+        const swapBack = updated.used[updated.used.length - 1];
+        updated = {
+          ...updated,
+          hand: [...updated.hand, swapBack],
+          used: updated.used.slice(0, -1),
+        };
+      }
+    } else if (card.effect === 'surge') {
+      applyGame({ players: game.players.map((pl, i) => i === game.turn ? { ...pl, _surgeNext: true } as any : pl) });
+    } else if (card.effect === 'hot_streak') {
+      applyGame({ players: game.players.map((pl, i) => i === game.turn ? { ...pl, _hotStreak: true } as any : pl) });
+    } else if (card.effect === 'heal') {
+      if (game.mode === 'battle') {
+        applyGame({ players: game.players.map((pl, i) => i === game.turn ? { ...pl, hp: Math.min((pl as any).maxHp || 100, (pl.hp || 0) + (card.magnitude ?? 0)) } as any : pl) });
+      }
+    } else if (card.effect === 'bust_protect') {
+      applyGame({ players: game.players.map((pl, i) => i === game.turn ? { ...pl, _luckyMiss: true } as any : pl) });
     }
 
     const playedCard: PlayedCard = {
@@ -86,6 +121,7 @@ export function playCard(params: PlayCardParams): void {
     const pc = state.hand[handIdx];
     setGame({
       ...game,
+      ...gameUpdates,
       cardState: { ...game.cardState, [p.id]: updated },
       playedCards: [...(game.playedCards || []), playedCard],
       lastCardPlay: { playerId: p.id, cardId: card.id, upgradeLevel: pc?.upgradeLevel ?? 0, timestamp: playedCard.timestamp },

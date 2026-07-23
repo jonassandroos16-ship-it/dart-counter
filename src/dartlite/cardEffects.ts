@@ -48,6 +48,9 @@ export function applyCardEffect(params: CardEffectParams): CardPlayState {
   } else if (effect === 'heal' || effect === 'blessing') {
     const heal = effect === 'blessing' ? Math.min(mag, 40) : mag;
     setBattleState(prev => prev ? { ...prev, partyHp: Math.min(prev.partyMaxHp, prev.partyHp + heal) } : prev);
+    if (effect === 'blessing') {
+      setNextTurnDraws(prev => ({ ...prev, [throwerId]: (prev[throwerId] ?? 0) + 1 }));
+    }
   } else if (effect === 'heal_over_time') {
     const buffId = `regen_${Date.now()}`;
     setBattleState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'regen' as const, amount: mag, turnsLeft: 3, source: throwerId }] })) } : prev);

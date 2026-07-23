@@ -33,9 +33,20 @@ export interface EnterVisitParams {
 export function enterVisit(params: EnterVisitParams): void {
   const { game, setGame, settings, players, games, setGames, setPlayers, toast, music, popups, targetId, setTargetId, endedState } = params;
   if (!game.darts.length) { toast('Play at least one damage card'); return; }
-  const scored = game.darts.reduce((a, d) => a + d.value, 0);
+  const cur0 = game.players[game.turn] as any;
+  const surgeActive = !!cur0._surgeNext && !cur0._surgeArmed;
+  const hotStreakActive = !!cur0._hotStreak;
+  const rawScored = game.darts.reduce((a, d) => a + d.value, 0);
+  const surgeScored = surgeActive ? rawScored * 2 : rawScored;
+  const hotStreakBonus = hotStreakActive
+    ? game.darts.reduce((a, _d, i) => a + i * 5, 0)
+    : 0;
+  const scored = surgeScored + hotStreakBonus;
   const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
   const cur = newPlayers[game.turn] as any;
+  if (cur._surgeArmed) delete cur._surgeArmed;
+  else if (cur._surgeNext) delete cur._surgeNext;
+  if (cur._hotStreak) delete cur._hotStreak;
   const resetBonus = { ...game, bonusSlots: 0 };
   const isBattle = game.mode === 'battle';
   const isKiller = game.mode === 'killer';
@@ -224,6 +235,16 @@ export function enterVisit(params: EnterVisitParams): void {
   }
 
   if (bust) {
+    if (cur._luckyMiss) {
+      delete cur._luckyMiss;
+      cur.visits.push({ darts: [...game.darts], scored: 0, remaining: cur.score, leg: game.leg, bust: true, luckyMiss: true, date: new Date().toISOString() });
+      Sound.play('enter', {}, settings);
+      toast('Soul Barrier! Bust cancelled — score stays.');
+      const thrown = [...game.thrownThisRound, cur.id];
+      const next = advanceTurn({ ...resetBonus, players: newPlayers, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [cur.id]: endedState } }, ctx);
+      setGame(next);
+      return;
+    }
     cur.visits.push({ darts: [...game.darts], scored: 0, remaining: cur.score, leg: game.leg, bust: true, date: new Date().toISOString() });
     Sound.play('bust', {}, settings);
     toast('Bust!');
