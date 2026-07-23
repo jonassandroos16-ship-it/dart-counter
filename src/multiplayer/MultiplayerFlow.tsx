@@ -4,10 +4,9 @@ import type { Lobby, LobbyPlayer, GameConfig } from './client';
 import {
   createLobby, joinLobby, leaveLobby, deleteLobby,
   fetchLobbyPlayers, startGame, subscribeToLobby,
-  getDeviceId, setLobbyStatus, setLobbyGameMode,
+  getDeviceId, setLobbyStatus,
 } from './client';
 import type { MultiplayerGameMode } from './client';
-import { Target, Layers } from 'lucide-react';
 import { Sound } from '../sound';
 import type { MusicEngine } from '../music';
 import type { PopupControls } from '../Popups';
