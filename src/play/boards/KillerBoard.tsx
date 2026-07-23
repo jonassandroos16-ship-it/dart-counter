@@ -3,7 +3,7 @@ import type { Game, GameRecord, Player, Settings } from '../../types';
 import { Sound } from '../../sound';
 import type { MusicEngine } from '../../music';
 import type { PopupControls } from '../../Popups';
-import { PowerUpOrb, BadgeAvatar } from '../common';
+import { ChargedPlayerIcon, BadgeAvatar } from '../common';
 import { addDartToGame, undoDart, clearVisitPowerUpFlags, tickShield } from '../dart';
 import { activatePowerUp } from '../powerups';
 import { finishSimpleGame } from '../finish';
@@ -104,7 +104,19 @@ export function KillerBoard({ game, setGame, settings, players, games, toast, mu
       <div className="play-current">
         <div className="pc-header">
           <div className="row" style={{ gap: 8 }}>
-            <BadgeAvatar playerId={p.id} players={players} games={games} size={32} fontSize={13} color={p.color} />
+            {game.powerUpsEnabled ? (
+              <ChargedPlayerIcon game={game} curIdx={game.turn} settings={settings} players={players} games={games} toast={toast} onActivate={() => {
+                activatePowerUp(game, game.turn, settings, toast, {
+                  popups,
+                  onReroll: (plan) => new Promise<boolean>((resolve) => {
+                    setReroll(plan);
+                    setRerollResolve(() => resolve);
+                  }),
+                }).then((next) => { if (next) setGame(next); });
+              }} />
+            ) : (
+              <BadgeAvatar playerId={p.id} players={players} games={games} size={32} fontSize={13} color={p.color} />
+            )}
             <span className="pc-name">{p.name}</span>
             {(p.killerHits || 0) >= 5 && <span className="pill" style={{ background: '#ef4444', color: '#fff', fontSize: 10 }}>KILLER</span>}
           </div>
@@ -150,17 +162,6 @@ export function KillerBoard({ game, setGame, settings, players, games, toast, mu
           {Array.from({ length: (game.powerUpsEnabled && (p as any)._fourthDart) ? 4 : (game.powerUpsEnabled && (p as any)._oneDartNext ? 1 : 3) }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`} style={i === 3 ? { borderColor: 'var(--accent)' } : {}}>{d ? d.label : (i === 3 ? '🎯' : '–')}</div>; })}
         </div>
         <div className="muted small">Lives: <b style={{ color: 'var(--text)' }}>{'❤️'.repeat(p.lives || 0) || 'none'}</b></div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
-          <PowerUpOrb game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
-            activatePowerUp(game, game.turn, settings, toast, {
-              popups,
-              onReroll: (plan) => new Promise<boolean>((resolve) => {
-                setReroll(plan);
-                setRerollResolve(() => resolve);
-              }),
-            }).then((next) => { if (next) setGame(next); });
-          }} />
-        </div>
       </div>
 
       <div className="play-others">
