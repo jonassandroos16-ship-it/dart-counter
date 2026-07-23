@@ -314,9 +314,10 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
     }
     const newPool = availablePool(miniBosses, bosses);
     const partyHpAfter = Math.max(0, battle.partyHp);
+    const ratio = battle.partyMaxHp > 0 ? partyHpAfter / battle.partyMaxHp : 0;
     let runPlayers = run.runPlayers.map(rp => ({
       ...rp,
-      hp: partyHpAfter > 0 ? Math.max(1, Math.round(partyHpAfter)) : rp.hp,
+      hp: Math.max(1, Math.round(rp.hp * ratio)),
     }));
     if (isBossRound(run.round)) {
       runPlayers = runPlayers.map(rp => ({ ...rp, hp: rp.maxHp }));
