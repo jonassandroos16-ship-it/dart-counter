@@ -37,9 +37,6 @@ interface Props {
   onBattleEnd: (won: boolean) => void;
   onChoice: (run: DartliteRun) => void;
   onQuit: () => void;
-  /** When provided, this is the list of lobby players for multiplayer mode.
-   *  Used to gate interaction to only the device that owns the current
-   *  chooser player. */
   lobbyPlayers?: LobbyPlayer[];
 }
 
@@ -57,17 +54,14 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   const [showDeckUpgrade, setShowDeckUpgrade] = useState(false);
   const [deckUpgradeOption, setDeckUpgradeOption] = useState<ChoiceOption | null>(null);
 
-  // Multiplayer: determine if this device owns the current chooser player.
   const isMultiplayer = !!lobbyPlayers?.length;
   const chooserIdx = run.phase === 'choice' ? run.choicePlayerIdx : (run.phase === 'boss_victory' ? 0 : -1);
   const chooserPlayerId = chooserIdx >= 0 ? run.playerIds[chooserIdx] : null;
   const canChoose = !isMultiplayer || (chooserPlayerId != null && ownsPlayer(lobbyPlayers!, chooserPlayerId));
 
-  // Multiplayer: determine if this device owns the current thrower.
   const throwerId = state?.players?.[state.playerTurnIdx]?.id;
   const canThrow = !isMultiplayer || (throwerId != null && ownsPlayer(lobbyPlayers!, throwerId));
 
-  // ── Card mode state ──────────────────────────────────────────────────
   const [cardStates, setCardStates] = useState<Record<string, CardPlayState>>({});
   const [selectedCardIdx, setSelectedCardIdx] = useState<number | null>(null);
   const [bonusSlots, setBonusSlots] = useState(0);
@@ -204,7 +198,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
       }
       setBonusSlots(0);
     }
-    setState(prev => prev ? resolvePlayerVisit(prev) : prev);
+    setState(prev => prev ? resolvePlayerVisit(prev, cardMode && totalCardsPlayed > 0) : prev);
   };
 
   const playCard = (handIdx: number) => {
@@ -385,7 +379,50 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             {state.phase === 'player' && thrower && (
               <>
                 <div className="pc-slots" style={{ marginTop: 6 }}>
-                  {[0, 1, 2].map(i => {
+                  {cardMode ? (() => {
+                    const cs = cardStates[thrower.id];
+                    const usedDefs = cs ? cs.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[] : [];
+                    const slots: React.ReactNode[] = [];
+                    let dartIdx = 0;
+                    for (let i = 0; i < maxDartsPerVisit; i++) {
+                      const usedDef = usedDefs[i];
+                      if (!usedDef) { slots.push(<div key={i} className="pc-slot">–</div>); continue; }
+                      if (usedDef.type === 'damage') {
+                        const d = state.darts[dartIdx];
+                        const r = state.resolvedDarts[dartIdx];
+                        const isDefeated = r?.kind === 'defeated';
+                        slots.push(
+                          <div key={i} className="pc-slot filled" style={{
+                            borderColor: isDefeated ? '#ef4444' : undefined,
+                            background: isDefeated ? 'color-mix(in srgb,#ef4444 18%,var(--bg-3))' : undefined,
+                            flexDirection: 'row', gap: 6, justifyContent: 'space-between', padding: '4px 8px',
+                          }}>
+                            <span style={{ fontWeight: 800, fontSize: 15 }}>{d ? d.label : usedDef.name}</span>
+                            {r && (
+                              <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.9 }}>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 18, height: 18, borderRadius: 6, padding: '0 4px', background: 'color-mix(in srgb,var(--accent) 22%,var(--bg))', color: 'var(--accent)', fontSize: 10, fontWeight: 900 }}>{enemyIcon(state.enemies.find(e => e.id === r.enemyId)?.defId ?? r.enemyId)}</span>
+                                {r.damage > 0 ? `-${r.damage}` : r.kind === 'shield_break' ? '🛡' : ''}
+                                {isDefeated ? ' ☠' : ''}
+                              </span>
+                            )}
+                          </div>
+                        );
+                        dartIdx++;
+                      } else {
+                        slots.push(
+                          <div key={i} className="pc-slot filled" style={{
+                            flexDirection: 'row', gap: 6, justifyContent: 'space-between', padding: '4px 8px',
+                            borderColor: cardTypeColor(usedDef.type),
+                            background: `color-mix(in srgb, ${cardTypeColor(usedDef.type)} 12%, var(--bg-3))`,
+                          }}>
+                            <span style={{ fontWeight: 800, fontSize: 13 }}>{usedDef.icon} {usedDef.name}</span>
+                            <span style={{ fontSize: 9, fontWeight: 700, opacity: 0.8, textTransform: 'capitalize' }}>{usedDef.type}</span>
+                          </div>
+                        );
+                      }
+                    }
+                    return slots;
+                  })() : [0, 1, 2].map(i => {
                     const d = state.darts[i];
                     if (!d) return <div key={i} className="pc-slot">–</div>;
                     const r = state.resolvedDarts[i];
@@ -626,7 +663,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
 
           {showingFrozen && <FrozenOverlay state={state} onContinue={onContinue} />}
           {showingOverlay && !showingFrozen && (
-            <DartOverlay state={state} onContinue={onContinue} onEndVisit={onEnter} settings={settings} enemyIcon={enemyIcon} />
+            <DartOverlay state={state} onContinue={onContinue} onEndVisit={onEnter} settings={settings} enemyIcon={enemyIcon} playerVisitDone={playerVisitDone} playedCards={cardMode && thrower ? (cardStates[thrower.id]?.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[] ?? []) : undefined} />
           )}
 
           {showTrinketUnlock && run.lastUnlockedTrinket && (() => {
