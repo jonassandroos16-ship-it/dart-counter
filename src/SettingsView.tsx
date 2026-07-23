@@ -110,20 +110,48 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
           <input type="checkbox" checked={settings.sound} onChange={e => update({ sound: e.target.checked })} />
           <span>Sound effects</span>
         </label>
+        {settings.sound && (
+          <>
+            <label className="field" style={{ marginBottom: 8 }}>
+              <span>SFX volume · {Math.round((settings.sfxVolume ?? 0.9) * 100)}%</span>
+              <input type="range" min={0} max={1} step={0.05} value={settings.sfxVolume ?? 0.9} onChange={e => update({ sfxVolume: +e.target.value })} />
+            </label>
+            <label className="field" style={{ marginBottom: 8 }}>
+              <span>Hit sound pack · played on dart damage</span>
+              <select value={settings.hitSoundPack ?? 'thud'} onChange={e => update({ hitSoundPack: e.target.value as Settings['hitSoundPack'] })}>
+                <option value="thud">Thud (default)</option>
+                <option value="board">Board</option>
+                <option value="punch">Punch</option>
+                <option value="arcade">Arcade</option>
+              </select>
+            </label>
+            <label className="field" style={{ marginBottom: 8 }}>
+              <span>Button click sound · UI feedback</span>
+              <select value={settings.clickSound ?? 'none'} onChange={e => update({ clickSound: e.target.value as Settings['clickSound'] })}>
+                <option value="none">None</option>
+                <option value="tick">Tick</option>
+                <option value="pop">Pop</option>
+                <option value="tap">Tap</option>
+              </select>
+            </label>
+            {settings.clickSound && settings.clickSound !== 'none' && (
+              <label className="field" style={{ marginBottom: 8 }}>
+                <span>Click volume · {Math.round((settings.clickVolume ?? 0.6) * 100)}%</span>
+                <input type="range" min={0} max={1} step={0.05} value={settings.clickVolume ?? 0.6} onChange={e => update({ clickVolume: +e.target.value })} />
+              </label>
+            )}
+          </>
+        )}
         <label className="row" style={{ marginBottom: 8 }}>
           <input type="checkbox" checked={settings.music} onChange={e => update({ music: e.target.checked })} />
           <span>Music</span>
         </label>
-        <label className="field" style={{ marginBottom: 8 }}>
-          <span>SFX volume</span>
-          <input type="range" min={0} max={1} step={0.05} value={settings.sfxVolume} onChange={e => update({ sfxVolume: +e.target.value })} />
-        </label>
-        <label className="field" style={{ marginBottom: 8 }}>
-          <span>Music volume</span>
-          <input type="range" min={0} max={1} step={0.05} value={settings.musicVolume} onChange={e => update({ musicVolume: +e.target.value })} />
-        </label>
         {settings.music && (
           <>
+            <label className="field" style={{ marginBottom: 8 }}>
+              <span>Music volume · {Math.round((settings.musicVolume ?? 0.9) * 100)}%</span>
+              <input type="range" min={0} max={1} step={0.05} value={settings.musicVolume ?? 0.9} onChange={e => { update({ musicVolume: +e.target.value }); if (previewing) previewRef.current?.preview(previewing, { ...settings, music: true, musicVolume: +e.target.value }); }} />
+            </label>
             <div style={{ marginTop: 10, marginBottom: 4, fontSize: 13, fontWeight: 600 }}>Music tracks</div>
             <TrackRow label="Start screen" value={settings.musicStartTrack} onChange={v => update({ musicStartTrack: v })} context="start" previewing={previewing} onTogglePreview={togglePreview} onStopPreview={stopPreview} />
             <TrackRow label="Setup" value={settings.musicSetupTrack} onChange={v => update({ musicSetupTrack: v })} context="setup" previewing={previewing} onTogglePreview={togglePreview} onStopPreview={stopPreview} />
