@@ -44,7 +44,7 @@ interface Props {
 }
 
 export function CoopFlow({ players, settings, music, setPlayers, toast, onExitToMenu, skipSetup }: Props) {
-  const [stage, setStage] = useState<CoopStage>(skipSetup ? 'chapters' : 'none');
+  const [stage, setStage] = useState<CoopStage>(skipSetup ? 'chapters' : 'setup');
   const [playerIds, setPlayerIds] = useState<string[]>(skipSetup ? players.map(p => p.id) : []);
   const [chapterId, setChapterId] = useState<string | null>(null);
   const [levelId, setLevelId] = useState<number | null>(null);
