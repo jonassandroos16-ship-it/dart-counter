@@ -159,22 +159,36 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
       const thrower = state.players[state.playerTurnIdx];
       if (thrower) {
         const cs = cardStates[thrower.id];
-        if (cs && state.darts.length > 0) {
-          const lastDart = state.darts[state.darts.length - 1];
-          const usedIdx = [...cs.used].reverse().findIndex(pc => {
-            const def = resolveCardDef(pc);
-            return def?.name === lastDart.label;
-          });
-          if (usedIdx !== -1) {
-            const realIdx = cs.used.length - 1 - usedIdx;
-            const card = cs.used[realIdx];
+        if (cs && cs.used.length > 0) {
+          const lastUsed = cs.used[cs.used.length - 1];
+          const lastDef = resolveCardDef(lastUsed);
+          if (lastDef && lastDef.type !== 'damage') {
             const updated: CardPlayState = {
               deck: cs.deck,
-              hand: [...cs.hand, card],
-              used: cs.used.filter((_, i) => i !== realIdx),
+              hand: [...cs.hand, lastUsed],
+              used: cs.used.slice(0, -1),
               graveyard: cs.graveyard,
             };
             setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
+            return;
+          }
+          if (state.darts.length > 0) {
+            const lastDart = state.darts[state.darts.length - 1];
+            const usedIdx = [...cs.used].reverse().findIndex(pc => {
+              const def = resolveCardDef(pc);
+              return def?.name === lastDart.label;
+            });
+            if (usedIdx !== -1) {
+              const realIdx = cs.used.length - 1 - usedIdx;
+              const card = cs.used[realIdx];
+              const updated: CardPlayState = {
+                deck: cs.deck,
+                hand: [...cs.hand, card],
+                used: cs.used.filter((_, i) => i !== realIdx),
+                graveyard: cs.graveyard,
+              };
+              setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
+            }
           }
         }
       }
@@ -182,18 +196,17 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     setState(prev => prev ? undoDart(prev, settings) : prev);
   };
   const onEnter = () => {
-    if (!state.darts.length) return;
     if (cardMode) {
-      const thrower = state.players[state.playerTurnIdx];
-      if (thrower) {
-        const cs = cardStates[thrower.id];
-        if (cs) {
-          const endedState = endTurn(cs);
-          setCardStates(prev => ({ ...prev, [thrower.id]: endedState }));
-        }
-      }
+      if (!thrower) return;
+      const cs = cardStates[thrower.id];
+      if (!cs || cs.used.length === 0) return;
+      const endedState = endTurn(cs);
+      setCardStates(prev => ({ ...prev, [thrower.id]: endedState }));
       setBonusSlots(0);
+      setState(prev => prev ? resolvePlayerVisit(prev) : prev);
+      return;
     }
+    if (!state.darts.length) return;
     setState(prev => prev ? resolvePlayerVisit(prev) : prev);
   };
 
@@ -224,7 +237,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
       setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
       return;
     }
-    if (state.darts.length >= MAX_PLAYS_PER_TURN + bonusSlots) return;
+    if (totalCardsPlayed >= MAX_PLAYS_PER_TURN + bonusSlots) return;
     const updated = playCardFromHand(cs, handIdx);
     if (!updated) return;
     const base = card.base ?? 0;
@@ -250,7 +263,9 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   const partyHpPct = Math.max(0, Math.min(100, (state.partyHp / state.partyMaxHp) * 100));
   const maxDartsPerVisit = cardMode ? MAX_PLAYS_PER_TURN + bonusSlots : 3;
   const totalCardsPlayed = cardMode && thrower ? (cardStates[thrower.id]?.used.length ?? 0) : 0;
-  const playerVisitDone = state.phase === 'player' && state.darts.length >= maxDartsPerVisit && state.outcome === 'ongoing';
+  const playerVisitDone = state.phase === 'player'
+    && (cardMode ? totalCardsPlayed >= maxDartsPerVisit : state.darts.length >= maxDartsPerVisit)
+    && state.outcome === 'ongoing';
   const showingFrozen = state.phase === 'enemy'
     && state.pendingEnemyAttacks.length === 0
     && state.appliedEnemyAttacks.length === 0
@@ -410,7 +425,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             {state.enemies.map((e, i) => {
               const hpPct = Math.max(0, Math.min(100, (e.hp / e.maxHp) * 100));
               const isTarget = i === state.targetIdx && !e.defeated;
-              const canTarget = state.phase === 'player' && !e.defeated && state.darts.length < maxDartsPerVisit && state.outcome === 'ongoing';
+              const canTarget = state.phase === 'player' && !e.defeated && (cardMode ? totalCardsPlayed < maxDartsPerVisit : state.darts.length < maxDartsPerVisit) && state.outcome === 'ongoing';
               return (
                 <div key={e.id} className="play-other" onClick={() => canTarget && setState(prev => prev ? setTarget(prev, e.id) : prev)}
                   style={{ cursor: canTarget ? 'pointer' : 'default', opacity: e.defeated ? 0.4 : 1, borderColor: isTarget ? 'var(--accent)' : 'var(--border)', boxShadow: isTarget ? '0 0 0 2px var(--accent)' : 'none', background: e.defeated ? 'var(--bg-3)' : 'var(--bg-2)' }}>
@@ -431,7 +446,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             })}
           </div>
 
-          {state.phase === 'player' && state.outcome === 'ongoing' && state.darts.length < (cardMode ? MAX_PLAYS_PER_TURN + bonusSlots : 3) && (
+          {state.phase === 'player' && state.outcome === 'ongoing' && (cardMode ? totalCardsPlayed < (MAX_PLAYS_PER_TURN + bonusSlots) : state.darts.length < 3) && (
             cardMode && thrower ? (() => {
               const cs = cardStates[thrower.id];
               if (!cs) return null;
@@ -499,8 +514,8 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
                       </div>
                     )}
                     <div className="row" style={{ gap: 8, marginTop: 8 }}>
-                      <button className="btn block ghost" onClick={onUndo} disabled={!state.darts.length}>{'\u21B6'} Undo card</button>
-                      <button className="btn block primary" onClick={onEnter} disabled={!state.darts.length}>End visit</button>
+                      <button className="btn block ghost" onClick={onUndo} disabled={!totalCardsPlayed && !state.darts.length}>{'\u21B6'} Undo card</button>
+                      <button className="btn block primary" onClick={onEnter} disabled={cardMode ? totalCardsPlayed === 0 : !state.darts.length}>End visit</button>
                     </div>
                   </div>
                 </div>
