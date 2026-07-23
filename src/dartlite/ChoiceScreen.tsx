@@ -2,9 +2,20 @@ import type { Player } from '../types';
 import { initials } from '../store';
 import type { DartliteRun, ChoiceOption } from './engine';
 
-export function ChoiceScreen({ run, players, options, onPick }: { run: DartliteRun; players: Player[]; options: ChoiceOption[]; onPick: (opt: ChoiceOption) => void }) {
+interface Props {
+  run: DartliteRun;
+  players: Player[];
+  options: ChoiceOption[];
+  onPick: (opt: ChoiceOption) => void;
+  /** When false (multiplayer non-owner), show a read-only waiting state. */
+  canChoose?: boolean;
+  /** Player ID of the current chooser (for the waiting overlay). */
+  chooserPlayerId?: string | null;
+}
+
+export function ChoiceScreen({ run, players, options, onPick, canChoose = true, chooserPlayerId }: Props) {
   const chooserIdx = run.choicePlayerIdx;
-  const chooserId = run.playerIds[chooserIdx];
+  const chooserId = chooserPlayerId ?? run.playerIds[chooserIdx];
   const chooser = players.find(p => p.id === chooserId);
   const chooserName = chooser?.name || `Player ${chooserIdx + 1}`;
   const chooserColor = chooser?.color || '#7c3aed';
@@ -20,12 +31,12 @@ export function ChoiceScreen({ run, players, options, onPick }: { run: DartliteR
             <span style={{ fontWeight: 800, fontSize: 14 }}>{chooserName} is choosing</span>
           </div>
           <div className="muted small" style={{ marginTop: 6 }}>
-            {'Choose one boon for this round.'}
+            {canChoose ? 'Choose one boon for this round.' : `Waiting for ${chooserName} to choose a boon…`}
           </div>
         </div>
         <div style={{ display: 'grid', gap: 10 }}>
           {options.map((opt, i) => (
-            <button key={i} className="btn block" style={{ padding: 14, textAlign: 'left', background: `linear-gradient(135deg, color-mix(in srgb, ${chooserColor} 18%, var(--bg-3)) 0%, var(--bg-3) 80%)`, borderColor: `color-mix(in srgb, ${chooserColor} 40%, var(--border))` }}
+            <button key={i} className="btn block" style={{ padding: 14, textAlign: 'left', background: `linear-gradient(135deg, color-mix(in srgb, ${chooserColor} 18%, var(--bg-3)) 0%, var(--bg-3) 80%)`, borderColor: `color-mix(in srgb, ${chooserColor} 40%, var(--border))`, opacity: canChoose ? 1 : 0.5, cursor: canChoose ? 'pointer' : 'default', pointerEvents: canChoose ? 'auto' : 'none' }}
               onClick={() => onPick(opt)}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span style={{ fontSize: 26 }}>{opt.icon}</span>

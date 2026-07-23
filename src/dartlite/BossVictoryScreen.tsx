@@ -9,9 +9,11 @@ interface Props {
   run: DartliteRun;
   players: Player[];
   onPick: (trinketId: TrinketId) => void;
+  /** When false (multiplayer non-owner), show a read-only waiting state. */
+  canChoose?: boolean;
 }
 
-export function BossVictoryScreen({ run, players, onPick }: Props) {
+export function BossVictoryScreen({ run, players, onPick, canChoose = true }: Props) {
   const [picked, setPicked] = useState<TrinketId | null>(null);
   if (!run.bossVictory) return null;
   const { bossName, trinketOptions } = run.bossVictory;
@@ -27,7 +29,9 @@ export function BossVictoryScreen({ run, players, onPick }: Props) {
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#fbbf24', textTransform: 'uppercase' }}>Boss Defeated</div>
           <div style={{ fontSize: 26, fontWeight: 900, marginTop: 6 }}>{bossName}</div>
           <div className="muted small" style={{ marginTop: 6 }}>
-            The party has been healed to 100%. Choose a boss trinket to empower your run.
+            {canChoose
+              ? 'The party has been healed to 100%. Choose a boss trinket to empower your run.'
+              : 'Waiting for the host to claim a boss trinket…'}
           </div>
         </div>
 
@@ -43,9 +47,11 @@ export function BossVictoryScreen({ run, players, onPick }: Props) {
                   ? 'linear-gradient(135deg, color-mix(in srgb,#f59e0b 28%,var(--bg-3)) 0%, var(--bg-3) 80%)'
                   : 'var(--bg-3)',
                 borderColor: isPicked ? '#f59e0b' : 'var(--border)',
-                opacity: picked && !isPicked ? 0.5 : 1,
+                opacity: (picked && !isPicked) || !canChoose ? 0.5 : 1,
                 transition: 'opacity 200ms, border-color 200ms',
-              }} onClick={() => setPicked(id)}>
+                cursor: canChoose ? 'pointer' : 'default',
+                pointerEvents: canChoose ? 'auto' : 'none',
+              }} onClick={() => canChoose && setPicked(id)}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <span style={{ fontSize: 28 }}>{def.icon}</span>
                   <div style={{ flex: 1 }}>
@@ -62,8 +68,8 @@ export function BossVictoryScreen({ run, players, onPick }: Props) {
         <button
           className="btn primary block"
           style={{ marginTop: 18 }}
-          disabled={!picked}
-          onClick={() => picked && onPick(picked)}
+          disabled={!picked || !canChoose}
+          onClick={() => canChoose && picked && onPick(picked)}
         >
           Claim Trinket & Continue
         </button>

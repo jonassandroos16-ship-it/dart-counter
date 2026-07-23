@@ -49,6 +49,7 @@ export interface GameConfig {
 }
 
 export type MultiplayerGameMode = 'dartboard' | 'cards' | 'coop' | 'dartlite';
+export type InputMode = 'dartboard' | 'cards';
 
 export interface Lobby {
   id: string;
@@ -62,6 +63,7 @@ export interface Lobby {
   popup_state: { type: string; playerId: string; data: any } | null;
   player_turn: number;
   game_mode: MultiplayerGameMode;
+  input_mode: InputMode;
   created_at: string;
   updated_at: string;
 }
@@ -72,7 +74,7 @@ export interface LobbyWithPlayers extends Lobby {
 
 // ── Lobby CRUD ──────────────────────────────────────────────────────
 
-export async function createLobby(name: string, hostPlayer: Player, gameMode: MultiplayerGameMode): Promise<Lobby | null> {
+export async function createLobby(name: string, hostPlayer: Player, gameMode: MultiplayerGameMode, inputMode: InputMode = 'dartboard'): Promise<Lobby | null> {
   if (!supabase) return null;
   const deviceId = getDeviceId();
   const code = generateLobbyCode();
@@ -85,6 +87,7 @@ export async function createLobby(name: string, hostPlayer: Player, gameMode: Mu
       host_player_id: hostPlayer.id,
       status: 'lobby',
       game_mode: gameMode,
+      input_mode: inputMode,
     })
     .select()
     .single();
@@ -201,6 +204,18 @@ export async function updateGameState(lobbyId: string, game: Game): Promise<void
   if (error) console.warn('[mp] updateGameState:', error.message);
 }
 
+export async function updateCoopState(lobbyId: string, state: unknown): Promise<void> {
+  if (!supabase) return;
+  const { error } = await supabase
+    .from('mp_lobbies')
+    .update({
+      game_state: state,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', lobbyId);
+  if (error) console.warn('[mp] updateCoopState:', error.message);
+}
+
 export async function startGame(lobbyId: string, config: GameConfig, game: Game): Promise<void> {
   if (!supabase) return;
   const { error } = await supabase
@@ -216,11 +231,34 @@ export async function startGame(lobbyId: string, config: GameConfig, game: Game)
   if (error) console.warn('[mp] startGame:', error.message);
 }
 
+export async function startCoopGame(lobbyId: string, coopMode: 'coop' | 'dartlite', playerIds: string[], inputMode: InputMode): Promise<void> {
+  if (!supabase) return;
+  const { error } = await supabase
+    .from('mp_lobbies')
+    .update({
+      status: 'playing',
+      game_config: { _coopMode: coopMode, playerIds, inputMode } as any,
+      game_state: null,
+      player_turn: 0,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', lobbyId);
+  if (error) console.warn('[mp] startCoopGame:', error.message);
+}
+
 export async function setLobbyGameMode(lobbyId: string, gameMode: MultiplayerGameMode): Promise<void> {
   if (!supabase) return;
   await supabase
     .from('mp_lobbies')
     .update({ game_mode: gameMode, updated_at: new Date().toISOString() })
+    .eq('id', lobbyId);
+}
+
+export async function setLobbyInputMode(lobbyId: string, inputMode: InputMode): Promise<void> {
+  if (!supabase) return;
+  await supabase
+    .from('mp_lobbies')
+    .update({ input_mode: inputMode, updated_at: new Date().toISOString() })
     .eq('id', lobbyId);
 }
 
