@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import type { Game, GamePlayer, GameRecord, Player, Settings } from '../../types';
 import { MODES, TEAM_COLORS, getTitleInfo } from '../../constants';
 import { recordFromGame, checkoutHint, leadTrailBadge, visitAvg, levelFromXP, getPlayerXPById } from '../../logic';
@@ -9,19 +8,16 @@ import { ChargedPlayerIcon, AttributeStrip, BadgeAvatar } from '../common';
 import { addDartToGame, undoDart, KeypadPad, clearVisitPowerUpFlags, tickShield } from '../dart';
 import { activatePowerUp } from '../powerups';
 import { runMilestones, awardXP, checkTitleUnlocks, awardBadges } from '../rewards';
-import { GameOver } from '../GameOver';
-import { RerollOverlay } from '../RerollOverlay';
-import type { RerollPlan } from '../../powerups';
+import { QuitButton, GameOverGuard, PowerUpBanners, DartSlots, calcScored, clearCurFlags, useRerollOverlay } from '../boardUtils';
 
 export function X01Board({ game, setGame, settings, players, games, setGames, setPlayers, toast, music, onQuit, onGameOver, popups }: {
   game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[];
   setGames: (updater: any) => void; setPlayers: (updater: any) => void; toast: (m: string) => void;
   music: MusicEngine; onQuit: () => void; onGameOver: () => void; popups: PopupControls;
 }) {
-  const [reroll, setReroll] = useState<RerollPlan | null>(null);
-  const [rerollResolve, setRerollResolve] = useState<((v: boolean) => void) | null>(null);
+  const { rerollOverlay, onReroll } = useRerollOverlay(settings);
 
-  if (game.finished) return <GameOver game={game} onNewGame={() => { setGame(null); onGameOver(); music.startContext('setup', settings); }} onViewStats={() => { setGame(null); onGameOver(); }} />;
+  if (game.finished) return <GameOverGuard game={game} setGame={setGame} onGameOver={onGameOver} music={music} settings={settings} />;
 
   const p = game.players[game.turn];
   const buffScored = game.darts.reduce((a, d) => a + d.value, 0);
@@ -40,36 +36,10 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
   const enterVisit = () => {
     if (!game.darts.length) { toast('Add at least one dart'); return; }
     const cur0 = game.players[game.turn] as any;
-    // Surge only fires on the player's NEXT visit — the turn after they
-    // activated it. While `_surgeArmed` is set, surge was activated this visit
-    // and is not yet active.
-    const surgeActive = !!cur0._surgeNext && !cur0._surgeArmed;
-    const crippleActive = !!cur0._crippledNext;
-    const bullseyeFrenzyActive = !!cur0._bullseyeFrenzy;
-    const hotStreakActive = !!cur0._hotStreak;
-    // Bullseye Frenzy: darts hitting the bull (25 or 50) score double.
-    const rawScored = game.darts.reduce((a, d) => {
-      const isBull = d.value === 50 || d.value === 25;
-      const v = bullseyeFrenzyActive && isBull ? d.value * 2 : d.value;
-      return a + v;
-    }, 0);
-    const surgeScored = surgeActive ? rawScored * 2 : rawScored;
-    const crippleScored = crippleActive ? Math.round(surgeScored * 0.5) : surgeScored;
-    // Hot Streak: each dart gets +5 bonus per dart already scored this visit
-    // (dart 1: +0, dart 2: +5, dart 3: +10) — rewards stringing hits together.
-    const hotStreakBonus = hotStreakActive
-      ? game.darts.reduce((a, _d, i) => a + i * 5, 0)
-      : 0;
-    const scored = crippleScored + hotStreakBonus;
+    const scored = calcScored(game.darts, cur0);
     const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
     const cur = newPlayers[game.turn] as any;
-    if (cur._surgeArmed) delete cur._surgeArmed; // armed this visit — surge stays for next
-    else if (cur._surgeNext) delete cur._surgeNext; // surge was active, consume
-    if (cur._crippledNext) delete cur._crippledNext;
-    if (cur._fourthDart) delete cur._fourthDart;
-    if (cur._oneDartNext) delete cur._oneDartNext;
-    if (cur._bullseyeFrenzy) delete cur._bullseyeFrenzy;
-    if (cur._hotStreak) delete cur._hotStreak;
+    clearCurFlags(cur);
 
     if (game.practice) {
       cur.score += scored;
@@ -134,7 +104,6 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
       const nextLeg = game.leg + 1;
       const nextTurn = (nextLeg - 1) % game.players.length;
       newPlayers.forEach(pl => pl.score = MODES[game.mode].start);
-      // Shield: tick down the current player's shield at the end of their visit.
       if (game.powerUpsEnabled) newPlayers[game.turn] = tickShield(newPlayers[game.turn]);
       Sound.play('win', {}, settings);
       toast(`${cur.name} wins leg ${game.leg}`);
@@ -173,7 +142,6 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
   };
 
   const advanceTurn = (g: Game): Game => {
-    // Shield: tick down the current player's shield at the end of their visit.
     if (g.powerUpsEnabled && !g.teamMode) {
       const c = g.players[g.turn] as any;
       if (c && c._shieldTurns > 0) {
@@ -258,20 +226,14 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
 
   return (
     <div className="view-noscroll">
-      <button className="btn danger sm quit-float" onClick={() => { if (confirm('Quit this game? Progress will not be saved.')) onQuit(); }}>Quit</button>
+      <QuitButton onQuit={onQuit} />
       <div className="play-current" style={game.teamMode ? { borderColor: curTeamColor, boxShadow: `0 0 0 2px ${curTeamColor}33` } : {}}>
         <div className="pc-header">
           <div className="row" style={{ gap: 8 }}>
             <span className={`turn-order-badge${game.turn === game.roundStartTurn ? ' starter' : ''}`}>{throwOrder(game.turn) + 1}</span>
             {game.powerUpsEnabled ? (
               <ChargedPlayerIcon game={game} curIdx={game.turn} settings={settings} players={players} games={games} toast={toast} onActivate={() => {
-                activatePowerUp(game, game.turn, settings, toast, {
-                  popups,
-                  onReroll: (plan) => new Promise<boolean>((resolve) => {
-                    setReroll(plan);
-                    setRerollResolve(() => resolve);
-                  }),
-                }).then((next) => { if (next) setGame(next); });
+                activatePowerUp(game, game.turn, settings, toast, { popups, onReroll }).then((next) => { if (next) setGame(next); });
               }} />
             ) : (
               <BadgeAvatar playerId={p.id} players={players} games={games} size={32} fontSize={16} color={p.color} />
@@ -288,39 +250,8 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
         </div>
         <div className="pc-remaining" style={{ color: projected < 0 ? 'var(--danger)' : 'var(--text)' }}>{projected}</div>
         <div className="checkout-hint center">{checkoutHint(game.practice ? null : projected, game.doubleOut, game.practice)}</div>
-        {game.powerUpsEnabled && (p as any)._oneDartNext && (
-          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#f59e0b 18%,var(--bg-3))', border: '1px solid #f59e0b', color: '#f59e0b' }}>
-            🛡️ Blocked! You only get ONE dart this visit.
-          </div>
-        )}
-        {game.powerUpsEnabled && (p as any)._crippledNext && (
-          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#ef4444 18%,var(--bg-3))', border: '1px solid #ef4444', color: '#ef4444' }}>
-            🦾 Crippled! You only score 50% this visit.
-          </div>
-        )}
-        {game.powerUpsEnabled && (p as any)._surgeNext && !(p as any)._surgeArmed && (
-          <div className="pu-banner" style={{ background: 'color-mix(in srgb,var(--accent) 18%,var(--bg-3))', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
-            ⚡ Surge active! This visit scores double.
-          </div>
-        )}
-        {game.powerUpsEnabled && (p as any)._bullseyeFrenzy && (
-          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#a855f7 18%,var(--bg-3))', border: '1px solid #a855f7', color: '#c084fc' }}>
-            🐂 Bullseye Frenzy! Bulls score double this visit.
-          </div>
-        )}
-        {game.powerUpsEnabled && (p as any)._hotStreak && (
-          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#f97316 18%,var(--bg-3))', border: '1px solid #f97316', color: '#fb9234' }}>
-            🔥 Hot Streak! Each dart this visit earns +5 bonus per dart before it.
-          </div>
-        )}
-        {game.powerUpsEnabled && (p as any)._shieldTurns > 0 && (
-          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#38bdf8 18%,var(--bg-3))', border: '1px solid #38bdf8', color: '#7dd3fc' }}>
-            🏰 Shield active! Protected from power-up attacks for {(p as any)._shieldTurns} more turn{(p as any)._shieldTurns === 1 ? '' : 's'}.
-          </div>
-        )}
-        <div className="pc-slots">
-          {Array.from({ length: (game.powerUpsEnabled && (p as any)._fourthDart) ? 4 : (game.powerUpsEnabled && (p as any)._oneDartNext ? 1 : 3) }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`} style={i === 3 ? { borderColor: 'var(--accent)' } : {}}>{d ? d.label : (i === 3 ? '🎯' : '–')}</div>; })}
-        </div>
+        <PowerUpBanners game={game} p={p} />
+        <DartSlots game={game} p={p} />
         <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{buffScored}</b> · Darts thrown: <b style={{ color: 'var(--text)' }}>{(p.visits.reduce((a, v) => a + v.darts.length, 0)) + game.darts.length}</b></div>
         <AttributeStrip playerId={p.id} players={players} mode={game.mode} settings={settings} />
       </div>
@@ -362,17 +293,7 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
       <div className="play-input">
         <KeypadPad game={game} setGame={setGame as any} onAdd={addDart} onUndo={() => setGame(undoDart(game))} onEnter={enterVisit} />
       </div>
-      {reroll ? (
-        <RerollOverlay
-          plan={reroll}
-          settings={settings}
-          onDone={() => {
-            setReroll(null);
-            if (rerollResolve) rerollResolve(true);
-            setRerollResolve(null);
-          }}
-        />
-      ) : null}
+      {rerollOverlay}
     </div>
   );
 }

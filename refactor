@@ -1,0 +1,90 @@
+# Refactor Pass — DRY Cleanup for Game Boards
+
+## Why
+
+The `src/play/boards/` directory has accumulated significant code duplication
+across the different game-mode board components (X01Board, BattleBoard,
+KillerBoard, HighScoreBoard, CardBoard). CardBoard.tsx alone is 810 lines.
+The same patterns — power-up banner rendering, quit button, game-over guard,
+dart slot rendering, scored calculation with power-up modifiers, turn-advance
+with frozen-skip logic, reroll overlay wiring — are copy-pasted across 4-5
+files. This makes bugs hard to fix (the same fix must be applied N times) and
+makes the files harder to navigate.
+
+## What we're doing
+
+1. **Extract `PowerUpBanners` component** — the 6 power-up status banners
+   (_oneDartNext, _crippledNext, _surgeNext, _bullseyeFrenzy, _hotStreak,
+   _shieldTurns) are copy-pasted verbatim in X01Board, BattleBoard,
+   KillerBoard, HighScoreBoard, and CardBoard. Extract to a single component
+   in `src/play/common.tsx`.
+
+2. **Extract `QuitButton` component** — the same quit button with confirm
+   dialog appears in every board.
+
+3. **Extract `GameOverGuard` component** — every board starts with
+   `if (game.finished) return <GameOver .../>` with identical props.
+
+4. **Extract `DartSlots` component** — the slot rendering logic (with
+   power-up 4th-dart / 1-dart-next sizing) is duplicated.
+
+5. **Extract `calcScored` helper** — the surge/cripple/bullseyeFrenzy/
+   hotStreak scored calculation is duplicated in X01Board, BattleBoard,
+   HighScoreBoard, and CardBoard (partially).
+
+6. **Extract `clearVisitFlags` helper** — the pattern of deleting the
+   one-visit power-up flags from the current player is duplicated.
+
+7. **Extract `useRerollOverlay` hook** — the reroll state + resolve pattern
+   is identical in X01Board, BattleBoard, KillerBoard, HighScoreBoard.
+
+8. **Extract `advanceSimpleTurn` helper** — the simple turn-advance with
+   frozen-skip + shield-tick logic (used by Battle, Killer, HighScore) is
+   duplicated. X01 has a more complex version with team/leg logic that stays
+   in-place but can share the frozen-skip portion.
+
+9. **Extract `ScorePopups` helper** — the SCORE_POPUPS milestone check is
+   duplicated in Battle, HighScore, and CardBoard.
+
+10. **Split CardBoard.tsx** — Extract the card-pile popup (deck/graveyard
+    viewer) and the card-detail popup into separate components, reducing
+    CardBoard from ~810 lines to a more manageable size.
+
+## Progress
+
+- [x] Created this refactor notes file
+- [x] Extracted shared board utilities to `src/play/boardUtils.tsx`
+  - QuitButton, GameOverGuard, PowerUpBanners, DartSlots
+  - calcScored, clearCurFlags, checkScoreMilestones
+  - useRerollOverlay hook
+  - advanceSimpleTurn helper
+- [x] Refactored X01Board — uses QuitButton, GameOverGuard, PowerUpBanners,
+      DartSlots, calcScored, clearCurFlags, useRerollOverlay
+- [x] Refactored BattleBoard — uses all shared utils + advanceSimpleTurn +
+      checkScoreMilestones
+- [x] Refactored KillerBoard — uses all shared utils + advanceSimpleTurn
+- [x] Refactored HighScoreBoard — uses all shared utils + advanceSimpleTurn +
+      checkScoreMilestones
+- [x] Refactored CardBoard — extracted CardPilePopup + CardDetailPopup to
+      CardPopups.tsx, uses shared utils (PowerUpBanners, calcScored,
+      clearCurFlags, checkScoreMilestones, advanceSimpleTurn, QuitButton)
+- [x] Typecheck passes (tsc --noEmit)
+- [x] Tests pass (190/190 — 2 pre-existing failures in AppSpend/NewPlayerSave
+      are unrelated localStorage/jsdom environment issues)
+- [x] Push to GitHub main
+
+## Notes for continuation
+
+If someone else needs to continue this work:
+
+- The shared utilities should go in `src/play/boardUtils.tsx` (new file).
+- All boards import from `../common` (for BadgeAvatar etc.) and
+  `../dart` (for addDartToGame, KeypadPad, etc.) — the new utils file
+  should sit alongside these.
+- The `Game` type is in `src/types.ts`.
+- The `finishSimpleGame` helper is already shared in `src/play/finish.ts`.
+- The `clearVisitPowerUpFlags` and `tickShield` helpers are already shared
+  in `src/play/dart.tsx`.
+- Tests are in `src/play/dart.test.ts` and `src/logic.test.ts` — run with
+  `npx vitest run` to verify nothing breaks.
+- The dev server runs automatically; do NOT start it manually.
