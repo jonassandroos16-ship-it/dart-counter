@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import type { Game, GameRecord, Player, Settings, Dart, PlayedCard } from '../../types';
-import { TEAM_COLORS, getTitleInfo, MODES, SCORE_POPUPS } from '../../constants';
-import { recordFromGame, checkoutHint, leadTrailBadge, visitAvg, levelFromXP, getPlayerXPById, computeBattleDartDamage } from '../../logic';
+import { TEAM_COLORS, MODES, SCORE_POPUPS } from '../../constants';
+import { recordFromGame, checkoutHint, leadTrailBadge, computeBattleDartDamage } from '../../logic';
 import { Sound } from '../../sound';
 import type { MusicEngine } from '../../music';
 import type { PopupControls } from '../../Popups';
@@ -11,13 +11,17 @@ import { runMilestones, awardXP, checkTitleUnlocks, awardBadges } from '../rewar
 import { finishSimpleGame } from '../finish';
 import { GameOver } from '../GameOver';
 import type { PlayerCard, CardDef, CardPlayState } from '../../cards/types';
-import { cardDamage, cardRarityColor, cardTypeColor } from '../../cards/definitions';
+import { cardDamage } from '../../cards/definitions';
 import {
   initCardPlayState, startTurn,
   playCardFromHand, endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
   getPlayerCards, defaultPlayerCards,
   redrawHand, recycleGraveyard,
 } from '../../cards/deck';
+import { CardBoardOthers } from './CardBoardOthers';
+import { CardBoardHand, CardPopup } from './CardBoardHand';
+import { DeckPopup, GraveyardPopup, PlayedPopup, CardDetailPopup, CardPlayAnimOverlay } from './CardBoardPopups';
+import type { CardPlayAnim } from './CardBoardPopups';
 
 const HIGH_SCORE_VISITS = 7;
 
@@ -36,7 +40,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
   const [playedPopupClosing, setPlayedPopupClosing] = useState(false);
   const [animatingOut, setAnimatingOut] = useState<number | null>(null);
   const [popupClosing, setPopupClosing] = useState(false);
-  const [cardPlayAnim, setCardPlayAnim] = useState<{ cardId: string; upgradeLevel: number; playerName: string; playerColor: string } | null>(null);
+  const [cardPlayAnim, setCardPlayAnim] = useState<CardPlayAnim | null>(null);
   const prevHandLen = useRef<number>(0);
   const prevLastCardPlay = useRef<{ playerId: string; cardId: string; timestamp: number } | null>(null);
 
@@ -58,7 +62,6 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     }, 200);
   };
 
-  // Detect when another device plays a card (lastCardPlay changes) to trigger animation + sound
   useEffect(() => {
     const lcp = game.lastCardPlay;
     if (!lcp) return;
@@ -66,7 +69,6 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         prevLastCardPlay.current.playerId === lcp.playerId &&
         prevLastCardPlay.current.timestamp === lcp.timestamp) return;
     prevLastCardPlay.current = { playerId: lcp.playerId, cardId: lcp.cardId, timestamp: lcp.timestamp };
-    // Only animate/sound on devices that are NOT the one playing the card
     if (!isMyTurn) {
       const player = game.players.find(pl => pl.id === lcp.playerId);
       setCardPlayAnim({
@@ -96,7 +98,6 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     setGame({ ...game, cardState });
   }, [game.players.length]);
 
-  // Ensure the current player has a hand drawn for their turn.
   useEffect(() => {
     if (!game.cardState) return;
     const p = game.players[game.turn];
@@ -139,7 +140,8 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     }
   }, [game.turn, aliveOthers.length, isBattle]);
 
-  // Track hand length changes for enter/exit animations.
+  const prevHandRef = useRef<number | null>(null);
+
   useEffect(() => {
     const curLen = state.hand.length;
     if (curLen < prevHandLen.current && prevHandRef.current !== null) {
@@ -151,15 +153,12 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     prevHandLen.current = curLen;
   }, [state.hand.length]);
 
-  const prevHandRef = useRef<number | null>(null);
-
   const playCard = (handIdx: number) => {
     if (!isMyTurn) return;
     const card = handDefs[handIdx];
     if (!card) return;
     if (totalCardsPlayed >= maxPlays) { toast(`Only ${maxPlays} cards per visit`); return; }
     if (card.type !== 'damage') {
-      // Spell/utility cards: provide themed UI feedback based on effect type
       const effectMsg: Record<string, string> = {
         heal: `✨ ${card.name} — Party healed!`,
         heal_over_time: `💚 ${card.name} — Party regenerating HP!`,
@@ -191,17 +190,14 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       toast(msg);
       const soundType = card.type === 'spell' ? 'card_spell' : 'card_utility';
       Sound.play(soundType, {}, settings);
-      // Move the card to used pile so it's consumed
       let updated = playCardFromHand(state, handIdx);
       if (!updated) return;
 
-      // Apply real deck-manipulation effects for the redesigned utility cards.
       if (card.effect === 'redraw') {
         updated = redrawHand(updated);
       } else if (card.effect === 'recycle') {
         updated = recycleGraveyard(updated);
       } else if (card.effect === 'extra_dart') {
-        // Grant a bonus slot for this turn
         setGame({ ...game, bonusSlots: bonusSlots + 1 });
       }
 
@@ -397,7 +393,6 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       return;
     }
 
-    // x01 modes (501, 301, 701, 101, speed101)
     const remaining = cur.score - scored;
     const lastDart = game.darts[game.darts.length - 1];
     const bust = remaining < 0 || (remaining === 1 && game.doubleOut) || (remaining === 0 && game.doubleOut && !lastDart.isDouble);
@@ -650,352 +645,72 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       </div>
 
       {game.players.length > 1 && (
-        <div className="play-others">
-          {others.map(pl => {
-            const xpInfo = getPlayerXPById(pl.id, players);
-            const li = levelFromXP(xpInfo.xp, settings);
-            const ti = getTitleInfo(xpInfo.selectedTitle ?? '', settings.customTitles);
-            const badge = leadTrailBadge(pl, game);
-            const plTeam = game.teamMode ? (pl.team ?? 0) : -1;
-            const plTeamColor = game.teamMode ? TEAM_COLORS[plTeam % TEAM_COLORS.length] : pl.color;
-            const defeated = isBattle && pl.defeated;
-            const eliminated = isKiller && pl.eliminated;
-            const hidden = defeated || eliminated;
-            return (
-              <div key={pl.id} className="play-other" style={{ ...(hidden ? { opacity: 0.4, filter: 'grayscale(.6)' } : {}), ...(game.teamMode ? { borderColor: plTeamColor } : {}) }}>
-                <div className="row between">
-                  <div className="row" style={{ gap: 6 }}>
-                    <span className={`turn-order-badge${game.players.indexOf(pl) === game.roundStartTurn ? ' starter' : ''}`} style={{ width: 18, height: 18, fontSize: 10 }}>{throwOrder(game.players.indexOf(pl)) + 1}</span>
-                    <BadgeAvatar playerId={pl.id} players={players} games={games} size={22} fontSize={12} color={pl.color} />
-                    <span className="po-name">{pl.name}</span>
-                    {game.teamMode && <span style={{ fontSize: 9, fontWeight: 800, color: plTeamColor }}>T{plTeam + 1}</span>}
-                    {isKiller && (pl.killerHits || 0) >= 5 && !eliminated && <span className="pill" style={{ background: '#ef4444', color: '#fff', fontSize: 9 }}>KILLER</span>}
-                    {defeated && <span className="pill" style={{ fontSize: 9, background: '#ef4444', color: '#fff' }}>DEFEATED</span>}
-                    {eliminated && <span className="pill" style={{ fontSize: 9, background: '#ef4444', color: '#fff' }}>ELIMINATED</span>}
-                  </div>
-                  <div className="row" style={{ gap: 4 }}>
-                    {!game.teamMode && game.legsBestOf > 1 && !isBattle && !isKiller && !isHighScore ? <span className="pill" style={{ fontSize: 10 }}>{pl.legsWon}</span> : null}
-                    {isBattle ? <span className="pill" style={{ fontSize: 10 }}>{pl.hp} HP</span> :
-                     isKiller ? <span className="pill" style={{ fontSize: 10 }}>{'❤️'.repeat(pl.lives || 0) || '💀'}</span> :
-                     isHighScore ? <span className="pill" style={{ fontSize: 10 }}>{pl.visits.length}/{HIGH_SCORE_VISITS}</span> :
-                     badge ? <span className={`lead-badge ${badge.startsWith('+') ? 'lead' : 'trail'}`}>{badge}</span> : null}
-                  </div>
-                </div>
-                {isBattle ? (
-                  <>
-                    <div style={{ marginTop: 4, height: 6, borderRadius: 3, background: 'var(--bg-3)', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${hpPct(pl)}%`, background: pl.color, transition: 'width .3s' }} />
-                    </div>
-                    <div className="po-sub">🛡️ {pl.armorPct}% · ⚡ {pl.powerPct}{pl.damageDealt ? ` · 💥 ${pl.damageDealt}` : ''}</div>
-                  </>
-                ) : isKiller ? (
-                  <>
-                    <div className="po-score">#{pl.killerNumber}</div>
-                    <div className="po-sub">{(pl.killerHits || 0) >= 5 ? 'Killer' : `${pl.killerHits || 0}/5 to kill`} · {pl.kills?.length || 0} kills</div>
-                  </>
-                ) : isHighScore ? (
-                  <>
-                    <div className="po-score">{pl.score}</div>
-                    <div className="po-sub">avg {visitAvg(pl).toFixed(1)}</div>
-                  </>
-                ) : (
-                  <>
-                    <div className="po-score">{pl.score}</div>
-                    <div className="po-sub">avg {visitAvg(pl).toFixed(1)} · {pl.visits.reduce((a, v) => a + v.darts.length, 0)} 🎯 · L{li.level}{ti ? ` · ${ti.icon || ''} ${ti.name}` : ''}</div>
-                    <AttributeStrip playerId={pl.id} players={players} mode={game.mode} settings={settings} />
-                  </>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <CardBoardOthers
+          game={game}
+          players={players}
+          games={games}
+          settings={settings}
+          isBattle={isBattle}
+          isKiller={isKiller}
+          isHighScore={isHighScore}
+          throwOrder={throwOrder}
+          hpPct={hpPct}
+        />
       )}
 
-      <div className="play-input">
-        <div className="pad-card card-board-pad">
-          <div className="card-pile-row">
-            <button className="card-pile-btn" onClick={() => isMyTurn && setShowDeck(true)} title="View deck" disabled={!isMyTurn}>
-              <span className="card-pile-icon">🂠</span>
-              <span className="card-pile-label">Deck</span>
-              <span className="card-pile-count">{isMyTurn ? state.deck.length : '—'}</span>
-            </button>
-            <div className="card-hand-label">{isMyTurn ? `Your Hand — ${p.name}` : `${p.name}'s turn`}</div>
-            <button className="card-pile-btn" onClick={() => setShowPlayed(true)} title="View played cards">
-              <span className="card-pile-icon">📋</span>
-              <span className="card-pile-label">Played</span>
-              <span className="card-pile-count">{game.playedCards?.length || 0}</span>
-            </button>
-            <button className="card-pile-btn" onClick={() => setShowGraveyard(true)} title="View graveyard">
-              <span className="card-pile-icon">⚰️</span>
-              <span className="card-pile-label">Graveyard</span>
-              <span className="card-pile-count">{state.graveyard.length}</span>
-            </button>
-          </div>
-
-          <div className="card-hand-fan">
-            {handDefs.length === 0 && (
-              <div className="muted small" style={{ padding: '20px 0', textAlign: 'center' }}>No cards in hand. End turn to draw new cards.</div>
-            )}
-            {isMyTurn ? (
-              handDefs.map((card, idx) => {
-                const tColor = cardTypeColor(card.type);
-                const rColor = cardRarityColor(card.rarity);
-                const isAnimatingOut = animatingOut === idx;
-                return (
-                  <div
-                    key={`${idx}-${card.id}`}
-                    className={`card-tile ${isAnimatingOut ? 'card-anim-out' : 'card-anim-in'}`}
-                    style={{
-                      '--card-color': tColor,
-                      '--card-rarity': rColor,
-                      '--card-rot': `${(idx - (handDefs.length - 1) / 2) * 4}deg`,
-                      '--card-offset': `${Math.abs(idx - (handDefs.length - 1) / 2) * 6}px`,
-                    } as React.CSSProperties}
-                    onClick={() => setSelectedCardIdx(idx)}
-                  >
-                    <div className="card-tile-inner">
-                      <div className="card-tile-top">
-                        <span className="card-tile-icon">{card.icon}</span>
-                      </div>
-                      <div className="card-tile-name">{card.name}</div>
-                      <div className="card-tile-type">{card.type === 'damage' ? `${cardDamage(card)} dmg` : card.type}</div>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              state.hand.map((_, idx) => (
-                <div
-                  key={`back-${idx}`}
-                  className="card-tile card-back"
-                  style={{
-                    '--card-rot': `${(idx - (state.hand.length - 1) / 2) * 4}deg`,
-                    '--card-offset': `${Math.abs(idx - (state.hand.length - 1) / 2) * 6}px`,
-                  } as React.CSSProperties}
-                >
-                  <div className="card-tile-inner card-back-inner">
-                    <span className="card-back-icon">🂠</span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          {usedDefs.length > 0 && (
-            <div className="card-used-row">
-              <span className="muted small" style={{ fontWeight: 600 }}>Used:</span>
-              {usedDefs.map((card, idx) => (
-                <div key={idx} className="card-used-tile" style={{ borderColor: cardRarityColor(card.rarity) }}>
-                  <span style={{ fontSize: 16 }}>{card.icon}</span>
-                  <span style={{ fontSize: 10, fontWeight: 800 }}>{card.name}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {isMyTurn && (
-            <div className="row" style={{ gap: 8, marginTop: 8 }}>
-              <button className="btn block ghost" onClick={undoCard}>↶ Undo card</button>
-              <button className="btn block primary" onClick={enterVisit}>{isBattle ? 'Attack!' : 'Enter visit'}</button>
-            </div>
-          )}
-        </div>
-      </div>
+      <CardBoardHand
+        handDefs={handDefs}
+        usedDefs={usedDefs}
+        isMyTurn={isMyTurn}
+        animatingOut={animatingOut}
+        isBattle={isBattle}
+        playerName={p.name}
+        deckCount={state.deck.length}
+        graveyardCount={state.graveyard.length}
+        playedCount={game.playedCards?.length || 0}
+        onCardClick={setSelectedCardIdx}
+        onShowDeck={() => setShowDeck(true)}
+        onShowGraveyard={() => setShowGraveyard(true)}
+        onShowPlayed={() => setShowPlayed(true)}
+        onUndo={undoCard}
+        onEnterVisit={enterVisit}
+      />
 
       {selectedCard && (
-        <div className="card-popup-overlay" onClick={closeCardPopup}>
-          <div className={`card-popup${popupClosing ? ' closing' : ''}`} onClick={e => e.stopPropagation()} style={{ '--card-color': cardTypeColor(selectedCard.type), '--card-rarity': cardRarityColor(selectedCard.rarity) } as React.CSSProperties}>
-            <div className="card-popup-header">
-              <span className="card-popup-icon">{selectedCard.icon}</span>
-              <span className="card-popup-name">{selectedCard.name}</span>
-              <span className="card-popup-rarity" style={{ color: cardRarityColor(selectedCard.rarity) }}>{selectedCard.rarity}</span>
-            </div>
-            <div className="card-popup-body">
-              <div className="card-popup-type" style={{ color: cardTypeColor(selectedCard.type) }}>
-                {selectedCard.type === 'damage' ? `Damage — ${cardDamage(selectedCard)} points` : selectedCard.type === 'spell' ? 'Spell' : 'Utility'}
-              </div>
-              <div className="card-popup-desc">{selectedCard.desc}</div>
-              {selectedCard.class !== 'any' && <div className="card-popup-class">Class: {selectedCard.class}</div>}
-            </div>
-            <div className="card-popup-actions">
-              <button className="btn block ghost" onClick={closeCardPopup}>Cancel</button>
-              <button
-                className="btn block primary"
-                disabled={!canPlayMore}
-                onClick={() => playCard(selectedCardIdx!)}
-              >
-                {selectedCard.type === 'damage' ? 'Play' : 'Use'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <CardPopup
+          card={selectedCard}
+          popupClosing={popupClosing}
+          canPlayMore={canPlayMore}
+          onClose={closeCardPopup}
+          onPlay={() => playCard(selectedCardIdx!)}
+        />
       )}
 
       {showDeck && (
-        <div className="card-popup-overlay" onClick={() => setShowDeck(false)}>
-          <div className="card-pile-popup" onClick={e => e.stopPropagation()}>
-            <div className="card-pile-popup-header">
-              <h3>🂠 Deck ({state.deck.length})</h3>
-              <button className="btn sm ghost" onClick={() => setShowDeck(false)}>Close</button>
-            </div>
-            {state.deck.length === 0 ? (
-              <div className="muted small" style={{ padding: 20 }}>Deck is empty. Graveyard will be shuffled in on next draw.</div>
-            ) : (
-              <>
-                {/* Starter cards */}
-                <div style={{ marginBottom: 12 }}>
-                  <div className="muted small" style={{ fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em', fontSize: 10 }}>Starter Cards</div>
-                  <div className="card-pile-popup-grid">
-                    {state.deck.filter(pc => { const def = resolveCardDef(pc); return def && (def.levelRequired ?? 1) === 1; }).map((pc, idx) => {
-                      const def = resolveCardDef(pc);
-                      if (!def) return null;
-                      return (
-                        <div key={idx} className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))` }}>
-                          <span style={{ fontSize: 20 }}>{def.icon}</span>
-                          <span style={{ fontSize: 10, fontWeight: 800 }}>{def.name}</span>
-                          <span className="muted" style={{ fontSize: 9 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                {/* Leveled cards — split by level */}
-                {Array.from(new Set(state.deck.map(pc => resolveCardDef(pc)?.levelRequired ?? 1).filter(lvl => lvl > 1))).sort((a, b) => a - b).map(lvl => {
-                  const levelCards = state.deck.filter(pc => { const def = resolveCardDef(pc); return def && (def.levelRequired ?? 1) === lvl; });
-                  if (levelCards.length === 0) return null;
-                  return (
-                    <div key={lvl} style={{ marginBottom: 12 }}>
-                      <div className="muted small" style={{ fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em', fontSize: 10 }}>Level {lvl} Cards</div>
-                      <div className="card-pile-popup-grid">
-                        {levelCards.map((pc, idx) => {
-                          const def = resolveCardDef(pc);
-                          if (!def) return null;
-                          return (
-                            <div key={idx} className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))` }}>
-                              <span style={{ fontSize: 20 }}>{def.icon}</span>
-                              <span style={{ fontSize: 10, fontWeight: 800 }}>{def.name}</span>
-                              <span className="muted" style={{ fontSize: 9 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </>
-            )}
-          </div>
-        </div>
+        <DeckPopup deck={state.deck} onClose={() => setShowDeck(false)} />
       )}
 
       {showGraveyard && (
-        <div className="card-popup-overlay" onClick={() => setShowGraveyard(false)}>
-          <div className="card-pile-popup" onClick={e => e.stopPropagation()}>
-            <div className="card-pile-popup-header">
-              <h3>⚰️ Graveyard ({state.graveyard.length})</h3>
-              <button className="btn sm ghost" onClick={() => setShowGraveyard(false)}>Close</button>
-            </div>
-            <div className="card-pile-popup-grid">
-              {state.graveyard.length === 0 && <div className="muted small" style={{ padding: 20 }}>Graveyard is empty.</div>}
-              {state.graveyard.map((pc, idx) => {
-                const def = resolveCardDef(pc);
-                if (!def) return null;
-                return (
-                  <div key={idx} className="card-mini-tile" style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))` }}>
-                    <span style={{ fontSize: 20 }}>{def.icon}</span>
-                    <span style={{ fontSize: 10, fontWeight: 800 }}>{def.name}</span>
-                    <span className="muted" style={{ fontSize: 9 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <GraveyardPopup graveyard={state.graveyard} onClose={() => setShowGraveyard(false)} />
       )}
 
       {showPlayed && (
-        <div className="card-popup-overlay" onClick={() => setShowPlayed(false)}>
-          <div className="card-pile-popup" onClick={e => e.stopPropagation()}>
-            <div className="card-pile-popup-header">
-              <h3>📋 Played ({game.playedCards?.length || 0})</h3>
-              <button className="btn sm ghost" onClick={() => setShowPlayed(false)}>Close</button>
-            </div>
-            <div className="card-pile-popup-grid">
-              {(!game.playedCards || game.playedCards.length === 0) && <div className="muted small" style={{ padding: 20 }}>No cards played yet.</div>}
-              {(game.playedCards || []).map((pc, idx) => {
-                const def = resolveCardDef({ cardId: pc.cardId, upgradeLevel: pc.upgradeLevel, upgraded: pc.upgradeLevel > 0 });
-                if (!def) return null;
-                return (
-                  <div
-                    key={idx}
-                    className="card-mini-tile clickable"
-                    style={{ borderColor: cardRarityColor(def.rarity), background: `color-mix(in srgb, ${cardTypeColor(def.type)} 10%, var(--bg-3))` }}
-                    onClick={() => { setSelectedPlayedCard(pc); setShowPlayed(false); }}
-                  >
-                    <span style={{ fontSize: 20 }}>{def.icon}</span>
-                    <span style={{ fontSize: 10, fontWeight: 800 }}>{def.name}</span>
-                    <span className="muted" style={{ fontSize: 9 }}>{def.type === 'damage' ? `${cardDamage(def)} dmg` : def.type}</span>
-                    <span style={{ fontSize: 8, color: pc.playerColor, fontWeight: 700, marginTop: 2 }}>{pc.playerName}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <PlayedPopup
+          playedCards={game.playedCards || []}
+          onClose={() => setShowPlayed(false)}
+          onSelect={(pc) => { setSelectedPlayedCard(pc); setShowPlayed(false); }}
+        />
       )}
 
-      {selectedPlayedCard && (() => {
-        const def = resolveCardDef({ cardId: selectedPlayedCard.cardId, upgradeLevel: selectedPlayedCard.upgradeLevel, upgraded: selectedPlayedCard.upgradeLevel > 0 });
-        if (!def) return null;
-        const tColor = cardTypeColor(def.type);
-        const rColor = cardRarityColor(def.rarity);
-        return (
-          <div className="card-popup-overlay" onClick={closePlayedPopup}>
-            <div
-              className={`card-detail-popup ${playedPopupClosing ? 'popup-closing' : ''}`}
-              onClick={e => e.stopPropagation()}
-              style={{ '--card-color': tColor, '--card-rarity': rColor } as React.CSSProperties}
-            >
-              <div className="card-detail-header">
-                <span className="card-detail-icon">{def.icon}</span>
-                <span className="card-detail-name">{def.name}</span>
-                <button className="btn sm ghost" onClick={closePlayedPopup}>Close</button>
-              </div>
-              <div className="card-detail-body">
-                <div className="card-detail-type" style={{ color: tColor }}>{def.type}</div>
-                <div className="card-detail-rarity" style={{ color: rColor }}>{def.rarity}</div>
-                {def.type === 'damage' && <div className="card-detail-stat">Damage: {cardDamage(def)}</div>}
-                <div className="card-detail-desc">{def.desc}</div>
-                <div className="card-detail-player" style={{ color: selectedPlayedCard.playerColor }}>
-                  Played by {selectedPlayedCard.playerName}
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {selectedPlayedCard && (
+        <CardDetailPopup
+          playedCard={selectedPlayedCard}
+          closing={playedPopupClosing}
+          onClose={closePlayedPopup}
+        />
+      )}
 
-      {cardPlayAnim && (() => {
-        const def = resolveCardDef({ cardId: cardPlayAnim.cardId, upgradeLevel: cardPlayAnim.upgradeLevel, upgraded: cardPlayAnim.upgradeLevel > 0 });
-        if (!def) return null;
-        const tColor = cardTypeColor(def.type);
-        const rColor = cardRarityColor(def.rarity);
-        return (
-          <div className="card-play-anim-overlay">
-            <div
-              className="card-play-anim-card"
-              style={{ '--card-color': tColor, '--card-rarity': rColor } as React.CSSProperties}
-            >
-              <div className="card-play-anim-icon">{def.icon}</div>
-              <div className="card-play-anim-name">{def.name}</div>
-              <div className="card-play-anim-type">{def.type === 'damage' ? `${cardDamage(def)} damage` : def.type}</div>
-              <div className="card-play-anim-player" style={{ color: cardPlayAnim.playerColor }}>
-                {cardPlayAnim.playerName}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {cardPlayAnim && <CardPlayAnimOverlay anim={cardPlayAnim} />}
     </div>
   );
 }
