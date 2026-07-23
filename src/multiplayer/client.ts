@@ -48,6 +48,8 @@ export interface GameConfig {
   powerUps: boolean;
 }
 
+export type MultiplayerGameMode = 'dartboard' | 'cards';
+
 export interface Lobby {
   id: string;
   code: string;
@@ -59,6 +61,7 @@ export interface Lobby {
   game_state: Game | null;
   popup_state: { type: string; playerId: string; data: any } | null;
   player_turn: number;
+  game_mode: MultiplayerGameMode;
   created_at: string;
   updated_at: string;
 }
@@ -69,7 +72,7 @@ export interface LobbyWithPlayers extends Lobby {
 
 // ── Lobby CRUD ──────────────────────────────────────────────────────
 
-export async function createLobby(name: string, hostPlayer: Player): Promise<Lobby | null> {
+export async function createLobby(name: string, hostPlayer: Player, gameMode: MultiplayerGameMode): Promise<Lobby | null> {
   if (!supabase) return null;
   const deviceId = getDeviceId();
   const code = generateLobbyCode();
@@ -81,6 +84,7 @@ export async function createLobby(name: string, hostPlayer: Player): Promise<Lob
       host_device_id: deviceId,
       host_player_id: hostPlayer.id,
       status: 'lobby',
+      game_mode: gameMode,
     })
     .select()
     .single();
@@ -210,6 +214,14 @@ export async function startGame(lobbyId: string, config: GameConfig, game: Game)
     })
     .eq('id', lobbyId);
   if (error) console.warn('[mp] startGame:', error.message);
+}
+
+export async function setLobbyGameMode(lobbyId: string, gameMode: MultiplayerGameMode): Promise<void> {
+  if (!supabase) return;
+  await supabase
+    .from('mp_lobbies')
+    .update({ game_mode: gameMode, updated_at: new Date().toISOString() })
+    .eq('id', lobbyId);
 }
 
 export async function setLobbyStatus(lobbyId: string, status: string): Promise<void> {

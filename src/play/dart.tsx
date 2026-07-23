@@ -63,32 +63,33 @@ export function tickShield(pl: any): any {
 
 // Shared keypad/multiplier input block. `onAdd` is called with the chosen base
 // and current multiplier; `onUndo` and `onEnter` are wired to the action row.
-export function KeypadPad({ game, setGame, onAdd, onUndo, onEnter, enterLabel = 'Enter visit' }: {
+export function KeypadPad({ game, setGame, onAdd, onUndo, onEnter, enterLabel = 'Enter visit', disabled }: {
   game: Game;
   setGame: (g: Game) => void;
   onAdd: (base: number, mult: number, labelOverride?: string, isBull?: boolean) => void;
   onUndo: () => void;
   onEnter: () => void;
   enterLabel?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="pad-card">
       <div className="mult">
-        <button className={game.mult === 1 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 1 })}>Single</button>
-        <button className={game.mult === 2 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 2 })}>Double</button>
-        <button className={game.mult === 3 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 3 })}>Triple</button>
+        <button className={game.mult === 1 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 1 })} disabled={disabled}>Single</button>
+        <button className={game.mult === 2 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 2 })} disabled={disabled}>Double</button>
+        <button className={game.mult === 3 ? 'on' : ''} onClick={() => setGame({ ...game, mult: 3 })} disabled={disabled}>Triple</button>
       </div>
       <div className="keypad">
         {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20].map(n => (
-          <button key={n} className="key" onClick={() => onAdd(n, game.mult)}>{n}</button>
+          <button key={n} className="key" onClick={() => onAdd(n, game.mult)} disabled={disabled}>{n}</button>
         ))}
-        <button className="key" style={{ background: 'color-mix(in srgb,var(--accent) 20%,var(--bg-3))' }} onClick={() => onAdd(25, game.mult === 2 ? 2 : 1)}>25</button>
-        <button className="key" style={{ gridColumn: 'span 2', background: 'color-mix(in srgb,var(--accent) 30%,var(--bg-3))' }} onClick={() => onAdd(50, 1, 'Bull', true)}>Bull<br /><small>50</small></button>
-        <button className="key" style={{ gridColumn: 'span 2', color: 'var(--muted)' }} onClick={() => onAdd(0, 1, '0')}>Miss</button>
+        <button className="key" style={{ background: 'color-mix(in srgb,var(--accent) 20%,var(--bg-3))' }} onClick={() => onAdd(25, game.mult === 2 ? 2 : 1)} disabled={disabled}>25</button>
+        <button className="key" style={{ gridColumn: 'span 2', background: 'color-mix(in srgb,var(--accent) 30%,var(--bg-3))' }} onClick={() => onAdd(50, 1, 'Bull', true)} disabled={disabled}>Bull<br /><small>50</small></button>
+        <button className="key" style={{ gridColumn: 'span 2', color: 'var(--muted)' }} onClick={() => onAdd(0, 1, '0')} disabled={disabled}>Miss</button>
       </div>
       <div className="row" style={{ gap: 8, marginTop: 8 }}>
-        <button className="btn block ghost" onClick={onUndo}>↶ Undo dart</button>
-        <button className="btn block primary" onClick={onEnter}>{enterLabel}</button>
+        <button className="btn block ghost" onClick={onUndo} disabled={disabled}>↶ Undo dart</button>
+        <button className="btn block primary" onClick={onEnter} disabled={disabled}>{enterLabel}</button>
       </div>
     </div>
   );
