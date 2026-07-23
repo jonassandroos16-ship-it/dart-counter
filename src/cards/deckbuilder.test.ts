@@ -85,7 +85,7 @@ describe('Deck-builder logic', () => {
     const drawn = drawCards(s, HAND_SIZE);
     const played = playCardFromHand(drawn, 0)!;
     const usedCard = played.used[0];
-    const stillInHand = played.hand.some(c => c.cardId === usedCard.cardId && c.upgradeLevel === usedCard.upgradeLevel);
+    const stillInHand = played.hand.includes(usedCard);
     expect(stillInHand).toBe(false);
   });
 

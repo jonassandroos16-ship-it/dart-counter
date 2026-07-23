@@ -51,6 +51,8 @@ export interface Player {
   campaignProgress?: PlayerCampaignProgress;
   dartliteStats?: PlayerDartliteStats;
   cards?: Record<string, PlayerCard[]>; // per-class card collection (card mode)
+  developerMode?: boolean;
+  showdownBg?: string;
 }
 
 export interface Dart {
