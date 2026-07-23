@@ -15,8 +15,8 @@ import type { RerollPlan } from '../../powerups';
 
 const HIGH_SCORE_VISITS = 7;
 
-export function HighScoreBoard({ game, setGame, settings, players, games, toast, music, onQuit, setGames, setPlayers, popups, onGameOver }: {
-  game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[]; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void;
+export function HighScoreBoard({ game, setGame, settings, players, games, toast, music, onQuit, setGames, setPlayers, popups, onGameOver, isMyTurn = true }: {
+  game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[]; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void; isMyTurn?: boolean;
 }) {
   const [reroll, setReroll] = useState<RerollPlan | null>(null);
   const [rerollResolve, setRerollResolve] = useState<((v: boolean) => void) | null>(null);
@@ -181,7 +181,7 @@ export function HighScoreBoard({ game, setGame, settings, players, games, toast,
       )}
 
       <div className="play-input">
-        <KeypadPad game={game} setGame={setGame as any} onAdd={addDart} onUndo={() => setGame(undoDart(game))} onEnter={enterVisit} />
+        <KeypadPad game={game} setGame={setGame as any} onAdd={addDart} onUndo={() => setGame(undoDart(game))} onEnter={enterVisit} disabled={!isMyTurn} />
       </div>
       {reroll ? (
         <RerollOverlay
