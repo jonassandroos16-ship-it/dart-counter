@@ -154,6 +154,12 @@ export function addDart(
     return { ...state, players, darts: [...state.darts, dart], phantomDarts, visitEnemiesSnapshot, powerUpCharge };
   }
   const power = effectivePower(thrower);
+  // Surge: double damage on next visit. Hot streak: cumulative bonus per dart.
+  const surgeBuff = thrower.buffs.find(b => b.kind === 'surge');
+  const surgeMult = surgeBuff ? surgeBuff.amount : 1;
+  const hotStreakBuff = thrower.buffs.find(b => b.kind === 'hot_streak');
+  const hotStreakBonus = hotStreakBuff ? hotStreakBuff.amount * (state.darts.length + 1) : 0;
+  const adjustedPower = power + hotStreakBonus;
   let targetIdx = state.targetIdx;
   let target = state.enemies[targetIdx];
   if (!target || target.defeated) {
@@ -177,9 +183,10 @@ export function addDart(
       step = { dart, damage: 0, kind: 'miss', enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0 };
     }
   } else {
-    const dmg = computePlayerDartDamage(dart, power, t.armor);
+    const dmg = computePlayerDartDamage(dart, adjustedPower, t.armor);
     const vulnerable = t.vulnerableTurns > 0;
-    const finalDmg = vulnerable ? Math.round(dmg * 1.5) : dmg;
+    const surgeDmg = Math.round(dmg * surgeMult);
+    const finalDmg = vulnerable ? Math.round(surgeDmg * 1.5) : surgeDmg;
     t.hp = Math.max(0, t.hp - finalDmg);
     const defeated = t.hp <= 0;
     if (defeated) t.defeated = true;
@@ -248,13 +255,17 @@ export function computePlayerDartDamage(dart: CampaignDart, attackerPower: numbe
 
 export function resolvePlayerVisit(state: CampaignBattleState, hasPlayedCards = false): CampaignBattleState {
   if (state.phase !== 'player') return state;
-  // In card mode, a visit may consist entirely of utility/spell cards that
-  // never add a dart to state.darts. The visit is still valid (cards were
-  // played) and must advance — otherwise the game freezes. The caller
-  // passes hasPlayedCards=true when at least one card was used this visit.
   if (!state.darts.length && !hasPlayedCards) return state;
+  // Consume one-time visit buffs (surge, hot_streak) after the visit.
+  const thrower = state.players[state.playerTurnIdx];
+  const players = thrower
+    ? state.players.map(p => p.id === thrower.id
+        ? { ...p, buffs: p.buffs.filter(b => b.kind !== 'surge' && b.kind !== 'hot_streak') }
+        : p)
+    : state.players;
   return advanceAfterPlayerVisit({
     ...state,
+    players,
     darts: [],
     resolvedDarts: [],
     visitEnemiesSnapshot: [],
