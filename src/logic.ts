@@ -128,13 +128,14 @@ export function checkoutHint(remaining: number | null, doubleOut: boolean, pract
 export function leadTrailBadge(pl: GamePlayer, game: Game): string {
   if (game.practice || game.players.length < 2) return '';
   const scores = game.players.map(p => p.score);
-  const leaderScore = Math.min(...scores);
+  const isHighScore = game.mode === 'highscore';
+  const leaderScore = isHighScore ? Math.max(...scores) : Math.min(...scores);
   if (pl.score === leaderScore) {
-    const next = scores.filter(s => s !== leaderScore).sort((a, b) => a - b)[0];
-    const ahead = next != null ? next - leaderScore : 0;
+    const next = scores.filter(s => s !== leaderScore).sort((a, b) => isHighScore ? b - a : a - b)[0];
+    const ahead = isHighScore ? leaderScore - next : next - leaderScore;
     return ahead > 0 ? `+${ahead}` : '';
   }
-  const behind = pl.score - leaderScore;
+  const behind = isHighScore ? leaderScore - pl.score : pl.score - leaderScore;
   return behind > 0 ? `-${behind}` : '';
 }
 
