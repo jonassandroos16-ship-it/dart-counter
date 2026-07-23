@@ -9,14 +9,14 @@ import type { Player } from '../types';
 // are gained on level-up (based on class) and as dartlite rewards. Each
 // card can be upgraded once.
 
-// Starter deck: 10 cards per player.
+// Starter deck: 11 cards per player.
 //   4 class-specific (damage/spell mix)
 //   3 shared attack (class 'any' damage)
-//   2 shared utility (class 'any')
+//   3 shared utility (class 'any')
 //   1 class utility
 // If no class is selected, the 'any' cards plus neutral fallbacks are used.
 const STARTER_SHARED_ATTACK = ['dmg_s20', 'dmg_d20', 'dmg_outer_bull'];
-const STARTER_SHARED_UTILITY = ['util_redraw', 'util_recycle'];
+const STARTER_SHARED_UTILITY = ['util_redraw', 'util_recycle', 'util_focus'];
 
 const STARTER_CLASS_CARDS: Record<string, { specific: string[]; utility: string }> = {
   warrior: {
@@ -36,8 +36,8 @@ const STARTER_CLASS_CARDS: Record<string, { specific: string[]; utility: string 
 // Fallback for players without a class — extra shared cards fill the slots.
 const STARTER_NO_CLASS_FALLBACK: string[] = [
   'dmg_s20', 'dmg_d20', 'dmg_outer_bull', 'dmg_s20',
-  'util_redraw', 'util_recycle', 'util_redraw',
-  'dmg_s20', 'dmg_d20', 'util_recycle',
+  'util_redraw', 'util_recycle', 'util_focus',
+  'dmg_s20', 'dmg_d20', 'util_recycle', 'util_redraw',
 ];
 
 export function defaultPlayerCards(classId?: string | null): PlayerCard[] {
