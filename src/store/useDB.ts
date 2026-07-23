@@ -234,7 +234,7 @@ export function useDB(): DBAPI {
       const tombGSet = new Set(tombG);
       const merged = mergeBackup(
         { players: localPlayers.filter(p => !tombPSet.has(p.id)), games: localGames.filter(g => !tombGSet.has(g.id)), settings: localSettings },
-        { players: (remote.players || []).filter(p => !tombPSet.has(p.id)), games: remote.games.filter(g => !tombGSet.has(g.id)), settings: remote.settings },
+        { players: (remote.players || []).filter(p => !tombPSet.has(p.id)), games: (remote.games || []).filter(g => !tombGSet.has(g.id)), settings: remote.settings },
       );
       localStorage.setItem(KEYS.players, JSON.stringify(merged.players));
       localStorage.setItem(KEYS.games, JSON.stringify(merged.games));
@@ -248,9 +248,10 @@ export function useDB(): DBAPI {
       return ok
         ? { ok: true, message: `Synced — ${merged.players.length} players, ${merged.games.length} games` }
         : { ok: false, message: 'Database write failed' };
-    } catch {
+    } catch (e: any) {
       setConnected(false);
-      return { ok: false, message: 'Sync failed' };
+      const detail = e?.message || (typeof e === 'string' ? e : 'Unknown error');
+      return { ok: false, message: `Sync failed — ${detail}` };
     } finally {
       setSyncing(false);
     }
