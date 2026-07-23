@@ -7,8 +7,8 @@ import { finishSimpleGame } from '../finish';
 import { GameOver } from '../GameOver';
 import type { PopupControls } from '../../Popups';
 
-export function AtcBoard({ game, setGame, settings, players, games, toast, music, onQuit, setGames, setPlayers, popups, onGameOver }: {
-  game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[]; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void;
+export function AtcBoard({ game, setGame, settings, players, games, toast, music, onQuit, setGames, setPlayers, popups, onGameOver, isMyTurn = true }: {
+  game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[]; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void; isMyTurn?: boolean;
 }) {
   const p = game.players[game.turn];
   const total = ATC_TARGETS.length;
@@ -97,12 +97,12 @@ export function AtcBoard({ game, setGame, settings, players, games, toast, music
       <div className="play-input">
         <div className="pad-card">
           <div className="row" style={{ gap: 10 }}>
-            <button className="btn block primary" style={{ height: 64, fontSize: 20 }} onClick={() => addDartATC(true)}>✓ Hit {target}</button>
-            <button className="btn block" style={{ height: 64, fontSize: 20 }} onClick={() => addDartATC(false)}>✗ Miss</button>
+            <button className="btn block primary" style={{ height: 64, fontSize: 20 }} onClick={() => addDartATC(true)} disabled={!isMyTurn}>✓ Hit {target}</button>
+            <button className="btn block" style={{ height: 64, fontSize: 20 }} onClick={() => addDartATC(false)} disabled={!isMyTurn}>✗ Miss</button>
           </div>
           <div className="row" style={{ gap: 8, marginTop: 8 }}>
-            <button className="btn block ghost" onClick={undoDartATC}>↶ Undo dart</button>
-            <button className="btn block primary" onClick={() => enterVisitATC(game)}>Next player</button>
+            <button className="btn block ghost" onClick={undoDartATC} disabled={!isMyTurn}>↶ Undo dart</button>
+            <button className="btn block primary" onClick={() => enterVisitATC(game)} disabled={!isMyTurn}>Next player</button>
           </div>
         </div>
       </div>
