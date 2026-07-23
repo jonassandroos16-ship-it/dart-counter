@@ -29,22 +29,11 @@ export function startBattle(
   const cfg = settings?.powerUpScaling;
   const chargeCap = Number.isFinite(cfg?.chargeMax) ? (cfg?.chargeMax as number) : 100;
   const startMap = (cfg && cfg.startingCharge) || {};
-  // Per-player starting charge: each player uses their own equipped coop
-  // power-up's starting charge. This is the core fix for the bug where one
-  // player could charge but another couldn't use their power-up.
   const party = players.map(p => {
     const equippedId = p.powerUps?.coopActive ?? null;
     const startCharge = equippedId ? (startMap[equippedId] || 0) : 0;
     return toCoopPlayer(p, settings, Math.max(0, Math.min(chargeCap, startCharge)));
   });
-  // Apply team-wide passive bonuses (from each player's equipped passives)
-  // to the party's stats. Power and armor bonuses raise the per-player stats
-  // directly. The health bonus is applied to the SHARED party HP pool AFTER
-  // averaging — adding it per-player before averaging would divide the
-  // priest's contribution by the player count (a 2-player party with +120
-  // priest HP would only get +60), and the per-player healthMax cap would
-  // silently eat the bonus when base + bonus > cap. Applying it after
-  // averaging means the full priest bonus is always granted.
   const passiveBonus = computePartyPassiveBonus(players);
   const healthMax = Number.isFinite(cfg?.healthMax) ? (cfg?.healthMax as number) : Number.MAX_SAFE_INTEGER;
   const armorMax = Number.isFinite(cfg?.armorMax) ? (cfg?.armorMax as number) : Number.MAX_SAFE_INTEGER;
@@ -58,22 +47,12 @@ export function startBattle(
       }, 0) / players.length)))
     : 1;
   for (const cp of party) {
-    // Per-player maxHp includes the passive bonus for display purposes, but
-    // is NOT used to compute the shared party HP pool (see below).
     cp.maxHp = Math.min(healthMax, cp.maxHp + passiveBonus.health);
     cp.hp = cp.maxHp;
     cp.power = Math.min(powerMax, cp.power + passiveBonus.power);
     cp.armor = Math.min(armorMax, cp.armor + passiveBonus.armor);
   }
-  // Party HP = average of per-player BASE health (before passive bonus),
-  // then add the full team-wide passive health bonus on top. The bonus is
-  // NOT subject to the base healthMax cap — priest passives are meant to
-  // push the party past the normal cap (that's their whole point). This
-  // keeps the averaging behavior (more players ≠ more base HP) while
-  // ensuring the priest's contribution is not divided by the player count.
   const partyMaxHp = Math.max(1, baseAvg + passiveBonus.health);
-  // Legacy shared charge kept for backwards-compat with old saves/tests.
-  // Initialized to the first player's charge (mirrors old behavior).
   const powerUpCharge = party.length ? party[0].powerUpCharge : 0;
   const enemies: ActiveEnemy[] = level.enemies.map((defId) => {
     const def = db[defId];
@@ -131,19 +110,6 @@ export function startBattle(
   };
 }
 
-// ── Player turn ───────────────────────────────────────────────────────
-//
-// In Coop mode, each dart a player throws is resolved immediately against
-// the targeted enemy — shields are checked, damage is applied, and the
-// enemy may be defeated mid-visit. The thrower can keep throwing darts (up
-// to 3) at any alive enemy. After the 3rd dart, the player taps "Continue"
-// to see a summary of all darts thrown this visit (with per-dart target,
-// damage, and resulting HP) and then advance to the next player or the
-// enemy phase.
-//
-// `undoDart` reverts the most recent dart by restoring the enemy snapshot
-// taken when the first dart of the visit was thrown.
-
 export function addDart(
   state: CampaignBattleState,
   base: number,
@@ -169,59 +135,35 @@ export function addDart(
     isBull: !!isBull || base === 25,
   };
   let phantomDarts = state.phantomDarts;
-  // Phantom Darts power-up: convert thrown darts into bullseyes. Each
-  // consumed dart decrements the counter. Misses (base 0) are not converted
-  // so the player can still intentionally miss if they want.
   if (phantomDarts > 0 && base !== 0) {
     dart = { value: 50, label: '👻 Bull', base: 50, mult: 2, isDouble: true, isBull: true };
     phantomDarts = phantomDarts - 1;
   }
-
-  // Power-up charge: every dart thrown contributes to the CURRENT THROWER's
-  // coop power-up orb. This is per-player — other players' orbs are not
-  // affected. Mirrors the competitive `addDartToGame` flow.
   const chargeCap = settings?.powerUpScaling?.chargeMax ?? 100;
   const gained = settings ? chargeFromDart(dart, settings) : 0;
   const throwerIdx = state.playerTurnIdx;
   const players = state.players.map((p, i) => i === throwerIdx
     ? { ...p, powerUpCharge: Math.min(chargeCap, p.powerUpCharge + gained) }
     : p);
-  // Legacy shared charge kept in sync with the current thrower for backwards
-  // compat with old code that reads state.powerUpCharge.
   const powerUpCharge = players[throwerIdx].powerUpCharge;
-
-  // Snapshot enemies at the start of the visit so undo can restore them.
   const visitEnemiesSnapshot = state.darts.length === 0
     ? state.enemies.map(e => ({ ...e, shields: e.shields.map(s => ({ ...s })) }))
     : state.visitEnemiesSnapshot;
-
-  // Resolve this dart immediately against the targeted enemy.
   const thrower = players[throwerIdx];
   if (!thrower) {
     return { ...state, players, darts: [...state.darts, dart], phantomDarts, visitEnemiesSnapshot, powerUpCharge };
   }
   const power = effectivePower(thrower);
-
-  // Find a valid target (auto-pick first alive if the chosen one is dead).
   let targetIdx = state.targetIdx;
   let target = state.enemies[targetIdx];
   if (!target || target.defeated) {
     const firstAlive = state.enemies.findIndex(e => !e.defeated);
     if (firstAlive < 0) {
-      // No alive enemies — just record the dart.
-      return {
-        ...state,
-        players,
-        darts: [...state.darts, dart],
-        phantomDarts,
-        visitEnemiesSnapshot,
-        powerUpCharge,
-      };
+      return { ...state, players, darts: [...state.darts, dart], phantomDarts, visitEnemiesSnapshot, powerUpCharge };
     }
     targetIdx = firstAlive;
     target = state.enemies[targetIdx];
   }
-
   const enemies = state.enemies.map(e => ({ ...e, shields: [...e.shields] }));
   const t = enemies[targetIdx];
   let step: ResolvedDart;
@@ -230,18 +172,9 @@ export function addDart(
     const shield = t.shields[shieldIdx];
     if (dartMatchesShield(dart, shield)) {
       t.shields = t.shields.filter((_, i) => i !== shieldIdx);
-      step = {
-        dart, damage: 0, kind: 'shield_break',
-        shieldTarget: describeShield(shield),
-        enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
-        attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0,
-      };
+      step = { dart, damage: 0, kind: 'shield_break', shieldTarget: describeShield(shield), enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0 };
     } else {
-      step = {
-        dart, damage: 0, kind: 'miss',
-        enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
-        attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0,
-      };
+      step = { dart, damage: 0, kind: 'miss', enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0 };
     }
   } else {
     const dmg = computePlayerDartDamage(dart, power, t.armor);
@@ -250,25 +183,15 @@ export function addDart(
     t.hp = Math.max(0, t.hp - finalDmg);
     const defeated = t.hp <= 0;
     if (defeated) t.defeated = true;
-    step = {
-      dart, damage: finalDmg, kind: defeated ? 'defeated' : 'damage',
-      enemyId: t.id, enemyName: t.name, hpAfter: t.hp,
-      attackerPower: power, targetArmor: t.armor, vulnerable,
-    };
+    step = { dart, damage: finalDmg, kind: defeated ? 'defeated' : 'damage', enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable };
   }
-
   const anyAlive = enemies.some(e => !e.defeated);
   const outcome: CampaignBattleState['outcome'] = !anyAlive ? 'victory' : state.outcome;
-
-  // Per-player kill/damage bookkeeping for the thrower (used by Dartlite
-  // progress popups). Only counts real damage/defeats, not shield breaks or
-  // misses.
   const dartDamage = step.kind === 'damage' || step.kind === 'defeated' ? step.damage : 0;
   const dartKill = step.kind === 'defeated' ? 1 : 0;
   const playersWithStats = players.map((p, i) => i === throwerIdx
     ? { ...p, kills: (p.kills ?? 0) + dartKill, damageDealt: (p.damageDealt ?? 0) + dartDamage }
     : p);
-
   return {
     ...state,
     players: playersWithStats,
@@ -280,30 +203,20 @@ export function addDart(
     visitEnemiesSnapshot,
     outcome,
     powerUpCharge,
-    stats: {
-      ...state.stats,
-      dartsThrown: state.stats.dartsThrown + 1,
-      damageDealt: state.stats.damageDealt + dartDamage,
-      enemiesDefeated: state.stats.enemiesDefeated + dartKill,
-    },
+    stats: { ...state.stats, dartsThrown: state.stats.dartsThrown + 1, damageDealt: state.stats.damageDealt + dartDamage, enemiesDefeated: state.stats.enemiesDefeated + dartKill },
   };
 }
 
 export function undoDart(state: CampaignBattleState, settings?: Settings): CampaignBattleState {
   if (!state.darts.length) return state;
-  // Restore enemies from the visit snapshot (taken when the first dart was
-  // thrown). If this was the first dart, clear the snapshot.
   const enemies = state.visitEnemiesSnapshot.length
     ? state.visitEnemiesSnapshot.map(e => ({ ...e, shields: e.shields.map(s => ({ ...s })) }))
     : state.enemies;
   const resolvedDarts = state.resolvedDarts.slice(0, -1);
   const darts = state.darts.slice(0, -1);
   const visitEnemiesSnapshot = darts.length === 0 ? [] : state.visitEnemiesSnapshot;
-  // Recompute outcome — undoing a dart could un-defeat an enemy.
   const anyAlive = enemies.some(e => !e.defeated);
   const outcome: CampaignBattleState['outcome'] = !anyAlive ? 'victory' : 'ongoing';
-  // Revert the power-up charge added by the undone dart from the CURRENT
-  // THROWER's per-player orb (not the shared pool).
   const undoneDart = state.darts[state.darts.length - 1];
   const revert = settings ? chargeFromDart(undoneDart, settings) : 0;
   const throwerIdx = state.playerTurnIdx;
@@ -311,16 +224,7 @@ export function undoDart(state: CampaignBattleState, settings?: Settings): Campa
     ? { ...p, powerUpCharge: Math.max(0, p.powerUpCharge - revert) }
     : p);
   const powerUpCharge = Math.max(0, state.powerUpCharge - revert);
-  return {
-    ...state,
-    players,
-    enemies,
-    darts,
-    resolvedDarts,
-    visitEnemiesSnapshot,
-    outcome,
-    powerUpCharge,
-  };
+  return { ...state, players, enemies, darts, resolvedDarts, visitEnemiesSnapshot, outcome, powerUpCharge };
 }
 
 export function setTarget(state: CampaignBattleState, enemyId: string): CampaignBattleState {
@@ -329,15 +233,11 @@ export function setTarget(state: CampaignBattleState, enemyId: string): Campaign
   return { ...state, targetIdx: idx };
 }
 
-// Effective power for the current thrower, including active buffs.
 export function effectivePower(player: CoopPlayer): number {
   const buff = player.buffs.filter(b => b.kind === 'power').reduce((a, b) => a + b.amount, 0);
   return Math.max(0, player.power + buff);
 }
 
-// Per-dart damage = round((dartValue + power) * (1 − armor/100)), min 1 on a
-// hit. Armor is a percentage (e.g. armor 10 reduces damage by 10%). Misses
-// deal 0.
 export function computePlayerDartDamage(dart: CampaignDart, attackerPower: number, targetArmor: number): number {
   if (dart.value <= 0) return 0;
   const base = Math.max(0, dart.value + attackerPower);
@@ -346,14 +246,13 @@ export function computePlayerDartDamage(dart: CampaignDart, attackerPower: numbe
   return Math.max(1, Math.round(mitigated));
 }
 
-// After a player has thrown all their darts (and the damage has already
-// been applied dart-by-dart via `addDart`), `resolvePlayerVisit` finalizes
-// the visit: it logs the visit, clears the dart slots, and advances to the
-// next player or to the enemy phase. The UI shows a summary overlay of all
-// darts thrown this visit before calling this.
-export function resolvePlayerVisit(state: CampaignBattleState): CampaignBattleState {
+export function resolvePlayerVisit(state: CampaignBattleState, hasPlayedCards = false): CampaignBattleState {
   if (state.phase !== 'player') return state;
-  if (!state.darts.length) return state;
+  // In card mode, a visit may consist entirely of utility/spell cards that
+  // never add a dart to state.darts. The visit is still valid (cards were
+  // played) and must advance — otherwise the game freezes. The caller
+  // passes hasPlayedCards=true when at least one card was used this visit.
+  if (!state.darts.length && !hasPlayedCards) return state;
   return advanceAfterPlayerVisit({
     ...state,
     darts: [],
@@ -363,43 +262,17 @@ export function resolvePlayerVisit(state: CampaignBattleState): CampaignBattleSt
   });
 }
 
-// After a player's visit is fully animated, either pass to the next player
-// or start the enemy phase.
 function advanceAfterPlayerVisit(state: CampaignBattleState): CampaignBattleState {
   if (state.outcome === 'victory') {
-    return {
-      ...state,
-      phase: 'player',
-      darts: [],
-      resolvedDarts: [],
-      visitEnemiesSnapshot: [],
-      awaitContinue: false,
-    };
+    return { ...state, phase: 'player', darts: [], resolvedDarts: [], visitEnemiesSnapshot: [], awaitContinue: false };
   }
   const nextIdx = state.playerTurnIdx + 1;
   if (nextIdx < state.players.length) {
-    return {
-      ...state,
-      playerTurnIdx: nextIdx,
-      darts: [],
-      resolvedDarts: [],
-      visitEnemiesSnapshot: [],
-      awaitContinue: false,
-    };
+    return { ...state, playerTurnIdx: nextIdx, darts: [], resolvedDarts: [], visitEnemiesSnapshot: [], awaitContinue: false };
   }
-  // All players have thrown — start the enemy phase.
-  return {
-    ...state,
-    phase: 'enemy',
-    darts: [],
-    resolvedDarts: [],
-    visitEnemiesSnapshot: [],
-    awaitContinue: false,
-  };
+  return { ...state, phase: 'enemy', darts: [], resolvedDarts: [], visitEnemiesSnapshot: [], awaitContinue: false };
 }
 
-// Add power-up charge based on a dart just thrown (called from addDart flow
-// in the UI, or rolled into resolvePlayerVisit). Returns the new charge.
 export function chargeFromDart(dart: CampaignDart, settings: Settings): number {
   const cfg = settings.powerUpScaling;
   let c = 0;
@@ -411,6 +284,5 @@ export function chargeFromDart(dart: CampaignDart, settings: Settings): number {
   return c;
 }
 
-// Re-exported for callers that combine player turn with enemy AI flow.
 export { finishEnemyTurn };
 export type { PlayerBuff, PartyPassiveBonus };
