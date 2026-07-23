@@ -300,6 +300,39 @@ function playSfxByName(ctx: AudioContext, reverb: AudioNode | null, name: string
       kick(ctx, master, t, 0.4, 100, 0.18);
       break;
     }
+    case 'card_damage': {
+      // Heavy blade/impact sound for damage cards
+      kick(ctx, master, t, 0.7, 120, 0.2);
+      osc(ctx, master, 180, t, 0.15, 'sawtooth', 0.4);
+      noiseBurst(ctx, master, t, 0.08, 0.35, 2000, 300);
+      chime(ctx, master, 880, t + 0.03, 0.1, 0.15);
+      break;
+    }
+    case 'card_spell': {
+      // Mystical shimmer for spell cards
+      const notes = [659.25, 783.99, 987.77, 1174.66];
+      notes.forEach((f, i) => {
+        const o = ctx.createOscillator();
+        const g = adsr(ctx, master, t + i * 0.04, 0.3, 0.01, 0.08, 0.4, 0.2, 0.25);
+        o.type = 'sine';
+        o.frequency.setValueAtTime(f, t + i * 0.04);
+        const lfo = ctx.createOscillator();
+        const lg = ctx.createGain();
+        lfo.frequency.value = 6;
+        lg.gain.value = f * 0.015;
+        lfo.connect(lg); lg.connect(o.frequency);
+        o.connect(g); o.start(t + i * 0.04); o.stop(t + i * 0.04 + 0.35);
+        lfo.start(t + i * 0.04); lfo.stop(t + i * 0.04 + 0.35);
+      });
+      break;
+    }
+    case 'card_utility': {
+      // Quick, light utility sound
+      sweep(ctx, master, t, 0.12, 600, 1200, 'triangle', 0.35);
+      chime(ctx, master, 1200, t + 0.04, 0.1, 0.12);
+      hat(ctx, master, t, 0.1, 0.03);
+      break;
+    }
   }
 }
 
