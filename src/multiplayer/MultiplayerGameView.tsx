@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { Target, Layers } from 'lucide-react';
 import type { Game, GameRecord, Settings } from '../types';
-import type { Lobby, LobbyPlayer } from './client';
+import type { Lobby, LobbyPlayer, MultiplayerGameMode } from './client';
 import { updateGameState, setPopupState, ownsPlayer, isMyTurn } from './client';
 import type { PopupControls, PopupState } from '../Popups';
 import { MilestonePopup, LevelUpPopup, TitleUnlockPopup, KillPopup, FrozenPopup, ShieldBlockedPopup } from '../Popups';
@@ -20,7 +21,9 @@ interface Props {
     setGame: (g: Game | null) => void;
     isMyTurn: boolean;
     popups: PopupControls;
+    gameMode: MultiplayerGameMode;
   }) => React.ReactNode;
+  gameMode: MultiplayerGameMode;
 }
 
 function popupToBroadcast(type: keyof PopupState, value: any, game: Game): { type: string; playerId: string; data: any } | null {
@@ -32,7 +35,7 @@ function popupToBroadcast(type: keyof PopupState, value: any, game: Game): { typ
 
 export function MultiplayerGameView({
   lobby, lobbyPlayers, game, settings, isHost, popups,
-  onGameUpdate, onGameOver, renderBoard,
+  onGameUpdate, onGameOver, renderBoard, gameMode,
 }: Props) {
   const [remotePopup, setRemotePopup] = useState<{ type: string; playerId: string; data: any } | null>(null);
   const gameRef = useRef(game);
@@ -49,11 +52,13 @@ export function MultiplayerGameView({
 
   const setGame = useCallback((next: Game | null) => {
     if (!next) return;
+    // Only the player whose turn it is can mutate the game state.
+    if (!isMyTurn(lobbyPlayers, next)) return;
     onGameUpdate(next);
     if (isHost) {
       void updateGameState(lobby.id, next);
     }
-  }, [isHost, lobby.id, onGameUpdate]);
+  }, [isHost, lobby.id, onGameUpdate, lobbyPlayers]);
 
   const wrappedPopups: PopupControls = useMemo(() => {
     if (isHost) {
@@ -99,9 +104,32 @@ export function MultiplayerGameView({
 
   const myTurn = isMyTurn(lobbyPlayers, game);
 
+  // Dynamically set the browser tab favicon to indicate which game mode the
+  // host has selected for this lobby.
+  useEffect(() => {
+    const svg = gameMode === 'cards'
+      ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#1a1d24"/><rect x="6" y="4" width="14" height="20" rx="3" fill="#e8c55a" transform="rotate(-12 13 14)"/><rect x="12" y="8" width="14" height="20" rx="3" fill="#5b8def" transform="rotate(12 19 18)"/></svg>'
+      : '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#1a1d24"/><circle cx="16" cy="16" r="12" fill="none" stroke="#e8c55a" stroke-width="2"/><circle cx="16" cy="16" r="3" fill="#e8c55a"/><line x1="16" y1="4" x2="16" y2="28" stroke="#e8c55a" stroke-width="1.5"/><line x1="4" y1="16" x2="28" y2="16" stroke="#e8c55a" stroke-width="1.5"/></svg>';
+    const url = 'data:image/svg+xml,' + encodeURIComponent(svg);
+    let link = document.querySelector<HTMLLinkElement>('link[rel~="icon"]');
+    if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
+    const prevHref = link.href;
+    link.href = url;
+    return () => { link!.href = prevHref; };
+  }, [gameMode]);
+
   return (
     <div style={{ position: 'relative' }}>
-      {renderBoard({ game, setGame, isMyTurn: myTurn, popups: wrappedPopups })}
+      <div style={{
+        position: 'absolute', top: 8, right: 8, zIndex: 60,
+        display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+        borderRadius: 20, background: 'var(--bg-2)', border: '1px solid var(--border)',
+        fontSize: 12, fontWeight: 700, color: 'var(--muted)', pointerEvents: 'none',
+      }}>
+        {gameMode === 'cards' ? <Layers size={14} /> : <Target size={14} />}
+        {gameMode === 'cards' ? 'Card Mode' : 'Board Mode'}
+      </div>
+      {renderBoard({ game, setGame, isMyTurn: myTurn, popups: wrappedPopups, gameMode })}
       {!myTurn && !game.finished && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: 50,
