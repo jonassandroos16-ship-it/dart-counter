@@ -13,10 +13,10 @@ import { GameOver } from '../GameOver';
 import { RerollOverlay } from '../RerollOverlay';
 import type { RerollPlan } from '../../powerups';
 
-export function X01Board({ game, setGame, settings, players, games, setGames, setPlayers, toast, music, onQuit, onGameOver, popups }: {
+export function X01Board({ game, setGame, settings, players, games, setGames, setPlayers, toast, music, onQuit, onGameOver, popups, isMyTurn = true }: {
   game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[];
   setGames: (updater: any) => void; setPlayers: (updater: any) => void; toast: (m: string) => void;
-  music: MusicEngine; onQuit: () => void; onGameOver: () => void; popups: PopupControls;
+  music: MusicEngine; onQuit: () => void; onGameOver: () => void; popups: PopupControls; isMyTurn?: boolean;
 }) {
   const [reroll, setReroll] = useState<RerollPlan | null>(null);
   const [rerollResolve, setRerollResolve] = useState<((v: boolean) => void) | null>(null);
@@ -40,14 +40,10 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
   const enterVisit = () => {
     if (!game.darts.length) { toast('Add at least one dart'); return; }
     const cur0 = game.players[game.turn] as any;
-    // Surge only fires on the player's NEXT visit — the turn after they
-    // activated it. While `_surgeArmed` is set, surge was activated this visit
-    // and is not yet active.
     const surgeActive = !!cur0._surgeNext && !cur0._surgeArmed;
     const crippleActive = !!cur0._crippledNext;
     const bullseyeFrenzyActive = !!cur0._bullseyeFrenzy;
     const hotStreakActive = !!cur0._hotStreak;
-    // Bullseye Frenzy: darts hitting the bull (25 or 50) score double.
     const rawScored = game.darts.reduce((a, d) => {
       const isBull = d.value === 50 || d.value === 25;
       const v = bullseyeFrenzyActive && isBull ? d.value * 2 : d.value;
@@ -55,16 +51,14 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
     }, 0);
     const surgeScored = surgeActive ? rawScored * 2 : rawScored;
     const crippleScored = crippleActive ? Math.round(surgeScored * 0.5) : surgeScored;
-    // Hot Streak: each dart gets +5 bonus per dart already scored this visit
-    // (dart 1: +0, dart 2: +5, dart 3: +10) — rewards stringing hits together.
     const hotStreakBonus = hotStreakActive
       ? game.darts.reduce((a, _d, i) => a + i * 5, 0)
       : 0;
     const scored = crippleScored + hotStreakBonus;
     const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
     const cur = newPlayers[game.turn] as any;
-    if (cur._surgeArmed) delete cur._surgeArmed; // armed this visit — surge stays for next
-    else if (cur._surgeNext) delete cur._surgeNext; // surge was active, consume
+    if (cur._surgeArmed) delete cur._surgeArmed;
+    else if (cur._surgeNext) delete cur._surgeNext;
     if (cur._crippledNext) delete cur._crippledNext;
     if (cur._fourthDart) delete cur._fourthDart;
     if (cur._oneDartNext) delete cur._oneDartNext;
@@ -134,7 +128,6 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
       const nextLeg = game.leg + 1;
       const nextTurn = (nextLeg - 1) % game.players.length;
       newPlayers.forEach(pl => pl.score = MODES[game.mode].start);
-      // Shield: tick down the current player's shield at the end of their visit.
       if (game.powerUpsEnabled) newPlayers[game.turn] = tickShield(newPlayers[game.turn]);
       Sound.play('win', {}, settings);
       toast(`${cur.name} wins leg ${game.leg}`);
@@ -173,7 +166,6 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
   };
 
   const advanceTurn = (g: Game): Game => {
-    // Shield: tick down the current player's shield at the end of their visit.
     if (g.powerUpsEnabled && !g.teamMode) {
       const c = g.players[g.turn] as any;
       if (c && c._shieldTurns > 0) {
@@ -360,7 +352,7 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
       )}
 
       <div className="play-input">
-        <KeypadPad game={game} setGame={setGame as any} onAdd={addDart} onUndo={() => setGame(undoDart(game))} onEnter={enterVisit} />
+        <KeypadPad game={game} setGame={setGame as any} onAdd={addDart} onUndo={() => setGame(undoDart(game))} onEnter={enterVisit} disabled={!isMyTurn} />
       </div>
       {reroll ? (
         <RerollOverlay
