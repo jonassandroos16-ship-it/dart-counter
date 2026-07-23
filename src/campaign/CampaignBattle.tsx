@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { CampaignBattleState, CampaignProgress, CoopPowerUpId } from './types';
 import type { CardPlayState, PlayerCard } from '../cards/types';
-import { initCardPlayState, startTurn, getPlayerCards, MAX_PLAYS_PER_TURN, resolveCardDef } from '../cards/deck';
+import { initCardPlayState, startTurn, endTurn, getPlayerCards, MAX_PLAYS_PER_TURN, resolveCardDef, playCardFromHand, redrawHand, recycleGraveyard } from '../cards/deck';
+import { CardHand } from '../cards/CardHand';
 import {
   addDart, undoDart, resolvePlayerVisit,
   prepareEnemyTurn, applyNextEnemyAttack, setTarget, startBattle, getLevel,
@@ -132,7 +133,7 @@ import { DartOverlay } from './DartOverlay';
 import { FrozenOverlay } from './FrozenOverlay';
 import { Modal } from '../Popups';
 import { getEnemyDef } from './engine/enemies';
-import { CoopCardHand } from './CoopCardHand';
+
 
 interface Props {
   levelId: number;
@@ -246,7 +247,83 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
     setMult(1);
   };
 
-  const onUndo = () => setState(prev => undoDart(prev, settings));
+  const playCampaignCard = (handIdx: number) => {
+    const thrower = state.players[state.playerTurnIdx];
+    if (!thrower) return;
+    const cs = cardStates[thrower.id];
+    if (!cs) return;
+    const handDefs = cs.hand.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
+    const card = handDefs[handIdx];
+    if (!card) return;
+    const maxPlays = MAX_PLAYS_PER_TURN + bonusSlots;
+    if (cs.used.length >= maxPlays) return;
+
+    if (card.type !== 'damage') {
+      let updated = playCardFromHand(cs, handIdx);
+      if (!updated) return;
+      if (card.effect === 'redraw') {
+        updated = redrawHand(updated);
+      } else if (card.effect === 'recycle') {
+        updated = recycleGraveyard(updated);
+      } else if (card.effect === 'extra_dart') {
+        setBonusSlots(b => b + 1);
+      }
+      setState(prev => applyUtilityCard(prev, card, settings));
+      Sound.play('powerup', {}, settings);
+      setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
+      return;
+    }
+
+    const updated = playCardFromHand(cs, handIdx);
+    if (!updated) return;
+    setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
+    const base = card.base ?? 0;
+    const cardMult = card.mult ?? 1;
+    const isBull = base === 50;
+    onAdd(base, isBull ? 2 : (base === 25 && cardMult === 2 ? 2 : cardMult), card.name, isBull);
+  };
+
+  const onUndo = () => {
+    if (cardMode) {
+      const thrower = state.players[state.playerTurnIdx];
+      if (thrower) {
+        const cs = cardStates[thrower.id];
+        if (cs && cs.used.length > 0) {
+          const lastUsed = cs.used[cs.used.length - 1];
+          const lastDef = resolveCardDef(lastUsed);
+          if (lastDef && lastDef.type !== 'damage') {
+            const updated: CardPlayState = {
+              deck: cs.deck,
+              hand: [...cs.hand, lastUsed],
+              used: cs.used.slice(0, -1),
+              graveyard: cs.graveyard,
+            };
+            setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
+            return;
+          }
+          if (state.darts.length > 0) {
+            const lastDart = state.darts[state.darts.length - 1];
+            const usedIdx = [...cs.used].reverse().findIndex(pc => {
+              const def = resolveCardDef(pc);
+              return def?.name === lastDart.label;
+            });
+            if (usedIdx !== -1) {
+              const realIdx = cs.used.length - 1 - usedIdx;
+              const card = cs.used[realIdx];
+              const updated: CardPlayState = {
+                deck: cs.deck,
+                hand: [...cs.hand, card],
+                used: cs.used.filter((_, i) => i !== realIdx),
+                graveyard: cs.graveyard,
+              };
+              setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
+            }
+          }
+        }
+      }
+    }
+    setState(prev => undoDart(prev, settings));
+  };
 
   const onEnter = () => {
     if (cardMode) {
@@ -254,6 +331,8 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
       if (!thrower) return;
       const cs = cardStates[thrower.id];
       if (!cs || cs.used.length === 0) return;
+      const endedState = endTurn(cs);
+      setCardStates(prev => ({ ...prev, [thrower.id]: endedState }));
       setBonusSlots(0);
       setState(prev => resolvePlayerVisit(prev, true));
       return;
@@ -525,26 +604,16 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
 
       {state.phase === 'player' && state.outcome === 'ongoing' && (cardMode ? totalCardsPlayed < maxDartsPerVisit : state.darts.length < 3) && (
         cardMode ? (
-          <CoopCardHand
-            thrower={thrower}
-            players={players}
-            state={state}
-            cardState={thrower ? cardStates[thrower.id] ?? null : null}
-            setCardState={(updater) => {
-              if (!thrower) return;
-              setCardStates(prev => {
-                const current = prev[thrower.id];
-                if (!current) return prev;
-                return { ...prev, [thrower.id]: updater(current) };
-              });
-            }}
-            bonusSlots={bonusSlots}
-            setBonusSlots={setBonusSlots}
-            onPlayCard={(base, m, label, isBull) => onAdd(base, m, label, isBull)}
-            onPlayUtility={(card) => {
-              setState(prev => applyUtilityCard(prev, card, settings));
-              Sound.play('powerup', {}, settings);
-            }}
+          <CardHand
+            cardState={thrower ? cardStates[thrower.id] ?? initCardPlayState([]) : initCardPlayState([])}
+            playerName={thrower?.name ?? 'Player'}
+            isMyTurn={true}
+            isBattle={true}
+            canPlayMore={totalCardsPlayed < maxDartsPerVisit}
+            canEndVisit={totalCardsPlayed > 0}
+            canUndo={totalCardsPlayed > 0 || state.darts.length > 0}
+            onPlayCard={(handIdx) => playCampaignCard(handIdx)}
+            onUndo={onUndo}
             onEndVisit={onEnter}
           />
         ) : (
