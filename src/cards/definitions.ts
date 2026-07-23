@@ -29,6 +29,7 @@ export const CARD_DEFS: CardDef[] = [
   // ── Starter shared utility cards (Level 1, class 'any') ───────────
   { id: 'util_redraw', name: 'Redraw', icon: '🔄', type: 'utility', mode: 'both', class: 'any', rarity: 'common', desc: 'Discard your hand and draw the same number of fresh cards.', effect: 'redraw', levelRequired: 1 },
   { id: 'util_recycle', name: 'Recycle', icon: '♻️', type: 'utility', mode: 'both', class: 'any', rarity: 'common', desc: 'Shuffle your graveyard back into your deck.', effect: 'recycle', levelRequired: 1 },
+  { id: 'util_focus', name: 'Focus', icon: '🧠', type: 'utility', mode: 'both', class: 'any', rarity: 'common', desc: 'Play 1 more card next turn (4 instead of 3). Stacks.', effect: 'extra_slot', magnitude: 1, levelRequired: 1 },
   // ── Starter warrior cards (Level 1) ──────────────────────────────
   { id: 'dmg_warrior_slam', name: 'Mighty Slam', icon: '⚔️', type: 'damage', mode: 'both', class: 'warrior', rarity: 'common', desc: 'Deal 30 damage with brute force.', base: 30, mult: 1, levelRequired: 1 },
   { id: 'dmg_warrior_cleave', name: 'Cleave', icon: '🪓', type: 'damage', mode: 'both', class: 'warrior', rarity: 'common', desc: 'Deal 45 damage with a wide swing.', base: 45, mult: 1, levelRequired: 1 },
@@ -171,6 +172,11 @@ export function cardMatchesMode(card: CardDef, mode: 'competitive' | 'coop'): bo
 
 // ── Upgrades ──────────────────────────────────────────────────────────
 
+function updateMagnitudeInDesc(desc: string, oldMag: number | undefined, newMag: number | undefined): string {
+  if (oldMag === undefined || newMag === undefined || oldMag === newMag) return desc;
+  return desc.split(String(oldMag)).join(String(newMag));
+}
+
 export function upgradedCardDef(card: CardDef): CardDef {
   const stripPlus = (name: string) => name.replace(/\+*$/, '');
   if (card.type === 'damage') {
@@ -188,12 +194,13 @@ export function upgradedCardDef(card: CardDef): CardDef {
     };
   }
   if (card.type === 'spell' || card.type === 'utility') {
+    const newMag = card.magnitude ? Math.round(card.magnitude * 1.3) : card.magnitude;
     return {
       ...card,
       upgraded: true,
       name: stripPlus(card.name) + '+',
-      desc: card.desc,
-      magnitude: card.magnitude ? Math.round(card.magnitude * 1.3) : card.magnitude,
+      desc: updateMagnitudeInDesc(card.desc, card.magnitude, newMag),
+      magnitude: newMag,
     };
   }
   return { ...card, upgraded: true, name: stripPlus(card.name) + '+' };
