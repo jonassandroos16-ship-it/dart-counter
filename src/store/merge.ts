@@ -138,9 +138,11 @@ function mergeGames(existing: GameRecord[], incoming: GameRecord[]): GameRecord[
 
 function mergeSettings(existing: Settings, incoming?: Settings): Settings {
   if (!incoming) return existing;
+  const existingTitles = Array.isArray(existing.customTitles) ? existing.customTitles : [];
+  const incomingTitles = Array.isArray(incoming.customTitles) ? incoming.customTitles : [];
   const customTitles = (() => {
     const byId = new Map<string, CustomTitle>();
-    for (const t of [...existing.customTitles, ...(incoming.customTitles || [])]) byId.set(t.id, t);
+    for (const t of [...existingTitles, ...incomingTitles]) byId.set(t.id, t);
     return Array.from(byId.values());
   })();
   return {
