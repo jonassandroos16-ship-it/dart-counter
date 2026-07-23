@@ -1,25 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
-import { Target, Layers } from 'lucide-react';
-import type { Player, GameRecord, Settings, CustomTitle } from './types';
+import type { Player, GameRecord, Settings, CustomTitle, XPConfig, PowerUpScalingConfig } from './types';
 import { COLORS, conditionLabel } from './constants';
 import { tracksFor, MusicEngine } from './music';
 import { uid, todayKey, mergeBackup, type BackupShape, type SyncResult } from './store';
 import { Modal } from './Popups';
-import { POWER_UPS } from './powerups';
-import { COOP_POWER_UPS } from './campaign/engine';
 import { CampaignEditor } from './campaign/CampaignEditor';
 
 export function SettingsView({ players, games, settings, setSettings, setPlayers, setGames, toast, hasDatabase, connected, upToDate, lastSync, syncing, onSync }: { players: Player[]; games: GameRecord[]; settings: Settings; setSettings: (updater: any) => void; setPlayers: (updater: any) => void; setGames: (updater: any) => void; toast: (m: string) => void; hasDatabase: boolean; connected: boolean; upToDate: boolean; lastSync: number | null; syncing: boolean; onSync: () => Promise<SyncResult> }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
   const cfg = settings.xpConfig;
-  const [xpForm, setXpForm] = useState(cfg);
-  const [puForm, setPuForm] = useState(settings.powerUpScaling);
+  const [xpForm, setXpForm] = useState<XPConfig>(cfg);
+  const [puForm, setPuForm] = useState<PowerUpScalingConfig>(settings.powerUpScaling);
   const mergeInputRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<MusicEngine | null>(null);
   const [previewing, setPreviewing] = useState<string | null>(null);
-
-  const mpHosting = localStorage.getItem('mp_hosting') === '1';
 
   if (!previewRef.current) previewRef.current = new MusicEngine();
 
@@ -37,7 +32,7 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
     previewRef.current?.stop();
     const track = tracksFor('match').find(t => t.id === trackId);
     if (track) {
-      previewRef.current?.play(track);
+      previewRef.current?.preview(trackId, settings);
       setPreviewing(trackId);
     }
   };
@@ -51,7 +46,7 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
   })();
 
   const exportBackup = () => {
-    const data = { players, games, settings, _ts: Date.now() };
+    const data: BackupShape = { players, games, settings, exportedAt: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -65,19 +60,50 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
     try {
       const text = await file.text();
       const data = JSON.parse(text) as BackupShape;
-      mergeBackup(data, { players: () => setPlayers((p: Player[]) => [...p]), setPlayers, setGames, setSettings, toast });
+      const merged = mergeBackup({ players, games, settings }, data);
+      setPlayers(merged.players);
+      setGames(merged.games);
+      setSettings(merged.settings);
+      toast('Backup imported');
     } catch { toast('Invalid backup file'); }
   };
+
+  const xpFields: { key: keyof XPConfig; label: string; min?: number; step?: number }[] = [
+    { key: 'win', label: 'XP per win', min: 0 },
+    { key: 'visit60', label: 'XP per 60+ visit', min: 0 },
+    { key: 'visit80', label: 'XP per 80+ visit', min: 0 },
+    { key: 'visit100', label: 'XP per 100+ visit', min: 0 },
+    { key: 'visit120', label: 'XP per 120+ visit', min: 0 },
+    { key: 'visit140', label: 'XP per 140+ visit', min: 0 },
+    { key: 'visit180', label: 'XP per 180 visit', min: 0 },
+    { key: 'checkout', label: 'XP per checkout', min: 0 },
+    { key: 'perDart', label: 'XP per dart thrown', min: 0 },
+    { key: 'baseLevelXp', label: 'Base level XP', min: 1 },
+    { key: 'levelMult', label: 'Level multiplier', min: 1, step: 0.1 },
+  ];
+
+  const puFields: { key: keyof PowerUpScalingConfig; label: string; min?: number; max?: number; step?: number }[] = [
+    { key: 'chargePerDouble', label: 'Charge per double (%)', min: 0, step: 0.5 },
+    { key: 'chargePerTriple', label: 'Charge per triple (%)', min: 0, step: 0.5 },
+    { key: 'chargePerBull', label: 'Charge per bull (%)', min: 0, step: 0.5 },
+    { key: 'chargePerScorePoint', label: 'Charge per score point', min: 0, step: 0.01 },
+    { key: 'chargeMax', label: 'Max charge', min: 10, step: 5 },
+    { key: 'pointsPerLevel', label: 'Power-up points per level', min: 0 },
+    { key: 'startingPoints', label: 'Starting power-up points', min: 0 },
+    { key: 'attributePointsPerLevel', label: 'Attribute points per level', min: 0 },
+    { key: 'healthPerPoint', label: 'Health per point', min: 1 },
+    { key: 'armorPerPoint', label: 'Armor per point', min: 0 },
+    { key: 'powerPerPoint', label: 'Power per point', min: 0 },
+    { key: 'armorMax', label: 'Armor cap (%)', min: 0 },
+    { key: 'powerMax', label: 'Power cap', min: 0 },
+    { key: 'healthMax', label: 'Health cap', min: 1 },
+    { key: 'battleMinDamage', label: 'Battle min damage', min: 0 },
+  ];
 
   return (
     <div className="view scroll">
       <div className="card">
         <h2 style={{ marginBottom: 12 }}>Settings</h2>
-
-        <label className="field" style={{ marginBottom: 14 }}>
-          <span>Player name</span>
-          <input value={settings.name} onChange={e => update({ name: e.target.value })} maxLength={20} />
-        </label>
 
         <div className="muted small" style={{ marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Sound</div>
         <label className="row" style={{ marginBottom: 8 }}>
@@ -88,24 +114,30 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
           <input type="checkbox" checked={settings.music} onChange={e => update({ music: e.target.checked })} />
           <span>Music</span>
         </label>
+        <label className="field" style={{ marginBottom: 8 }}>
+          <span>SFX volume</span>
+          <input type="range" min={0} max={1} step={0.05} value={settings.sfxVolume} onChange={e => update({ sfxVolume: +e.target.value })} />
+        </label>
+        <label className="field" style={{ marginBottom: 8 }}>
+          <span>Music volume</span>
+          <input type="range" min={0} max={1} step={0.05} value={settings.musicVolume} onChange={e => update({ musicVolume: +e.target.value })} />
+        </label>
         {settings.music && (
           <>
             <div style={{ marginTop: 10, marginBottom: 4, fontSize: 13, fontWeight: 600 }}>Music tracks</div>
-            <TrackRow label="Start screen" value={settings.tracks?.start ?? 'menu'} onChange={v => update({ tracks: { ...settings.tracks, start: v } })} context="start" previewing={previewing} onTogglePreview={togglePreview} onStopPreview={stopPreview} />
-            <TrackRow label="Setup" value={settings.tracks?.setup ?? 'setup'} onChange={v => update({ tracks: { ...settings.tracks, setup: v } })} context="setup" previewing={previewing} onTogglePreview={togglePreview} onStopPreview={stopPreview} />
-            <TrackRow label="Match" value={settings.tracks?.match ?? 'match'} onChange={v => update({ tracks: { ...settings.tracks, match: v } })} context="match" previewing={previewing} onTogglePreview={togglePreview} onStopPreview={stopPreview} />
-            <TrackRow label="Co-op" value={settings.tracks?.coop ?? 'coop'} onChange={v => update({ tracks: { ...settings.tracks, coop: v } })} context="coop" previewing={previewing} onTogglePreview={togglePreview} onStopPreview={stopPreview} />
+            <TrackRow label="Start screen" value={settings.musicStartTrack} onChange={v => update({ musicStartTrack: v })} context="start" previewing={previewing} onTogglePreview={togglePreview} onStopPreview={stopPreview} />
+            <TrackRow label="Setup" value={settings.musicSetupTrack} onChange={v => update({ musicSetupTrack: v })} context="setup" previewing={previewing} onTogglePreview={togglePreview} onStopPreview={stopPreview} />
+            <TrackRow label="Match" value={settings.musicMatchTrack} onChange={v => update({ musicMatchTrack: v })} context="match" previewing={previewing} onTogglePreview={togglePreview} onStopPreview={stopPreview} />
+            <TrackRow label="Co-op" value={settings.musicCoopTrack} onChange={v => update({ musicCoopTrack: v })} context="coop" previewing={previewing} onTogglePreview={togglePreview} onStopPreview={stopPreview} />
           </>
         )}
 
         <div className="muted small" style={{ marginTop: 14, marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Appearance</div>
         <label className="field" style={{ marginBottom: 10 }}>
           <span>Theme</span>
-          <select value={settings.theme} onChange={e => update({ theme: e.target.value as any })}>
+          <select value={settings.theme} onChange={e => update({ theme: e.target.value as Settings['theme'] })}>
             <option value="dark">Dark</option>
             <option value="light">Light</option>
-            <option value="neon">Neon</option>
-            <option value="retro">Retro</option>
           </select>
         </label>
         <label className="field" style={{ marginBottom: 10 }}>
@@ -146,30 +178,12 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
 
       <div className="card">
         <h3 style={{ marginBottom: 10 }}>XP & Leveling</h3>
-        <label className="field" style={{ marginBottom: 10 }}>
-          <span>XP per win</span>
-          <input type="number" value={xpForm.perWin} min={0} onChange={e => setXpForm({ ...xpForm, perWin: +e.target.value || 0 })} />
-        </label>
-        <label className="field" style={{ marginBottom: 10 }}>
-          <span>XP per 180</span>
-          <input type="number" value={xpForm.per180} min={0} onChange={e => setXpForm({ ...xpForm, per180: +e.target.value || 0 })} />
-        </label>
-        <label className="field" style={{ marginBottom: 10 }}>
-          <span>XP per ton+</span>
-          <input type="number" value={xpForm.perTon} min={0} onChange={e => setXpForm({ ...xpForm, perTon: +e.target.value || 0 })} />
-        </label>
-        <label className="field" style={{ marginBottom: 10 }}>
-          <span>XP per game</span>
-          <input type="number" value={xpForm.perGame} min={0} onChange={e => setXpForm({ ...xpForm, perGame: +e.target.value || 0 })} />
-        </label>
-        <label className="field" style={{ marginBottom: 10 }}>
-          <span>Base level XP</span>
-          <input type="number" value={xpForm.baseLevelXp} min={1} onChange={e => setXpForm({ ...xpForm, baseLevelXp: Math.max(1, +e.target.value || 1) })} />
-        </label>
-        <label className="field" style={{ marginBottom: 10 }}>
-          <span>Level multiplier</span>
-          <input type="number" value={xpForm.levelMult} min={1} step={0.1} onChange={e => setXpForm({ ...xpForm, levelMult: Math.max(1, +e.target.value || 1) })} />
-        </label>
+        {xpFields.map(f => (
+          <label key={f.key} className="field" style={{ marginBottom: 10 }}>
+            <span>{f.label}</span>
+            <input type="number" value={xpForm[f.key]} min={f.min ?? 0} step={f.step} onChange={e => setXpForm({ ...xpForm, [f.key]: f.key === 'levelMult' ? Math.max(1, +e.target.value || 1) : (f.min ? Math.max(f.min, +e.target.value || f.min) : +e.target.value || 0) })} />
+          </label>
+        ))}
         <div className="row" style={{ gap: 8 }}>
           <button className="btn block primary" onClick={() => { update({ xpConfig: xpForm }); toast('XP settings saved'); }}>Save</button>
           <button className="btn block ghost" onClick={() => setXpForm(cfg)}>Reset</button>
@@ -178,11 +192,13 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
 
       <div className="card">
         <h3 style={{ marginBottom: 10 }}>Power-Up Scaling</h3>
-        <label className="field" style={{ marginBottom: 10 }}>
-          <span>Scaling factor</span>
-          <input type="number" value={puForm} min={0.5} max={3} step={0.1} onChange={e => setPuForm(Math.max(0.5, Math.min(3, +e.target.value || 1)))} />
-        </label>
-        <div className="muted small" style={{ marginBottom: 10 }}>Adjusts power-up frequency. 1.0 = normal, higher = more frequent.</div>
+        {puFields.map(f => (
+          <label key={f.key} className="field" style={{ marginBottom: 10 }}>
+            <span>{f.label}</span>
+            <input type="number" value={puForm[f.key] as number} min={f.min ?? 0} max={f.max} step={f.step} onChange={e => setPuForm({ ...puForm, [f.key]: +e.target.value || 0 })} />
+          </label>
+        ))}
+        <div className="muted small" style={{ marginBottom: 10 }}>Adjusts power-up charge rates and attribute scaling.</div>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn block primary" onClick={() => { update({ powerUpScaling: puForm }); toast('Power-up scaling saved'); }}>Save</button>
           <button className="btn block ghost" onClick={() => setPuForm(settings.powerUpScaling)}>Reset</button>
@@ -198,7 +214,7 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
             <span style={{ fontSize: 20, marginRight: 8 }}>{t.icon}</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 600 }}>{t.name}</div>
-              <div className="muted small">{conditionLabel(t.condition)}</div>
+              <div className="muted small">{conditionLabel(t)}</div>
             </div>
             <button className="btn danger sm" onClick={() => update({ customTitles: settings.customTitles.filter(x => x.id !== t.id) })}>✕</button>
           </div>
@@ -212,7 +228,7 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
         <button className="btn block primary" onClick={() => setShowEditor(true)}>Open Campaign Editor</button>
       </div>
 
-      {showEditor && <CampaignEditor onClose={() => setShowEditor(false)} />}
+      {showEditor && <CampaignEditor onBack={() => setShowEditor(false)} />}
 
       {editingTitle && <EditCustomTitleModal onClose={() => setEditingTitle(false)} onSave={(t) => { update({ customTitles: [...settings.customTitles, t] }); setEditingTitle(false); toast('Custom title added'); }} />}
 
