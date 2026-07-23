@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
-import { Users, Play, Copy, Check, LogOut, Target, Layers } from 'lucide-react';
+import { Users, Play, Copy, Check, LogOut, Target, Layers, Swords, Dice5 } from 'lucide-react';
 import type { Player, Settings } from '../types';
 import type { Lobby, LobbyPlayer, GameConfig, MultiplayerGameMode } from './client';
-import { getDeviceId, setLobbyGameMode } from './client';
+import { getDeviceId, setLobbyGameMode, updateLobbyConfig } from './client';
 import { createGame } from '../logic';
 import { initials } from '../store';
 import { MODES, TEAM_COLORS } from '../constants';
@@ -37,6 +37,22 @@ export function LobbyRoom({ lobby, players, localPlayers, settings, isHost, onSt
   };
 
   const allLobbyPlayers = players;
+
+  // Sync config to the lobby whenever a setting changes (host only).
+  useEffect(() => {
+    if (!isHost) return;
+    const config: GameConfig = { mode, doubleOut, legs, teamMode, teamAssignment: teamMode ? allLobbyPlayers.map((_, i) => teams[i] ?? (i % teamCount)) : [], powerUps };
+    void updateLobbyConfig(lobby.id, config);
+  }, [isHost, lobby.id, mode, doubleOut, legs, teamMode, teamCount, powerUps, teams, allLobbyPlayers.length]);
+
+  // Non-host: read config from lobby
+  const remoteConfig = lobby.game_config;
+  const effectiveMode = isHost ? mode : (remoteConfig?.mode ?? mode);
+  const effectiveDoubleOut = isHost ? doubleOut : (remoteConfig?.doubleOut ?? false);
+  const effectiveLegs = isHost ? legs : (remoteConfig?.legs ?? 1);
+  const effectiveTeamMode = isHost ? teamMode : (remoteConfig?.teamMode ?? false);
+  const effectivePowerUps = isHost ? powerUps : (remoteConfig?.powerUps ?? false);
+  const effectiveTeamCount = isHost ? teamCount : (remoteConfig?.teamAssignment?.length ? Math.max(...remoteConfig.teamAssignment) + 1 : 2);
 
   const joinedLocalIds = new Set(
     allLobbyPlayers
@@ -76,13 +92,17 @@ export function LobbyRoom({ lobby, players, localPlayers, settings, isHost, onSt
     }));
     const teamAssignment = teamMode ? allLobbyPlayers.map((_, i) => teams[i] ?? (i % teamCount)) : [];
     const config: GameConfig = { mode, doubleOut, legs, teamMode, teamAssignment, powerUps };
+    if (lobbyGameMode === 'coop' || lobbyGameMode === 'dartlite') {
+      onStartGame(config, { _multiplayerCoop: true, _coopMode: lobbyGameMode, players: gamePlayers } as any);
+      return;
+    }
     const game = createGame(mode, playerIds, gamePlayers, doubleOut, legs, teamMode, teamAssignment, powerUps, settings);
     onStartGame(config, game);
   };
 
-  const m = MODES[mode];
+  const m = MODES[effectiveMode];
   const noX01 = !!(m.practice || m.atc || m.killer || m.party);
-  const teamValid = !teamMode || (allLobbyPlayers.length >= teamCount && teams.every(t => t != null && t < teamCount) && new Set(teams).size >= 1);
+  const teamValid = !effectiveTeamMode || (allLobbyPlayers.length >= effectiveTeamCount && (isHost ? (teams.every(t => t != null && t < effectiveTeamCount) && new Set(teams).size >= 1) : true));
 
   return (
     <div className="view-scroll">
@@ -136,6 +156,30 @@ export function LobbyRoom({ lobby, players, localPlayers, settings, isHost, onSt
               <Layers size={24} color={lobbyGameMode === 'cards' ? 'var(--accent)' : 'var(--muted)'} />
               <div style={{ fontWeight: 700, fontSize: 13 }}>Card Based</div>
             </button>
+            <button
+              onClick={() => handleSetGameMode('coop')}
+              disabled={!isHost}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: 12, borderRadius: 10,
+                background: lobbyGameMode === 'coop' ? 'color-mix(in srgb,#ef4444 22%,var(--bg-3))' : 'var(--bg-3)',
+                border: `2px solid ${lobbyGameMode === 'coop' ? '#ef4444' : 'var(--border)'}`,
+                cursor: isHost ? 'pointer' : 'default', opacity: isHost ? 1 : 0.7, color: 'inherit',
+              }}>
+              <Swords size={24} color={lobbyGameMode === 'coop' ? '#ef4444' : 'var(--muted)'} />
+              <div style={{ fontWeight: 700, fontSize: 13 }}>Coop Campaign</div>
+            </button>
+            <button
+              onClick={() => handleSetGameMode('dartlite')}
+              disabled={!isHost}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: 12, borderRadius: 10,
+                background: lobbyGameMode === 'dartlite' ? 'color-mix(in srgb,#7c3aed 22%,var(--bg-3))' : 'var(--bg-3)',
+                border: `2px solid ${lobbyGameMode === 'dartlite' ? '#7c3aed' : 'var(--border)'}`,
+                cursor: isHost ? 'pointer' : 'default', opacity: isHost ? 1 : 0.7, color: 'inherit',
+              }}>
+              <Dice5 size={24} color={lobbyGameMode === 'dartlite' ? '#7c3aed' : 'var(--muted)'} />
+              <div style={{ fontWeight: 700, fontSize: 13 }}>Dartlite</div>
+            </button>
           </div>
           {!isHost && <div className="muted small" style={{ marginTop: 6, textAlign: 'center' }}>The host determines the game mode for this lobby.</div>}
         </div>
@@ -177,80 +221,142 @@ export function LobbyRoom({ lobby, players, localPlayers, settings, isHost, onSt
 
         {isHost ? (
           <>
-            <label className="field"><span>Game Mode</span>
-              <select value={mode} onChange={e => setMode(e.target.value)}>
-                <option value="501">501</option>
-                <option value="301">301</option>
-                <option value="701">701</option>
-                <option value="101">101</option>
-                <option value="practice">Practice (free scoring)</option>
-                <option value="killer">Killer (elimination)</option>
-                <option value="highscore">High Score (party)</option>
-                <option value="battle">Battle (attributes)</option>
-              </select>
-            </label>
-            {!noX01 && <label className="field"><span>Finish</span>
-              <select value={doubleOut ? '1' : '0'} onChange={e => setDoubleOut(e.target.value === '1')}>
-                <option value="0">Straight Out</option>
-                <option value="1">Double Out</option>
-              </select>
-            </label>}
-            {!noX01 && <label className="field"><span>Best of (legs)</span>
-              <select value={legs} onChange={e => setLegs(+e.target.value)}>
-                <option>1</option><option>3</option><option>5</option><option>7</option>
-              </select>
-            </label>}
-
-            <div className="row between" style={{ margin: '10px 0 8px' }}>
-              <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Teams</span>
-              <button className="pill" style={{ background: teamMode ? 'var(--accent)' : 'var(--bg-3)', color: teamMode ? '#04150a' : 'var(--text)' }}
-                onClick={() => setTeamMode(v => !v)}>
-                {teamMode ? 'ON' : 'OFF'}
-              </button>
-            </div>
-            <div className="row between" style={{ margin: '0 0 10px' }}>
-              <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Power-Ups</span>
-              <button className="pill" style={{ background: powerUps ? 'var(--accent)' : 'var(--bg-3)', color: powerUps ? '#04150a' : 'var(--text)' }}
-                onClick={() => setPowerUps(v => !v)}>
-                {powerUps ? 'ON' : 'OFF'}
-              </button>
-            </div>
-
-            {teamMode && (
+            {lobbyGameMode !== 'coop' && lobbyGameMode !== 'dartlite' && (
               <>
-                <label className="field" style={{ marginBottom: 8 }}><span>Number of teams</span>
-                  <select value={teamCount} onChange={e => setTeamCount(+e.target.value)}>
-                    <option value={2}>2 teams</option>
-                    <option value={3}>3 teams</option>
-                    <option value={4}>4 teams</option>
+                <label className="field"><span>Game Mode</span>
+                  <select value={mode} onChange={e => setMode(e.target.value)}>
+                    <option value="501">501</option>
+                    <option value="301">301</option>
+                    <option value="701">701</option>
+                    <option value="101">101</option>
+                    <option value="practice">Practice (free scoring)</option>
+                    <option value="killer">Killer (elimination)</option>
+                    <option value="highscore">High Score (party)</option>
+                    <option value="battle">Battle (attributes)</option>
                   </select>
                 </label>
-                <div className="muted small" style={{ marginBottom: 6 }}>Tap a player to cycle through teams.</div>
-                <div className="row wrap" style={{ gap: 8, marginBottom: 10 }}>
-                  {allLobbyPlayers.map((lp, i) => {
-                    const t = teams[i] ?? 0;
-                    const color = TEAM_COLORS[t % TEAM_COLORS.length];
-                    return (
-                      <button key={lp.id} className="pill" style={{ background: color, color: '#04150a', borderColor: 'transparent' }}
-                        onClick={() => setTeams(prev => prev.map((x, j) => j === i ? (x + 1) % teamCount : x))}>
-                        <span className="avatar" style={{ width: 18, height: 18, fontSize: 9, background: 'rgba(0,0,0,.25)' }}>{initials(lp.player_name)}</span>
-                        {lp.player_name} · T{t + 1}
-                      </button>
-                    );
-                  })}
+                {!noX01 && <label className="field"><span>Finish</span>
+                  <select value={doubleOut ? '1' : '0'} onChange={e => setDoubleOut(e.target.value === '1')}>
+                    <option value="0">Straight Out</option>
+                    <option value="1">Double Out</option>
+                  </select>
+                </label>}
+                {!noX01 && <label className="field"><span>Best of (legs)</span>
+                  <select value={legs} onChange={e => setLegs(+e.target.value)}>
+                    <option>1</option><option>3</option><option>5</option><option>7</option>
+                  </select>
+                </label>}
+
+                <div className="row between" style={{ margin: '10px 0 8px' }}>
+                  <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Teams</span>
+                  <button className="pill" style={{ background: teamMode ? 'var(--accent)' : 'var(--bg-3)', color: teamMode ? '#04150a' : 'var(--text)' }}
+                    onClick={() => setTeamMode(v => !v)}>
+                    {teamMode ? 'ON' : 'OFF'}
+                  </button>
                 </div>
+                <div className="row between" style={{ margin: '0 0 10px' }}>
+                  <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Power-Ups</span>
+                  <button className="pill" style={{ background: powerUps ? 'var(--accent)' : 'var(--bg-3)', color: powerUps ? '#04150a' : 'var(--text)' }}
+                    onClick={() => setPowerUps(v => !v)}>
+                    {powerUps ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                {teamMode && (
+                  <>
+                    <label className="field" style={{ marginBottom: 8 }}><span>Number of teams</span>
+                      <select value={teamCount} onChange={e => setTeamCount(+e.target.value)}>
+                        <option value={2}>2 teams</option>
+                        <option value={3}>3 teams</option>
+                        <option value={4}>4 teams</option>
+                      </select>
+                    </label>
+                    <div className="muted small" style={{ marginBottom: 6 }}>Tap a player to cycle through teams.</div>
+                    <div className="row wrap" style={{ gap: 8, marginBottom: 10 }}>
+                      {allLobbyPlayers.map((lp, i) => {
+                        const t = teams[i] ?? 0;
+                        const color = TEAM_COLORS[t % TEAM_COLORS.length];
+                        return (
+                          <button key={lp.id} className="pill" style={{ background: color, color: '#04150a', borderColor: 'transparent' }}
+                            onClick={() => setTeams(prev => prev.map((x, j) => j === i ? (x + 1) % teamCount : x))}>
+                            <span className="avatar" style={{ width: 18, height: 18, fontSize: 9, background: 'rgba(0,0,0,.25)' }}>{initials(lp.player_name)}</span>
+                            {lp.player_name} · T{t + 1}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
               </>
             )}
 
+            {lobbyGameMode === 'coop' && (
+              <div className="muted small" style={{ padding: '10px 0', lineHeight: 1.5 }}>
+                Coop Campaign: Team up against AI enemies across a level-based campaign. All lobby players play together on the host's device.
+              </div>
+            )}
+            {lobbyGameMode === 'dartlite' && (
+              <div className="muted small" style={{ padding: '10px 0', lineHeight: 1.5 }}>
+                Dartlite: Rogue-lite endless run. Choose boons, collect trinkets, survive as long as you can. All lobby players play together on the host's device.
+              </div>
+            )}
+
             <button className="btn primary block" style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-              disabled={allLobbyPlayers.length < 1 || !teamValid}
+              disabled={allLobbyPlayers.length < 1 || (lobbyGameMode !== 'coop' && lobbyGameMode !== 'dartlite' && !teamValid)}
               onClick={handleStart}>
               <Play size={18} /> Start Game ({allLobbyPlayers.length} players)
             </button>
           </>
         ) : (
-          <div className="muted small center" style={{ padding: '16px 0' }}>
-            Waiting for the host to start the game…
+          <div className="settings-readonly">
+            {lobbyGameMode !== 'coop' && lobbyGameMode !== 'dartlite' ? (
+              <>
+                <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>Game Settings (set by host)</div>
+                <div style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
+                  <div className="row between" style={{ padding: '6px 10px', background: 'var(--bg-3)', borderRadius: 8 }}>
+                    <span className="muted small">Mode</span>
+                    <span style={{ fontWeight: 700 }}>{MODES[effectiveMode]?.label || effectiveMode}</span>
+                  </div>
+                  {!noX01 && <div className="row between" style={{ padding: '6px 10px', background: 'var(--bg-3)', borderRadius: 8 }}>
+                    <span className="muted small">Finish</span>
+                    <span style={{ fontWeight: 700 }}>{effectiveDoubleOut ? 'Double Out' : 'Straight Out'}</span>
+                  </div>}
+                  {!noX01 && <div className="row between" style={{ padding: '6px 10px', background: 'var(--bg-3)', borderRadius: 8 }}>
+                    <span className="muted small">Best of</span>
+                    <span style={{ fontWeight: 700 }}>{effectiveLegs} leg{effectiveLegs !== 1 ? 's' : ''}</span>
+                  </div>}
+                  <div className="row between" style={{ padding: '6px 10px', background: 'var(--bg-3)', borderRadius: 8 }}>
+                    <span className="muted small">Teams</span>
+                    <span style={{ fontWeight: 700 }}>{effectiveTeamMode ? `ON (${effectiveTeamCount})` : 'OFF'}</span>
+                  </div>
+                  <div className="row between" style={{ padding: '6px 10px', background: 'var(--bg-3)', borderRadius: 8 }}>
+                    <span className="muted small">Power-Ups</span>
+                    <span style={{ fontWeight: 700 }}>{effectivePowerUps ? 'ON' : 'OFF'}</span>
+                  </div>
+                </div>
+                {effectiveTeamMode && remoteConfig?.teamAssignment && (
+                  <div className="row wrap" style={{ gap: 6, marginBottom: 12 }}>
+                    {allLobbyPlayers.map((lp, i) => {
+                      const t = remoteConfig.teamAssignment[i] ?? 0;
+                      const color = TEAM_COLORS[t % TEAM_COLORS.length];
+                      return (
+                        <span key={lp.id} className="pill" style={{ background: color, color: '#04150a', borderColor: 'transparent' }}>
+                          <span className="avatar" style={{ width: 18, height: 18, fontSize: 9, background: 'rgba(0,0,0,.25)' }}>{initials(lp.player_name)}</span>
+                          {lp.player_name} · T{t + 1}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="muted small" style={{ padding: '10px 0', lineHeight: 1.5 }}>
+                {lobbyGameMode === 'coop' ? 'Coop Campaign: Team up against AI enemies across a level-based campaign.' : 'Dartlite: Rogue-lite endless run with boons and trinkets.'} All lobby players play together on the host's device.
+              </div>
+            )}
+            <div className="muted small center" style={{ padding: '8px 0' }}>
+              Waiting for the host to start the game…
+            </div>
           </div>
         )}
       </div>

@@ -48,7 +48,7 @@ export interface GameConfig {
   powerUps: boolean;
 }
 
-export type MultiplayerGameMode = 'dartboard' | 'cards';
+export type MultiplayerGameMode = 'dartboard' | 'cards' | 'coop' | 'dartlite';
 
 export interface Lobby {
   id: string;
@@ -221,6 +221,14 @@ export async function setLobbyGameMode(lobbyId: string, gameMode: MultiplayerGam
   await supabase
     .from('mp_lobbies')
     .update({ game_mode: gameMode, updated_at: new Date().toISOString() })
+    .eq('id', lobbyId);
+}
+
+export async function updateLobbyConfig(lobbyId: string, config: GameConfig): Promise<void> {
+  if (!supabase) return;
+  await supabase
+    .from('mp_lobbies')
+    .update({ game_config: config, updated_at: new Date().toISOString() })
     .eq('id', lobbyId);
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { Target, Layers } from 'lucide-react';
+import { Target, Layers, LogOut } from 'lucide-react';
 import type { Game, GameRecord, Settings } from '../types';
 import type { Lobby, LobbyPlayer, MultiplayerGameMode } from './client';
 import { updateGameState, setPopupState, ownsPlayer, isMyTurn } from './client';
@@ -16,6 +16,8 @@ interface Props {
   popups: PopupControls;
   onGameUpdate: (game: Game) => void;
   onGameOver: (record: GameRecord) => void;
+  onLeaveGame: () => void;
+  toast: (m: string) => void;
   renderBoard: (props: {
     game: Game;
     setGame: (g: Game | null) => void;
@@ -35,12 +37,30 @@ function popupToBroadcast(type: keyof PopupState, value: any, game: Game): { typ
 
 export function MultiplayerGameView({
   lobby, lobbyPlayers, game, settings, isHost, popups,
-  onGameUpdate, onGameOver, renderBoard, gameMode,
+  onGameUpdate, onGameOver, onLeaveGame, toast, renderBoard, gameMode,
 }: Props) {
   const [remotePopup, setRemotePopup] = useState<{ type: string; playerId: string; data: any } | null>(null);
   const gameRef = useRef(game);
   gameRef.current = game;
   const recordedRef = useRef(false);
+  const prevPlayerCount = useRef(lobbyPlayers.length);
+  const prevPlayerIds = useRef(lobbyPlayers.map(p => p.player_id));
+
+  // Detect players leaving mid-game and notify.
+  useEffect(() => {
+    if (game.finished) return;
+    const curIds = lobbyPlayers.map(p => p.player_id);
+    const left = prevPlayerIds.current.filter(id => !curIds.includes(id));
+    if (left.length > 0 && prevPlayerCount.current > curIds.length) {
+      const leftNames = left.map(id => {
+        const lp = lobbyPlayers.find(p => p.player_id === id);
+        return lp?.player_name || 'A player';
+      });
+      toast(`${leftNames.join(', ')} left the game`);
+    }
+    prevPlayerCount.current = curIds.length;
+    prevPlayerIds.current = curIds;
+  }, [lobbyPlayers, game.finished, toast]);
 
   useEffect(() => {
     if (game.finished && !recordedRef.current && isHost) {
@@ -122,12 +142,28 @@ export function MultiplayerGameView({
     <div style={{ position: 'relative' }}>
       <div style={{
         position: 'absolute', top: 8, right: 8, zIndex: 60,
-        display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
-        borderRadius: 20, background: 'var(--bg-2)', border: '1px solid var(--border)',
-        fontSize: 12, fontWeight: 700, color: 'var(--muted)', pointerEvents: 'none',
+        display: 'flex', alignItems: 'center', gap: 6,
       }}>
-        {gameMode === 'cards' ? <Layers size={14} /> : <Target size={14} />}
-        {gameMode === 'cards' ? 'Card Mode' : 'Board Mode'}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+          borderRadius: 20, background: 'var(--bg-2)', border: '1px solid var(--border)',
+          fontSize: 12, fontWeight: 700, color: 'var(--muted)', pointerEvents: 'none',
+        }}>
+          {gameMode === 'cards' ? <Layers size={14} /> : <Target size={14} />}
+          {gameMode === 'cards' ? 'Card Mode' : 'Board Mode'}
+        </div>
+        <button
+          onClick={() => {
+            if (confirm('Leave this game? You will return to the lobby list.')) onLeaveGame();
+          }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px',
+            borderRadius: 20, background: 'var(--bg-2)', border: '1px solid var(--danger)',
+            fontSize: 12, fontWeight: 700, color: 'var(--danger)', cursor: 'pointer',
+          }}
+        >
+          <LogOut size={14} /> Leave
+        </button>
       </div>
       {renderBoard({ game, setGame, isMyTurn: myTurn, popups: wrappedPopups, gameMode })}
       {!myTurn && !game.finished && gameMode !== 'cards' && (

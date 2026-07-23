@@ -14,8 +14,10 @@ import { LobbyBrowser } from './LobbyBrowser';
 import { CreateLobbyView } from './CreateLobbyView';
 import { LobbyRoom } from './LobbyRoom';
 import { MultiplayerGameView } from './MultiplayerGameView';
+import { CoopFlow } from '../play/CoopFlow';
+import { DartliteFlow } from '../play/DartliteFlow';
 
-type Stage = 'browser' | 'create' | 'room' | 'game';
+type Stage = 'browser' | 'create' | 'room' | 'game' | 'coop' | 'dartlite';
 interface Props {
   players: Player[];
   settings: Settings;
@@ -42,6 +44,7 @@ export function MultiplayerFlow({
   const [lobby, setLobby] = useState<Lobby | null>(null);
   const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>([]);
   const [game, setGameState] = useState<Game | null>(null);
+  const [coopPlayers, setCoopPlayers] = useState<Player[]>([]);
   const unsubRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     return () => { if (unsubRef.current) unsubRef.current(); };
@@ -127,6 +130,15 @@ export function MultiplayerFlow({
 
   const handleStartGame = useCallback(async (config: GameConfig, newGame: Game) => {
     if (!lobby) return;
+    const mpGame = newGame as any;
+    if (mpGame._multiplayerCoop) {
+      const coopMode = mpGame._coopMode as string;
+      const coopPlayers = mpGame.players as Player[];
+      setCoopPlayers(coopPlayers);
+      setStage(coopMode === 'dartlite' ? 'dartlite' : 'coop');
+      music.stop();
+      return;
+    }
     await startGame(lobby.id, config, newGame);
     setGameState(newGame);
     setStage('game');
@@ -168,6 +180,27 @@ export function MultiplayerFlow({
 
   const lobbyGameMode: MultiplayerGameMode = lobby?.game_mode ?? settings.gameMode;
 
+  if (stage === 'coop' && coopPlayers.length > 0) {
+    return <CoopFlow
+      players={coopPlayers}
+      settings={settings}
+      music={music}
+      setPlayers={setPlayers}
+      toast={toast}
+      onExitToMenu={() => { setCoopPlayers([]); handleLeave(); }}
+    />;
+  }
+
+  if (stage === 'dartlite' && coopPlayers.length > 0) {
+    return <DartliteFlow
+      players={coopPlayers}
+      settings={settings}
+      music={music}
+      setPlayers={setPlayers}
+      onExitToMenu={() => { setCoopPlayers([]); handleLeave(); }}
+    />;
+  }
+
   if (stage === 'game' && lobby && game) {
     return (
       <MultiplayerGameView
@@ -179,6 +212,8 @@ export function MultiplayerFlow({
         popups={popups}
         onGameUpdate={handleGameUpdate}
         onGameOver={handleGameOver}
+        onLeaveGame={() => { setGameState(null); handleLeave(); }}
+        toast={toast}
         renderBoard={renderBoard}
         gameMode={lobbyGameMode}
       />
