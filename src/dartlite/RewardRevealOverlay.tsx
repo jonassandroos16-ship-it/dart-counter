@@ -1,6 +1,5 @@
 import type { Player } from '../types';
 import type { DartliteRun } from './engine';
-import type { ChoiceOption } from './engine';
 import { getTrinket } from './trinkets';
 import { initials } from '../store';
 

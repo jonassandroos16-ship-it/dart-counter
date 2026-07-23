@@ -1,9 +1,9 @@
 import type { Game, PlayedCard, Settings } from '../../types';
 import { Sound } from '../../sound';
-import type { CardDef, CardPlayState, PlayerCard } from '../../cards/types';
+import type { CardDef, CardPlayState } from '../../cards/types';
 import { cardDamage } from '../../cards/definitions';
 import {
-  playCardFromHand, redrawHand, recycleGraveyard, resolveCardDef,
+  playCardFromHand, redrawHand, recycleGraveyard,
 } from '../../cards/deck';
 
 const EFFECT_MESSAGES: Record<string, string> = {

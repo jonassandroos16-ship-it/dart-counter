@@ -1,4 +1,4 @@
-import type { Game, GameRecord, Player, Settings, Dart, PlayedCard } from '../../types';
+import type { Game, GameRecord, Player, Settings, Dart } from '../../types';
 import { MODES, SCORE_POPUPS } from '../../constants';
 import { computeBattleDartDamage } from '../../logic';
 import { Sound } from '../../sound';
@@ -31,7 +31,7 @@ export interface EnterVisitParams {
 }
 
 export function enterVisit(params: EnterVisitParams): void {
-  const { game, setGame, settings, players, games, setGames, setPlayers, toast, music, popups, targetId, setTargetId, state, endedState } = params;
+  const { game, setGame, settings, players, games, setGames, setPlayers, toast, music, popups, targetId, setTargetId, endedState } = params;
   if (!game.darts.length) { toast('Play at least one damage card'); return; }
   const scored = game.darts.reduce((a, d) => a + d.value, 0);
   const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
@@ -41,7 +41,10 @@ export function enterVisit(params: EnterVisitParams): void {
   const isKiller = game.mode === 'killer';
   const isHighScore = game.mode === 'highscore';
 
-  const ctx = { isBattle, isKiller, isHighScore, popups, toast };
+  const ctx: VisitContext & { isBattle: boolean; isKiller: boolean; isHighScore: boolean } = {
+    game, setGame, settings, players, games, setGames, setPlayers, toast, music, popups, targetId, setTargetId,
+    isBattle, isKiller, isHighScore,
+  };
 
   if (game.practice) {
     cur.score += scored;

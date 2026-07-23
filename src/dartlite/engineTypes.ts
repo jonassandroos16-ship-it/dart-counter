@@ -1,5 +1,4 @@
 import type { CampaignBattleState } from '../campaign/types';
-import type { Player, Settings } from '../types';
 import type { TrinketId } from './trinkets';
 import type { PlayerCard } from '../cards/types';
 

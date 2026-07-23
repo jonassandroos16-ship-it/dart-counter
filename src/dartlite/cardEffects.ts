@@ -1,7 +1,7 @@
 import type { CampaignBattleState } from '../campaign/types';
 import type { CardDef, CardPlayState } from '../cards/types';
 import {
-  playCardFromHand, redrawHand, recycleGraveyard, resolveCardDef,
+  playCardFromHand, redrawHand, recycleGraveyard,
 } from '../cards/deck';
 
 export interface CardEffectParams {

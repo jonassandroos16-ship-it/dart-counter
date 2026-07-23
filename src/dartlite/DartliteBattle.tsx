@@ -28,7 +28,7 @@ import { cardDamage, cardRarityColor, cardTypeColor } from '../cards/definitions
 import {
   initCardPlayState, startTurn, drawCards, HAND_SIZE,
   playCardFromHand, endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
-  getPlayerCards, redrawHand, recycleGraveyard,
+  getPlayerCards,
 } from '../cards/deck';
 import { applyCardEffect } from './cardEffects';
 
@@ -37,7 +37,7 @@ interface Props {
   players: Player[];
   settings: Settings;
   music: MusicEngine;
-  onBattleEnd: (won: boolean) => void;
+  onBattleEnd: (won: boolean, finalBattle?: CampaignBattleState | null) => void;
   onChoice: (run: DartliteRun) => void;
   onQuit: () => void;
   lobbyPlayers?: LobbyPlayer[];
@@ -760,7 +760,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             />
           )}
         </>
-      )
+      )}
       )}
 
       {showDeckUpgrade && deckUpgradeOption && (

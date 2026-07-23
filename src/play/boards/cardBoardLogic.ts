@@ -1,12 +1,10 @@
-import type { Game, GameRecord, Player, Settings, Dart } from '../../types';
-import { MODES, SCORE_POPUPS } from '../../constants';
-import { recordFromGame, checkoutHint, leadTrailBadge, computeBattleDartDamage } from '../../logic';
+import type { Game, GameRecord, Player, Settings } from '../../types';
+import { recordFromGame } from '../../logic';
 import { Sound } from '../../sound';
 import type { MusicEngine } from '../../music';
 import type { PopupControls } from '../../Popups';
 import { clearVisitPowerUpFlags, tickShield } from '../dart';
-import { runMilestones, awardXP, checkTitleUnlocks, awardBadges } from '../rewards';
-import { finishSimpleGame } from '../finish';
+import { awardXP, checkTitleUnlocks, awardBadges } from '../rewards';
 
 const HIGH_SCORE_VISITS = 7;
 
@@ -25,7 +23,7 @@ export interface VisitContext {
   setTargetId: (id: string | null) => void;
 }
 
-export function advanceTurn(g: Game, ctx: { isBattle: boolean; isKiller: boolean; isHighScore: boolean; popups: PopupControls; toast: (m: string) => void }): Game {
+export function advanceTurn(g: Game, ctx: VisitContext & { isBattle: boolean; isKiller: boolean; isHighScore: boolean }): Game {
   const { isBattle, isKiller, isHighScore, popups, toast } = ctx;
   if (g.powerUpsEnabled && !g.teamMode) {
     const c = g.players[g.turn] as any;

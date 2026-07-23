@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import type { Game, GameRecord, Player, Settings, PlayedCard } from '../../types';
-import { TEAM_COLORS, SCORE_POPUPS } from '../../constants';
+import { TEAM_COLORS } from '../../constants';
 import { checkoutHint, leadTrailBadge } from '../../logic';
 import { Sound } from '../../sound';
 import type { MusicEngine } from '../../music';
@@ -8,11 +8,10 @@ import type { PopupControls } from '../../Popups';
 import { AttributeStrip, BadgeAvatar } from '../common';
 import {
   initCardPlayState, startTurn,
-  playCardFromHand, endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
+  endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
   getPlayerCards, defaultPlayerCards,
 } from '../../cards/deck';
 import type { PlayerCard, CardDef, CardPlayState } from '../../cards/types';
-import { cardDamage } from '../../cards/definitions';
 import { CardBoardOthers } from './CardBoardOthers';
 import { CardBoardHand, CardPopup } from './CardBoardHand';
 import { DeckPopup, GraveyardPopup, PlayedPopup, CardDetailPopup, CardPlayAnimOverlay } from './CardBoardPopups';
