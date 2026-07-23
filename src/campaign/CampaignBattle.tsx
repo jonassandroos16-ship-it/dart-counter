@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CampaignBattleState, CampaignProgress, CoopPowerUpId } from './types';
+import type { CardPlayState, PlayerCard } from '../cards/types';
+import { initCardPlayState, startTurn, getPlayerCards, MAX_PLAYS_PER_TURN } from '../cards/deck';
 import {
   addDart, undoDart, resolvePlayerVisit,
   prepareEnemyTurn, applyNextEnemyAttack, setTarget, startBattle, getLevel,
@@ -12,7 +14,6 @@ import type { CardDef } from '../cards/types';
 
 function applyUtilityCard(state: CampaignBattleState, card: CardDef, _settings: Settings): CampaignBattleState {
   if (state.phase !== 'player') return state;
-  if (state.darts.length > 0) return state;
   const thrower = state.players[state.playerTurnIdx];
   if (!thrower) return state;
   const mag = card.magnitude ?? 0;
@@ -154,6 +155,39 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
   );
   const [showInfo, setShowInfo] = useState(false);
 
+  // ── Card mode state ──────────────────────────────────────────────────
+  // Per-player card play state (deck, hand, used, graveyard), keyed by
+  // player ID. Only used when settings.gameMode === 'cards'.
+  const [cardStates, setCardStates] = useState<Record<string, CardPlayState>>({});
+  const [bonusSlots, setBonusSlots] = useState(0);
+  const cardMode = settings.gameMode === 'cards';
+
+  // Initialize card play state for all players when a new battle starts.
+  useEffect(() => {
+    if (!cardMode) return;
+    const cs: Record<string, CardPlayState> = {};
+    for (const cp of state.players) {
+      const playerData = players.find(p => p.id === cp.id);
+      const collection: PlayerCard[] = playerData ? getPlayerCards(playerData) : [];
+      cs[cp.id] = initCardPlayState(collection);
+    }
+    setCardStates(cs);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardMode]);
+
+  // Ensure the current thrower has a hand drawn for their turn.
+  useEffect(() => {
+    if (!cardMode || state.phase !== 'player') return;
+    const thrower = state.players[state.playerTurnIdx];
+    if (!thrower) return;
+    const cs = cardStates[thrower.id];
+    if (!cs) return;
+    if (cs.hand.length === 0 && cs.used.length === 0) {
+      const next = startTurn(cs);
+      setCardStates(prev => ({ ...prev, [thrower.id]: next }));
+    }
+  }, [state.phase, state.playerTurnIdx, cardMode, cardStates]);
+
   // Build a stable enemy index map (defId → enemy number) so each enemy
   // gets a consistent number badge across renders. Bosses use ☠ instead.
   const enemyNumberMap: Record<string, number> = {};
@@ -223,6 +257,15 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
   const onUndo = () => setState(prev => undoDart(prev, settings));
 
   const onEnter = () => {
+    if (cardMode) {
+      const thrower = state.players[state.playerTurnIdx];
+      if (!thrower) return;
+      const cs = cardStates[thrower.id];
+      if (!cs || cs.used.length === 0) return;
+      setBonusSlots(0);
+      setState(prev => resolvePlayerVisit(prev));
+      return;
+    }
     if (!state.darts.length) return;
     setState(prev => resolvePlayerVisit(prev));
   };
@@ -252,8 +295,10 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
   };
 
   const partyHpPct = Math.max(0, Math.min(100, (state.partyHp / state.partyMaxHp) * 100));
+  const maxDartsPerVisit = cardMode ? MAX_PLAYS_PER_TURN + bonusSlots : 3;
+  const totalCardsPlayed = cardMode && thrower ? (cardStates[thrower.id]?.used.length ?? 0) : 0;
   const playerVisitDone = state.phase === 'player'
-    && state.darts.length >= 3
+    && (cardMode ? totalCardsPlayed >= maxDartsPerVisit : state.darts.length >= 3)
     && state.outcome === 'ongoing';
   const showingFrozen = state.phase === 'enemy'
     && state.pendingEnemyAttacks.length === 0
@@ -434,7 +479,7 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
         {state.enemies.map((e, i) => {
           const hpPct = Math.max(0, Math.min(100, (e.hp / e.maxHp) * 100));
           const isTarget = i === state.targetIdx && !e.defeated;
-          const canTarget = state.phase === 'player' && !e.defeated && state.darts.length < 3 && state.outcome === 'ongoing';
+          const canTarget = state.phase === 'player' && !e.defeated && (cardMode ? totalCardsPlayed < maxDartsPerVisit : state.darts.length < 3) && state.outcome === 'ongoing';
           const frozen = e.frozenTurns > 0;
           const vulnerable = e.vulnerableTurns > 0;
           const distracted = e.distractedTurns > 0;
@@ -486,47 +531,54 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
         </div>
       )}
 
-      {state.phase === 'player' && state.outcome === 'ongoing' && state.darts.length < 3 && (
-        <div className="play-input">
-          <div className="pad-card">
-            {settings.gameMode === 'cards' ? (
-              <CoopCardHand
-                thrower={thrower}
-                players={players}
-                state={state}
-                onPlayCard={(base, mult, label) => {
-                  onAdd(base, mult, label, base === 50);
-                }}
-                onPlayUtility={(card) => {
-                  setState(applyUtilityCard(state, card, settings));
-                  Sound.play('powerup', {}, settings);
-                }}
-              />
-            ) : (
-              <>
-                <div className="mult">
-                  <button className={mult === 1 ? 'on' : ''} onClick={() => setMult(1)}>Single</button>
-                  <button className={mult === 2 ? 'on' : ''} onClick={() => setMult(2)}>Double</button>
-                  <button className={mult === 3 ? 'on' : ''} onClick={() => setMult(3)}>Triple</button>
-                </div>
-                <div className="keypad">
-                  {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20].map(n => (
-                    <button key={n} className="key" onClick={() => onAdd(n, mult)}>{n}</button>
-                  ))}
-                  <button className="key" style={{ background: 'color-mix(in srgb,var(--accent) 20%,var(--bg-3))' }} onClick={() => onAdd(25, mult === 2 ? 2 : 1)}>25</button>
-                  <button className="key" style={{ gridColumn: 'span 2', background: 'color-mix(in srgb,var(--accent) 30%,var(--bg-3))' }} onClick={() => onAdd(50, 1, 'Bull', true)}>Bull<br /><small>50</small></button>
-                  <button className="key" style={{ gridColumn: 'span 2', color: 'var(--muted)' }} onClick={() => onAdd(0, 1, '0')}>Miss</button>
-                </div>
-              </>
-            )}
-            <div className="row" style={{ gap: 8, marginTop: 8 }}>
-              <button className="btn block ghost" onClick={onUndo} disabled={!state.darts.length}>↶ Undo</button>
-              <button className="btn block primary" onClick={onEnter} disabled={!state.darts.length}>End visit</button>
+      {state.phase === 'player' && state.outcome === 'ongoing' && (cardMode ? totalCardsPlayed < maxDartsPerVisit : state.darts.length < 3) && (
+        cardMode ? (
+          <CoopCardHand
+            thrower={thrower}
+            players={players}
+            state={state}
+            cardState={thrower ? cardStates[thrower.id] ?? null : null}
+            setCardState={(updater) => {
+              if (!thrower) return;
+              setCardStates(prev => {
+                const current = prev[thrower.id];
+                if (!current) return prev;
+                return { ...prev, [thrower.id]: updater(current) };
+              });
+            }}
+            bonusSlots={bonusSlots}
+            setBonusSlots={setBonusSlots}
+            onPlayCard={(base, m, label, isBull) => onAdd(base, m, label, isBull)}
+            onPlayUtility={(card) => {
+              setState(prev => applyUtilityCard(prev, card, settings));
+              Sound.play('powerup', {}, settings);
+            }}
+            onEndVisit={onEnter}
+          />
+        ) : (
+          <div className="play-input">
+            <div className="pad-card">
+              <div className="mult">
+                <button className={mult === 1 ? 'on' : ''} onClick={() => setMult(1)}>Single</button>
+                <button className={mult === 2 ? 'on' : ''} onClick={() => setMult(2)}>Double</button>
+                <button className={mult === 3 ? 'on' : ''} onClick={() => setMult(3)}>Triple</button>
+              </div>
+              <div className="keypad">
+                {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20].map(n => (
+                  <button key={n} className="key" onClick={() => onAdd(n, mult)}>{n}</button>
+                ))}
+                <button className="key" style={{ background: 'color-mix(in srgb,var(--accent) 20%,var(--bg-3))' }} onClick={() => onAdd(25, mult === 2 ? 2 : 1)}>25</button>
+                <button className="key" style={{ gridColumn: 'span 2', background: 'color-mix(in srgb,var(--accent) 30%,var(--bg-3))' }} onClick={() => onAdd(50, 1, 'Bull', true)}>Bull<br /><small>50</small></button>
+                <button className="key" style={{ gridColumn: 'span 2', color: 'var(--muted)' }} onClick={() => onAdd(0, 1, '0')}>Miss</button>
+              </div>
+              <div className="row" style={{ gap: 8, marginTop: 8 }}>
+                <button className="btn block ghost" onClick={onUndo} disabled={!state.darts.length}>↶ Undo</button>
+                <button className="btn block primary" onClick={onEnter} disabled={!state.darts.length}>End visit</button>
+              </div>
             </div>
           </div>
-        </div>
+        )
       )}
-
 
       {showingFrozen && (
         <FrozenOverlay state={state} onContinue={onContinue} />
