@@ -3,22 +3,24 @@ import type { CampaignBattleState, EnemyAttackStep } from './types';
 import { initials } from '../store';
 import { Sound } from '../sound';
 import type { Settings } from '../types';
+import type { CardDef } from '../cards/types';
+import { cardTypeColor } from '../cards/definitions';
 
-export function DartOverlay({ state, onContinue, onEndVisit, settings, enemyIcon }: {
+export function DartOverlay({ state, onContinue, onEndVisit, settings, enemyIcon, playerVisitDone, playedCards }: {
   state: CampaignBattleState;
   onContinue: () => void;
   onEndVisit: () => void;
   settings?: Settings;
   enemyIcon?: (defId: string) => string;
+  playerVisitDone?: boolean;
+  playedCards?: CardDef[];
 }) {
-  const isPlayer = state.phase === 'player' && state.darts.length >= 3;
+  const isPlayer = state.phase === 'player' && (playerVisitDone || state.darts.length >= 3);
   const [shakeKey, setShakeKey] = useState(0);
   const [hitIdx, setHitIdx] = useState(0);
   const currentEnemyStep = state.pendingEnemyAttacks[0];
   const playerSteps = isPlayer ? state.resolvedDarts : [];
 
-  // Play a hit sound for each resolved dart in the player visit summary,
-  // staggered so each damage line gets its own audible cue.
   useEffect(() => {
     if (!isPlayer) return;
     if (hitIdx >= playerSteps.length) return;
@@ -44,13 +46,7 @@ export function DartOverlay({ state, onContinue, onEndVisit, settings, enemyIcon
         if (s.kind === 'defeated') existing.defeated = true;
       } else {
         const enemy = state.enemies.find(e => e.id === s.enemyId);
-        acc.push({
-          id: s.enemyId,
-          name: s.enemyName,
-          maxHp: enemy?.maxHp || 1,
-          finalHp: s.hpAfter,
-          defeated: s.kind === 'defeated',
-        });
+        acc.push({ id: s.enemyId, name: s.enemyName, maxHp: enemy?.maxHp || 1, finalHp: s.hpAfter, defeated: s.kind === 'defeated' });
       }
       return acc;
     }, []);
@@ -69,36 +65,50 @@ export function DartOverlay({ state, onContinue, onEndVisit, settings, enemyIcon
           </div>
 
           <div className="bo-steps" style={{ marginTop: 4 }}>
-            {steps.map((s, i) => {
-              const eDef = state.enemies.find(e => e.id === s.enemyId);
-              const icon = enemyIcon && eDef ? enemyIcon(eDef.defId) : '';
-              return (
-                <div key={i} className={`bo-step current${s.damage <= 0 ? ' miss' : ''}`}>
-                  <span className="bo-step-dart">{s.dart.label}</span>
-                  <span className="bo-step-formula" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        minWidth: 20, height: 20, borderRadius: 6, padding: '0 4px',
-                        background: 'color-mix(in srgb,var(--accent) 22%,var(--bg))',
-                        color: 'var(--accent)', fontSize: 11, fontWeight: 900, marginRight: 4, flex: '0 0 auto',
-                      }} title={s.enemyName}>{icon}</span>
-                      {s.kind === 'shield_break' ? `Broke ${s.shieldTarget} — 0 dmg`
-                        : s.kind === 'miss' ? 'Absorbed by shield — 0 dmg'
-                        : s.dart.value <= 0 ? 'Miss · 0 dmg'
-                        : `${s.dart.value} dmg`}
-                      {s.kind === 'defeated' ? ' · DEFEATED' : ''}
-                    </span>
-                    {s.damage > 0 && s.attackerPower != null && s.targetArmor != null && (
-                      <span className="muted" style={{ fontSize: 9, fontWeight: 600, lineHeight: 1.3 }}>
-                        ({s.dart.value} + {s.attackerPower} power)
-                        {s.targetArmor > 0 ? ` × (1 − ${s.targetArmor}% armor)` : ''}
-                        {s.vulnerable ? ' × 1.5 (vulnerable)' : ''}
-                        {' = '}{s.damage}
+            {(playedCards || []).map((card, i) => {
+              if (card.type === 'damage') {
+                const s = steps.find(st => st.dart.label === card.name);
+                if (!s) return null;
+                const eDef = state.enemies.find(e => e.id === s.enemyId);
+                const icon = enemyIcon && eDef ? enemyIcon(eDef.defId) : '';
+                return (
+                  <div key={i} className={`bo-step current${s.damage <= 0 ? ' miss' : ''}`}>
+                    <span className="bo-step-dart">{s.dart.label}</span>
+                    <span className="bo-step-formula" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          minWidth: 20, height: 20, borderRadius: 6, padding: '0 4px',
+                          background: 'color-mix(in srgb,var(--accent) 22%,var(--bg))',
+                          color: 'var(--accent)', fontSize: 11, fontWeight: 900, marginRight: 4, flex: '0 0 auto',
+                        }} title={s.enemyName}>{icon}</span>
+                        {s.kind === 'shield_break' ? `Broke ${s.shieldTarget} — 0 dmg`
+                          : s.kind === 'miss' ? 'Absorbed by shield — 0 dmg'
+                          : s.dart.value <= 0 ? 'Miss · 0 dmg'
+                          : `${s.dart.value} dmg`}
+                        {s.kind === 'defeated' ? ' · DEFEATED' : ''}
                       </span>
-                    )}
-                  </span>
-                  <span className="bo-step-dmg">{s.damage > 0 ? `-${s.damage}` : '0'}</span>
+                      {s.damage > 0 && s.attackerPower != null && s.targetArmor != null && (
+                        <span className="muted" style={{ fontSize: 9, fontWeight: 600, lineHeight: 1.3 }}>
+                          ({s.dart.value} + {s.attackerPower} power)
+                          {s.targetArmor > 0 ? ` × (1 − ${s.targetArmor}% armor)` : ''}
+                          {s.vulnerable ? ' × 1.5 (vulnerable)' : ''}
+                          {' = '}{s.damage}
+                        </span>
+                      )}
+                    </span>
+                    <span className="bo-step-dmg">{s.damage > 0 ? `-${s.damage}` : '0'}</span>
+                  </div>
+                );
+              }
+              return (
+                <div key={i} className="bo-step current" style={{
+                  borderColor: cardTypeColor(card.type),
+                  background: `color-mix(in srgb, ${cardTypeColor(card.type)} 12%, var(--bg-3))`,
+                }}>
+                  <span className="bo-step-dart" style={{ fontSize: 13 }}>{card.icon} {card.name}</span>
+                  <span className="bo-step-formula" style={{ textTransform: 'capitalize' }}>{card.type}</span>
+                  <span className="bo-step-dmg" style={{ fontSize: 10 }}>{card.desc}</span>
                 </div>
               );
             })}
