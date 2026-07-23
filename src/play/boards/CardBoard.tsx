@@ -1,27 +1,25 @@
 import { useEffect, useState, useRef } from 'react';
-import type { Game, GameRecord, Player, Settings, Dart, PlayedCard } from '../../types';
-import { TEAM_COLORS, MODES, SCORE_POPUPS } from '../../constants';
-import { recordFromGame, checkoutHint, leadTrailBadge, computeBattleDartDamage } from '../../logic';
+import type { Game, GameRecord, Player, Settings, PlayedCard } from '../../types';
+import { TEAM_COLORS, SCORE_POPUPS } from '../../constants';
+import { checkoutHint, leadTrailBadge } from '../../logic';
 import { Sound } from '../../sound';
 import type { MusicEngine } from '../../music';
 import type { PopupControls } from '../../Popups';
 import { AttributeStrip, BadgeAvatar } from '../common';
-import { clearVisitPowerUpFlags, tickShield } from '../dart';
-import { runMilestones, awardXP, checkTitleUnlocks, awardBadges } from '../rewards';
-import { finishSimpleGame } from '../finish';
-import { GameOver } from '../GameOver';
-import type { PlayerCard, CardDef, CardPlayState } from '../../cards/types';
-import { cardDamage } from '../../cards/definitions';
 import {
   initCardPlayState, startTurn,
   playCardFromHand, endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
   getPlayerCards, defaultPlayerCards,
-  redrawHand, recycleGraveyard,
 } from '../../cards/deck';
+import type { PlayerCard, CardDef, CardPlayState } from '../../cards/types';
+import { cardDamage } from '../../cards/definitions';
 import { CardBoardOthers } from './CardBoardOthers';
 import { CardBoardHand, CardPopup } from './CardBoardHand';
 import { DeckPopup, GraveyardPopup, PlayedPopup, CardDetailPopup, CardPlayAnimOverlay } from './CardBoardPopups';
 import type { CardPlayAnim } from './CardBoardPopups';
+import { playCard } from './cardBoardPlay';
+import { enterVisit } from './cardBoardVisit';
+import { GameOver } from '../GameOver';
 
 const HIGH_SCORE_VISITS = 7;
 
@@ -153,96 +151,13 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     prevHandLen.current = curLen;
   }, [state.hand.length]);
 
-  const playCard = (handIdx: number) => {
+  const handlePlayCard = (handIdx: number) => {
     if (!isMyTurn) return;
-    const card = handDefs[handIdx];
-    if (!card) return;
-    if (totalCardsPlayed >= maxPlays) { toast(`Only ${maxPlays} cards per visit`); return; }
-    if (card.type !== 'damage') {
-      const effectMsg: Record<string, string> = {
-        heal: `✨ ${card.name} — Party healed!`,
-        heal_over_time: `💚 ${card.name} — Party regenerating HP!`,
-        party_shield_flat: `🛡️ ${card.name} — Party shielded from flat damage!`,
-        party_shield: `🛡️ ${card.name} — Party takes less damage!`,
-        enemy_curse: `🔮 ${card.name} — Enemies cursed!`,
-        enemy_debuff: `💀 ${card.name} — Enemies weakened!`,
-        enemy_miss: `🌀 ${card.name} — Enemies debuffed, may miss!`,
-        bleed: `🩸 ${card.name} — Enemies bleeding!`,
-        freeze: `❄️ ${card.name} — Enemies frozen!`,
-        surge: `⚡ ${card.name} — Next visit scores double!`,
-        hot_streak: `🔥 ${card.name} — Cumulative bonus active!`,
-        power_buff: `💪 ${card.name} — Party power increased!`,
-        accuracy_buff: `🔮 ${card.name} — Divine sight granted to the party!`,
-        armor_buff: `🏰 ${card.name} — Party armor fortified!`,
-        reflect: `🪞 ${card.name} — Damage reflection active!`,
-        draw: `🃏 ${card.name} — Extra cards drawn!`,
-        reroll: `🎲 ${card.name} — Reroll available!`,
-        shadowstep: `🌑 ${card.name} — Shadowstep active!`,
-        blessing: `🙏 ${card.name} — Blessed!`,
-        bust_protect: `🛡️ ${card.name} — Soul barrier active!`,
-        double_up: `🌀 ${card.name} — Enemy strike disrupted!`,
-        extra_dart: `➕ ${card.name} — Extra throw granted!`,
-        redraw: `🔄 ${card.name} — Hand discarded, fresh cards drawn!`,
-        recycle: `♻️ ${card.name} — Graveyard shuffled into deck!`,
-        revive: `❤️ ${card.name} — Party revived!`,
-      };
-      const msg = effectMsg[card.effect || ''] || `${card.name}: ${card.desc}`;
-      toast(msg);
-      const soundType = card.type === 'spell' ? 'card_spell' : 'card_utility';
-      Sound.play(soundType, {}, settings);
-      let updated = playCardFromHand(state, handIdx);
-      if (!updated) return;
-
-      if (card.effect === 'redraw') {
-        updated = redrawHand(updated);
-      } else if (card.effect === 'recycle') {
-        updated = recycleGraveyard(updated);
-      } else if (card.effect === 'extra_dart') {
-        setGame({ ...game, bonusSlots: bonusSlots + 1 });
-      }
-
-      const playedCard: PlayedCard = {
-        playerId: p.id, playerName: p.name, playerColor: p.color,
-        cardId: card.id, upgradeLevel: state.hand[handIdx]?.upgradeLevel ?? 0,
-        turn: game.turn, timestamp: Date.now(),
-      };
-      const pc = state.hand[handIdx];
-      setGame({
-        ...game,
-        cardState: { ...game.cardState, [p.id]: updated },
-        playedCards: [...(game.playedCards || []), playedCard],
-        lastCardPlay: { playerId: p.id, cardId: card.id, upgradeLevel: pc?.upgradeLevel ?? 0, timestamp: playedCard.timestamp },
-      });
-      force(n => n + 1);
-      return;
-    }
-    if (game.darts.length >= maxPlays) { toast(`Only ${maxPlays} cards per visit`); return; }
-    const updated = playCardFromHand(state, handIdx);
-    if (!updated) return;
-    const base = card.base ?? 0;
-    const mult = card.mult ?? 1;
-    const isBull = base === 50;
-    const value = cardDamage(card);
-    const label = card.name;
-    const dart = { value, label, base, mult: isBull ? 2 : (base === 25 && value === 50 ? 2 : mult), isDouble: !!(isBull || (base === 25 && value === 50) || mult === 2), isOuter: false };
-    Sound.play('card_damage', {}, settings);
-    prevHandRef.current = handIdx;
-    setSelectedCardIdx(null);
-    const playedCard: PlayedCard = {
-      playerId: p.id, playerName: p.name, playerColor: p.color,
-      cardId: card.id, upgradeLevel: state.hand[handIdx]?.upgradeLevel ?? 0,
-      turn: game.turn, timestamp: Date.now(),
-    };
-    const pc = state.hand[handIdx];
-    setGame({
-      ...game,
-      darts: [...game.darts, dart],
-      mult: 1,
-      cardState: { ...game.cardState, [p.id]: updated },
-      playedCards: [...(game.playedCards || []), playedCard],
-      lastCardPlay: { playerId: p.id, cardId: card.id, upgradeLevel: pc?.upgradeLevel ?? 0, timestamp: playedCard.timestamp },
+    playCard({
+      handIdx, handDefs, state, game, p: { id: p.id, name: p.name, color: p.color },
+      settings, toast, setGame: setGame as (g: Game) => void,
+      totalCardsPlayed, maxPlays, bonusSlots, prevHandRef, setSelectedCardIdx, force,
     });
-    force(n => n + 1);
   };
 
   const undoCard = () => {
@@ -269,298 +184,13 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
     force(n => n + 1);
   };
 
-  const enterVisit = () => {
+  const handleEnterVisit = () => {
     if (!isMyTurn) return;
-    if (!game.darts.length) { toast('Play at least one damage card'); return; }
-    const scored = game.darts.reduce((a, d) => a + d.value, 0);
-    const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
-    const cur = newPlayers[game.turn] as any;
     const endedState = endTurn(state);
-    const resetBonus = { ...game, bonusSlots: 0 };
-
-    if (game.practice) {
-      cur.score += scored;
-      cur.visits.push({ darts: [...game.darts], scored, remaining: cur.score, leg: 1, date: new Date().toISOString() });
-      Sound.play('enter', {}, settings);
-      const next = advanceTurn({ ...resetBonus, players: newPlayers, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
-      setGame(next);
-      runMilestones(cur, cur.score, scored, settings, popups, setPlayers, { ...game, players: newPlayers }, players, games);
-      return;
-    }
-
-    if (isBattle) {
-      const power = cur.powerPct || 0;
-      let target = targetId;
-      const aliveTargets = newPlayers.filter((pl: any) => pl.id !== cur.id && !pl.defeated);
-      if (aliveTargets.length === 1) target = aliveTargets[0].id;
-      if (!target) { toast('Pick a target to attack'); return; }
-      const victim = newPlayers.find((pl: any) => pl.id === target);
-      if (!victim || victim.defeated) { toast('That opponent is already defeated'); return; }
-      const armor = victim.armorPct || 0;
-      let totalDamage = 0;
-      let hp = victim.hp || 0;
-      for (const d of game.darts as Dart[]) {
-        const dmg = computeBattleDartDamage(d.value, power, armor, settings);
-        totalDamage += dmg;
-        hp = Math.max(0, hp - dmg);
-      }
-      victim.hp = hp;
-      cur.damageDealt = (cur.damageDealt || 0) + totalDamage;
-      victim.damageTaken = (victim.damageTaken || 0) + totalDamage;
-      cur.attacks = [...(cur.attacks || []), { target: victim.id, damage: totalDamage, visit: cur.visits.length + 1, date: new Date().toISOString() }];
-      cur.score += scored;
-      cur.visits.push({ darts: [...game.darts], scored, remaining: cur.hp, leg: 1, mode: 'battle', date: new Date().toISOString() });
-      cur.dartsThrown += game.darts.length;
-      Sound.play('impact', {}, settings);
-      if (victim.hp <= 0 && !victim.defeated) {
-        victim.defeated = true;
-        popups.setKill({ killer: cur.name, victim: victim.name });
-        Sound.play('kill', {}, settings);
-      }
-      if (settings.popups.scores) {
-        for (const sp of SCORE_POPUPS) { if (scored >= sp.min) { popups.setMilestone({ emoji: sp.emoji, title: sp.title, sub: sp.sub }); Sound.play('milestone', {}, settings); break; } }
-      }
-      const finishedState: Game = { ...resetBonus, players: newPlayers, darts: [], mult: 1 };
-      const remainingAlive = newPlayers.filter((pl: any) => !pl.defeated);
-      if (remainingAlive.length <= 1) {
-        const winner = remainingAlive[0] || null;
-        setTimeout(() => finishSimpleGame(finishedState, winner, settings, setGame, setGames, setPlayers, popups, music, [], []), 200);
-        return;
-      }
-      const next = advanceTurn({ ...finishedState, cardState: { ...game.cardState, [p.id]: endedState } });
-      setGame(next);
-      return;
-    }
-
-    if (isKiller) {
-      const isKillerAlready = (cur.killerHits || 0) >= 5;
-      let killedThisVisit: { killer: string; victim: string } | null = null;
-      for (const dart of game.darts) {
-        if (dart.base === 0) continue;
-        if (!isKillerAlready) {
-          if (dart.base === cur.killerNumber) {
-            cur.killerHits = Math.min(5, (cur.killerHits || 0) + 1);
-            if (cur.killerHits === 5) toast(`${cur.name} is now a KILLER!`);
-          }
-        } else {
-          const victim = newPlayers.find(pl => pl.id !== cur.id && !pl.eliminated && pl.killerNumber === dart.base);
-          if (victim) {
-            victim.lives = Math.max(0, (victim.lives || 0) - 1);
-            cur.kills = [...(cur.kills || []), victim.id];
-            if (victim.lives === 0 && !victim.eliminated) {
-              victim.eliminated = true;
-              killedThisVisit = { killer: cur.name, victim: victim.name };
-            }
-          }
-        }
-      }
-      cur.visits.push({ darts: [...game.darts], scored, remaining: cur.lives, leg: 1, mode: 'killer', date: new Date().toISOString(), hits: (cur.kills || []).length });
-      cur.dartsThrown += game.darts.length;
-      const remainingAlive = newPlayers.filter(pl => !pl.eliminated);
-      const finishedState = { ...resetBonus, players: newPlayers, darts: [], mult: 1 };
-      if (remainingAlive.length <= 1) {
-        const winner = remainingAlive[0] || null;
-        if (killedThisVisit) popups.setKill(killedThisVisit);
-        setTimeout(() => finishSimpleGame(finishedState, winner, settings, setGame, setGames, setPlayers, popups, music, [], []), killedThisVisit ? 2200 : 0);
-        return;
-      }
-      Sound.play('enter', {}, settings);
-      if (killedThisVisit) popups.setKill(killedThisVisit);
-      const next = advanceTurn({ ...finishedState, cardState: { ...game.cardState, [p.id]: endedState } });
-      setGame(next);
-      return;
-    }
-
-    if (isHighScore) {
-      cur.score += scored;
-      cur.visits.push({ darts: [...game.darts], scored, remaining: cur.score, leg: 1, mode: 'highscore', date: new Date().toISOString() });
-      cur.dartsThrown += game.darts.length;
-      Sound.play('enter', {}, settings);
-      if (settings.popups.scores) {
-        for (const sp of SCORE_POPUPS) { if (scored >= sp.min) { popups.setMilestone({ emoji: sp.emoji, title: sp.title, sub: sp.sub }); Sound.play('milestone', {}, settings); break; } }
-      }
-      const allDone = newPlayers.every(pl => pl.visits.length >= HIGH_SCORE_VISITS);
-      const finishedState = { ...resetBonus, players: newPlayers, darts: [], mult: 1 };
-      if (allDone) {
-        const maxScore = Math.max(...newPlayers.map(pl => pl.score));
-        const winners = newPlayers.filter(pl => pl.score === maxScore);
-        const winner = winners.length === 1 ? winners[0] : null;
-        finishSimpleGame(finishedState, winner, settings, setGame, setGames, setPlayers, popups, music, [], []);
-        return;
-      }
-      const next = advanceTurn({ ...finishedState, cardState: { ...game.cardState, [p.id]: endedState } });
-      setGame(next);
-      return;
-    }
-
-    const remaining = cur.score - scored;
-    const lastDart = game.darts[game.darts.length - 1];
-    const bust = remaining < 0 || (remaining === 1 && game.doubleOut) || (remaining === 0 && game.doubleOut && !lastDart.isDouble);
-
-    if (remaining === 0 && (!game.doubleOut || lastDart.isDouble)) {
-      cur.visits.push({ darts: [...game.darts], scored, remaining: 0, leg: game.leg, checkout: scored, date: new Date().toISOString() });
-      cur.score = 0; cur.legsWon++;
-      if (game.teamMode) {
-        newPlayers.forEach(pl => { if (pl.team === cur.team) pl.score = 0; });
-        const teamLegs = [...(game.teamLegsWon || [])];
-        teamLegs[cur.team!] = (teamLegs[cur.team!] || 0) + 1;
-        const legsToWin = Math.ceil(game.legsBestOf / 2);
-        const teamWonMatch = teamLegs[cur.team!] >= (game.legsBestOf === 1 ? 1 : legsToWin);
-        if (teamWonMatch) {
-          finishGame({ ...resetBonus, players: newPlayers, teamLegsWon: teamLegs, darts: [], mult: 1, winningTeam: cur.team, cardState: { ...game.cardState, [p.id]: endedState } }, null, null);
-          return;
-        }
-        const nextLeg = game.leg + 1;
-        newPlayers.forEach(pl => pl.score = MODES[game.mode].start);
-        const tc = game.teamCount || 2;
-        const nextTeam = ((game.teamTurn || 0) + 1) % tc;
-        const cursors = [...(game.teamPlayerCursor || Array(tc).fill(0))];
-        const ros: number[][] = Array.from({ length: tc }, () => []);
-        newPlayers.forEach((pl, i) => { const t = pl.team ?? 0; if (t < tc) ros[t].push(i); });
-        const nextTurn = ros[nextTeam][cursors[nextTeam] % ros[nextTeam].length];
-        Sound.play('win', {}, settings);
-        toast(`Team ${cur.team! + 1} wins leg ${game.leg}`);
-        setGame({ ...resetBonus, players: newPlayers, leg: nextLeg, turn: nextTurn, teamTurn: nextTeam, teamLegsWon: teamLegs, roundStartTurn: nextTurn, checkedOutThisRound: [], thrownThisRound: [], darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
-        return;
-      }
-      const checkedOut = [...game.checkedOutThisRound, cur.id];
-      const thrown = [...game.thrownThisRound, cur.id];
-      const legsToWin = Math.ceil(game.legsBestOf / 2);
-      const reachedThreshold = cur.legsWon >= (game.legsBestOf === 1 ? 1 : legsToWin);
-      if (reachedThreshold) {
-        const MAX_CHECKOUT = 170;
-        const playersLeft = newPlayers.filter(pl => !checkedOut.includes(pl.id) && pl.score > 0);
-        const canTie = playersLeft.filter(pl => pl.score <= MAX_CHECKOUT);
-        if (playersLeft.length > 0 && canTie.length === playersLeft.length) {
-          toast(`${cur.name} checked out! ${playersLeft.length} player${playersLeft.length > 1 ? 's' : ''} left to tie.`);
-          Sound.play('win', {}, settings);
-          const next = advanceTurn({ ...resetBonus, players: newPlayers, checkedOutThisRound: checkedOut, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
-          setGame(next);
-          return;
-        }
-        if (checkedOut.length > 1) { finishGame({ ...resetBonus, players: newPlayers, checkedOutThisRound: checkedOut, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } }, null, checkedOut); return; }
-        finishGame({ ...resetBonus, players: newPlayers, checkedOutThisRound: checkedOut, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } }, cur, null);
-        return;
-      }
-      const nextLeg = game.leg + 1;
-      const nextTurn = (nextLeg - 1) % game.players.length;
-      newPlayers.forEach(pl => pl.score = MODES[game.mode].start);
-      if (game.powerUpsEnabled) newPlayers[game.turn] = tickShield(newPlayers[game.turn]);
-      Sound.play('win', {}, settings);
-      toast(`${cur.name} wins leg ${game.leg}`);
-      setGame({ ...resetBonus, players: newPlayers, leg: nextLeg, turn: nextTurn, roundStartTurn: nextTurn, checkedOutThisRound: [], thrownThisRound: [], darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
-      return;
-    }
-
-    if (bust) {
-      cur.visits.push({ darts: [...game.darts], scored: 0, remaining: cur.score, leg: game.leg, bust: true, date: new Date().toISOString() });
-      Sound.play('bust', {}, settings);
-      toast('Bust!');
-      const thrown = [...game.thrownThisRound, cur.id];
-      const next = advanceTurn({ ...resetBonus, players: newPlayers, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
-      setGame(next);
-      return;
-    }
-
-    cur.score = remaining;
-    if (game.teamMode) newPlayers.forEach(pl => { if (pl.team === cur.team && pl.id !== cur.id) pl.score = remaining; });
-    cur.visits.push({ darts: [...game.darts], scored, remaining, leg: game.leg, date: new Date().toISOString() });
-    Sound.play('enter', {}, settings);
-    const thrown = [...game.thrownThisRound, cur.id];
-    const next = advanceTurn({ ...resetBonus, players: newPlayers, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [p.id]: endedState } });
-    setGame(next);
-    runMilestones(cur, remaining, scored, settings, popups, setPlayers, { ...game, players: newPlayers }, players, games);
-  };
-
-  const advanceTurn = (g: Game): Game => {
-    if (g.powerUpsEnabled && !g.teamMode) {
-      const c = g.players[g.turn] as any;
-      if (c && c._shieldTurns > 0) {
-        g = { ...g, players: g.players.map((pl, i) => i === g.turn ? tickShield(pl) : pl) };
-      }
-    }
-    if (g.teamMode) {
-      const tc = g.teamCount || 2;
-      const ros: number[][] = Array.from({ length: tc }, () => []);
-      g.players.forEach((pl, i) => { const t = pl.team ?? 0; if (t < tc) ros[t].push(i); });
-      const cursors = [...(g.teamPlayerCursor || Array(tc).fill(0))];
-      const curT = g.teamTurn || 0;
-      if (ros[curT].length) cursors[curT] = (cursors[curT] + 1) % ros[curT].length;
-      const nextTeam = (curT + 1) % tc;
-      const nextTurn = ros[nextTeam][cursors[nextTeam] % ros[nextTeam].length];
-      return { ...g, turn: nextTurn, teamTurn: nextTeam, teamPlayerCursor: cursors };
-    }
-    let turn = (g.turn + 1) % g.players.length;
-    if (g.powerUpsEnabled) {
-      let guards = 0;
-      while (guards < g.players.length) {
-        const np = g.players[turn] as any;
-        if (np._frozenNext) {
-          g = { ...g, players: g.players.map((pl, i) => i === turn ? clearVisitPowerUpFlags(pl) : pl) };
-          const frozenPl = g.players[turn];
-          const modeLabel = isBattle ? 'battle' : isKiller ? 'killer' : isHighScore ? 'highscore' : undefined;
-          const visits = [...frozenPl.visits, { darts: [], scored: 0, remaining: isBattle ? frozenPl.hp : isKiller ? frozenPl.lives : frozenPl.score, leg: g.leg, frozen: true, mode: modeLabel, date: new Date().toISOString() }];
-          g = { ...g, players: g.players.map((pl, i) => i === turn ? { ...pl, visits } : pl), thrownThisRound: [...(g.thrownThisRound || []), frozenPl.id] };
-          popups.setFrozen({ name: frozenPl.name });
-          toast(`${frozenPl.name} is frozen — visit skipped.`);
-          turn = (turn + 1) % g.players.length;
-          guards++;
-        } else {
-          break;
-        }
-      }
-    }
-    if (isBattle) {
-      while (g.players[turn].defeated) turn = (turn + 1) % g.players.length;
-    } else if (isKiller) {
-      while (g.players[turn].eliminated) turn = (turn + 1) % g.players.length;
-    } else if (isHighScore) {
-      while (g.players[turn].visits.length >= HIGH_SCORE_VISITS) turn = (turn + 1) % g.players.length;
-    }
-    const checkedOutCount = g.checkedOutThisRound.length;
-    const thrown = g.thrownThisRound || [];
-    if (checkedOutCount > 0) {
-      const legsToWin = Math.ceil(g.legsBestOf / 2);
-      const anyReached = g.players.some(pl => g.checkedOutThisRound.includes(pl.id) && pl.legsWon >= (g.legsBestOf === 1 ? 1 : legsToWin));
-      if (anyReached) {
-        const MAX_CHECKOUT = 170;
-        const playersLeftToThrow = g.players.filter(pl =>
-          !g.checkedOutThisRound.includes(pl.id) && !thrown.includes(pl.id) && pl.score > 0);
-        if (playersLeftToThrow.length === 0) {
-          if (checkedOutCount > 1) { finishGame({ ...g, turn }, null, g.checkedOutThisRound); return { ...g, turn, finished: true }; }
-          const winner = g.players.find(pl => g.checkedOutThisRound.includes(pl.id));
-          if (winner) { finishGame({ ...g, turn }, winner, null); return { ...g, turn, finished: true }; }
-        }
-        const canTie = playersLeftToThrow.filter(pl => pl.score <= MAX_CHECKOUT);
-        if (canTie.length === 0) {
-          if (checkedOutCount > 1) { finishGame({ ...g, turn }, null, g.checkedOutThisRound); return { ...g, turn, finished: true }; }
-          const winner = g.players.find(pl => g.checkedOutThisRound.includes(pl.id));
-          if (winner) { finishGame({ ...g, turn }, winner, null); return { ...g, turn, finished: true }; }
-        }
-      }
-    }
-    return { ...g, turn };
-  };
-
-  const finishGame = (g: Game, winner: any, tiedIds: string[] | null) => {
-    if (g.finished) return;
-    const isTie = !winner && tiedIds && tiedIds.length > 1;
-    const winningTeam = g.winningTeam ?? null;
-    const finished: Game = { ...g, finished: true, winner: winner ? winner.id : null, tied: !!isTie, tiedPlayers: isTie ? tiedIds : null, winningTeam };
-    Sound.play('win', {}, settings);
-    music.startContext('setup', settings);
-    setGames((prev: GameRecord[]) => [...prev, recordFromGame(finished)]);
-    if (!finished.practice) {
-      if (finished.teamMode && winningTeam != null) {
-        finished.players.filter(pl => pl.team === winningTeam).forEach(pl => awardXP(pl.id, settings.xpConfig.win, `Team ${winningTeam + 1} won`, settings, setPlayers, popups));
-      } else if (winner) {
-        awardXP(winner.id, settings.xpConfig.win, 'Winning the game', settings, setPlayers, popups);
-      }
-      if (isTie && tiedIds) tiedIds.forEach(pid => awardXP(pid, Math.round(settings.xpConfig.win / 2), 'Tied the game', settings, setPlayers, popups));
-    }
-    finished.players.forEach(pl => checkTitleUnlocks(pl, settings, popups, setPlayers, finished, players, games));
-    awardBadges(finished, setPlayers);
-    setGame(finished);
+    enterVisit({
+      game, setGame, settings, players, games, setGames, setPlayers,
+      toast, music, popups, targetId, setTargetId, state, endedState, isMyTurn,
+    });
   };
 
   const hpPct = (pl: any) => Math.max(0, Math.min(100, ((pl.hp || 0) / (pl.maxHp || 1)) * 100));
@@ -670,10 +300,10 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         playedCount={game.playedCards?.length || 0}
         onCardClick={setSelectedCardIdx}
         onShowDeck={() => setShowDeck(true)}
-        onShowGraveyard={() => setShowGrareyard(true)}
+        onShowGraveyard={() => setShowGraveyard(true)}
         onShowPlayed={() => setShowPlayed(true)}
         onUndo={undoCard}
-        onEnterVisit={enterVisit}
+        onEnterVisit={handleEnterVisit}
       />
 
       {selectedCard && (
@@ -682,7 +312,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
           popupClosing={popupClosing}
           canPlayMore={canPlayMore}
           onClose={closeCardPopup}
-          onPlay={() => playCard(selectedCardIdx!)}
+          onPlay={() => handlePlayCard(selectedCardIdx!)}
         />
       )}
 
