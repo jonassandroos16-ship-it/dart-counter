@@ -101,7 +101,7 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
   ];
 
   return (
-    <div className="view scroll">
+    <div className="view-scroll">
       <div className="card">
         <h2 style={{ marginBottom: 12 }}>Settings</h2>
 
