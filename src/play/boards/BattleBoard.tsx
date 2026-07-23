@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { Game, GamePlayer, GameRecord, Player, Settings, Dart } from '../../types';
 import { SCORE_POPUPS } from '../../constants';
-import { computeBattleDartDamage } from '../../logic';
+import { computeBattleDartDamage, leadTrailBadge } from '../../logic';
 import { Sound } from '../../sound';
 import type { MusicEngine } from '../../music';
 import type { PopupControls } from '../../Popups';
-import { PowerUpOrb, BadgeAvatar } from '../common';
+import { ChargedPlayerIcon, BadgeAvatar } from '../common';
 import { addDartToGame, undoDart, KeypadPad, clearVisitPowerUpFlags, tickShield } from '../dart';
 import { activatePowerUp } from '../powerups';
 import { finishSimpleGame } from '../finish';
@@ -171,7 +171,19 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
       <div className="play-current">
         <div className="pc-header">
           <div className="row" style={{ gap: 8 }}>
-            <BadgeAvatar playerId={p.id} players={players} games={games} size={32} fontSize={13} color={p.color} />
+            {game.powerUpsEnabled ? (
+              <ChargedPlayerIcon game={game} curIdx={game.turn} settings={settings} players={players} games={games} toast={toast} onActivate={() => {
+                activatePowerUp(game, game.turn, settings, toast, {
+                  popups,
+                  onReroll: (plan) => new Promise<boolean>((resolve) => {
+                    setReroll(plan);
+                    setRerollResolve(() => resolve);
+                  }),
+                }).then((next) => { if (next) setGame(next); });
+              }} />
+            ) : (
+              <BadgeAvatar playerId={p.id} players={players} games={games} size={32} fontSize={13} color={p.color} />
+            )}
             <span className="pc-name">{p.name}</span>
           </div>
           <span className="muted small">BATTLE · {alive.length} ALIVE</span>
@@ -228,17 +240,6 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
             </div>
           </div>
         )}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
-          <PowerUpOrb game={game} curIdx={game.turn} settings={settings} toast={toast} onActivate={() => {
-            activatePowerUp(game, game.turn, settings, toast, {
-              popups,
-              onReroll: (plan) => new Promise<boolean>((resolve) => {
-                setReroll(plan);
-                setRerollResolve(() => resolve);
-              }),
-            }).then((next) => { if (next) setGame(next); });
-          }} />
-        </div>
       </div>
 
       <div className="play-others">
