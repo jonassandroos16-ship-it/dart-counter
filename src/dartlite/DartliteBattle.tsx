@@ -57,6 +57,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   // player ID. Only used when run.cardMode is true.
   const [cardStates, setCardStates] = useState<Record<string, CardPlayState>>({});
   const [selectedCardIdx, setSelectedCardIdx] = useState<number | null>(null);
+  const [bonusSlots, setBonusSlots] = useState(0);
   const [showDeck, setShowDeck] = useState(false);
   const [showGraveyard, setShowGraveyard] = useState(false);
   const [animatingOut, setAnimatingOut] = useState<number | null>(null);
@@ -191,6 +192,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
           setCardStates(prev => ({ ...prev, [thrower.id]: endedState }));
         }
       }
+      setBonusSlots(0);
     }
     setState(prev => prev ? resolvePlayerVisit(prev) : prev);
   };
@@ -205,6 +207,8 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     const handDefs = cs.hand.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
     const card = handDefs[handIdx];
     if (!card) return;
+    const maxPlays = MAX_PLAYS_PER_TURN + bonusSlots;
+    if (cs.used.length >= maxPlays) return;
     if (card.type !== 'damage') {
       let updated = playCardFromHand(cs, handIdx);
       if (!updated) return;
@@ -212,13 +216,15 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
         updated = redrawHand(updated);
       } else if (card.effect === 'recycle') {
         updated = recycleGraveyard(updated);
+      } else if (card.effect === 'extra_dart') {
+        setBonusSlots(b => b + 1);
       }
       Sound.play('powerup', {}, settings);
       setSelectedCardIdx(null);
       setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
       return;
     }
-    if (state.darts.length >= MAX_PLAYS_PER_TURN) return;
+    if (state.darts.length >= MAX_PLAYS_PER_TURN + bonusSlots) return;
     const updated = playCardFromHand(cs, handIdx);
     if (!updated) return;
     const base = card.base ?? 0;
@@ -242,7 +248,9 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   };
 
   const partyHpPct = Math.max(0, Math.min(100, (state.partyHp / state.partyMaxHp) * 100));
-  const maxDartsPerVisit = cardMode ? MAX_PLAYS_PER_TURN : 3;
+  const maxDartsPerVisit = cardMode ? MAX_PLAYS_PER_TURN + bonusSlots : 3;
+  const totalCardsPlayed = cardMode && thrower ? (cardStates[thrower.id]?.used.length ?? 0) : 0;
+  const canPlayMore = totalCardsPlayed < maxDartsPerVisit;
   const playerVisitDone = state.phase === 'player' && state.darts.length >= maxDartsPerVisit && state.outcome === 'ongoing';
   const showingFrozen = state.phase === 'enemy'
     && state.pendingEnemyAttacks.length === 0
@@ -424,14 +432,14 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             })}
           </div>
 
-          {state.phase === 'player' && state.outcome === 'ongoing' && state.darts.length < (cardMode ? MAX_PLAYS_PER_TURN : 3) && (
+          {state.phase === 'player' && state.outcome === 'ongoing' && state.darts.length < (cardMode ? MAX_PLAYS_PER_TURN + bonusSlots : 3) && (
             cardMode && thrower ? (() => {
               const cs = cardStates[thrower.id];
               if (!cs) return null;
               const handDefs = cs.hand.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
               const usedDefs = cs.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
               const selectedCard = selectedCardIdx !== null ? handDefs[selectedCardIdx] : null;
-              const canPlayMore = state.darts.length < MAX_PLAYS_PER_TURN;
+              const canPlayMore = totalCardsPlayed < MAX_PLAYS_PER_TURN + bonusSlots;
               return (
                 <>
                 <div className="play-input">
