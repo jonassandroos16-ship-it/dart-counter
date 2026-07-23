@@ -23,9 +23,6 @@ const dart = (base: number, mult: number): CampaignDart => ({
   isBull: base === 25 || base === 50,
 });
 
-// Build a dart that satisfies the given shield layer's target so the match
-// check returns true. For span targets we pick a representative segment; for
-// exact targets we parse the "D"/"T"/single encoding.
 const makeDartMatching = (shield: ShieldLayer): CampaignDart => {
   if (shield.type === 'span') {
     switch (shield.target_value) {
@@ -62,8 +59,6 @@ describe('campaign engine', () => {
     expect(totalLevels()).toBeGreaterThanOrEqual(5);
     const last = CAMPAIGN_LEVELS.levels[CAMPAIGN_LEVELS.levels.length - 1];
     expect(last.is_boss).toBe(true);
-    // getLevel returns the first match across chapters; the last flat level
-    // is chapter 2's boss, so look it up within chapter 2 instead.
     expect(getLevel(5)).toBeDefined();
   });
 
@@ -90,7 +85,7 @@ describe('campaign engine', () => {
     let state = startBattle(lvl, makePlayers(1), settings);
     state = setTarget(state, state.enemies[0].id);
     const enemyHp = state.enemies[0].hp;
-    state = addDart(state, 20, 3, undefined, false, settings); // T20 = 60
+    state = addDart(state, 20, 3, undefined, false, settings);
     expect(state.enemies[0].hp).toBe(Math.max(0, enemyHp - 60));
     expect(state.darts.length).toBe(1);
     expect(state.darts[0].label).toBe('T20');
@@ -100,15 +95,10 @@ describe('campaign engine', () => {
     const lvl = getLevel(1)!;
     let state = startBattle(lvl, makePlayers(1), settings);
     state = setTarget(state, state.enemies[0].id);
-    // Kill first enemy with one dart.
     state = addDart(state, 50, 1, 'Bull', true, settings);
-    // We need to kill all enemies — damage them all to 1 HP first.
-    state = {
-      ...state,
-      enemies: state.enemies.map(e => ({ ...e, hp: 1 })),
-    };
+    state = { ...state, enemies: state.enemies.map(e => ({ ...e, hp: 1 })) };
     state = setTarget(state, state.enemies[0].id);
-    state = addDart(state, 20, 3, undefined, false, settings); // T20 = 60
+    state = addDart(state, 20, 3, undefined, false, settings);
     expect(state.enemies.every(e => e.defeated)).toBe(true);
     expect(state.outcome).toBe('victory');
   });
@@ -129,7 +119,7 @@ describe('campaign engine', () => {
     let state = startBattle(lvl, makePlayers(1), settings);
     state = setTarget(state, state.enemies[0].id);
     const enemyHp = state.enemies[0].hp;
-    state = addDart(state, 20, 3, undefined, false, settings); // T20
+    state = addDart(state, 20, 3, undefined, false, settings);
     expect(state.enemies[0].hp).toBe(Math.max(0, enemyHp - 60));
     state = undoDart(state, settings);
     expect(state.enemies[0].hp).toBe(enemyHp);
@@ -161,14 +151,20 @@ describe('campaign engine', () => {
     expect(state).toBe(before);
   });
 
+  it('resolvePlayerVisit with hasPlayedCards=true advances even with no darts (utility/spell-only visit)', () => {
+    const lvl = getLevel(1)!;
+    let state = startBattle(lvl, makePlayers(1), settings);
+    state = setTarget(state, state.enemies[0].id);
+    state = resolvePlayerVisit(state, true);
+    expect(state.phase).toBe('enemy');
+  });
+
   it('resolvePlayerVisit rotates to the next player in a 2-player party', () => {
     const lvl = getLevel(1)!;
     let state = startBattle(lvl, makePlayers(2), settings);
     state = setTarget(state, state.enemies[0].id);
     state = addDart(state, 20, 3, undefined, false, settings);
     state = resolvePlayerVisit(state);
-    // With 2 players, player 1's visit advances to player 2 (still player
-    // phase). The enemy phase only begins after every player has thrown.
     expect(state.phase).toBe('player');
     expect(state.playerTurnIdx).toBe(1);
   });
@@ -178,7 +174,6 @@ describe('campaign engine', () => {
     const state = startBattle(lvl, makePlayers(1), settings);
     const power = state.players[0].power;
     const enemyArmor = state.enemies[0].armor;
-    // T20 = 60. damage = round((60 + power) * (1 - armor/100)), min 1.
     const t20 = dart(20, 3);
     const expected = Math.max(1, Math.round((60 + power) * (1 - enemyArmor / 100)));
     expect(computePlayerDartDamage(t20, power, enemyArmor)).toBe(expected);
@@ -188,9 +183,8 @@ describe('campaign engine', () => {
     const lvl = getLevel(1)!;
     const state = startBattle(lvl, makePlayers(1), settings);
     const enemy = state.enemies[0];
-    if (enemy.shields.length === 0) return; // no shields on this enemy
+    if (enemy.shields.length === 0) return;
     const shield = enemy.shields[0];
-    // Build a dart that matches the shield's exact/span target.
     const d = makeDartMatching(shield);
     expect(dartMatchesShield(d, shield)).toBe(true);
   });
@@ -199,7 +193,7 @@ describe('campaign engine', () => {
     const lvl = getLevel(1)!;
     const state = startBattle(lvl, makePlayers(1), settings);
     const shields = state.enemies[0].shields;
-    if (shields.length === 0) return; // no shields on this enemy
+    if (shields.length === 0) return;
     const desc = describeShield(shields[0]);
     expect(typeof desc).toBe('string');
     expect(desc.length).toBeGreaterThan(0);
@@ -248,7 +242,6 @@ describe('campaign engine', () => {
     const damaged = { ...state, partyHp: state.partyMaxHp - 100, powerUpCharge: 100, players: state.players.map(p => ({ ...p, powerUpCharge: 100 })) };
     expect(canActivateCoopPowerUp(damaged, 'coop_heal')).toBe(true);
     const after = activateCoopPowerUp(damaged, 'coop_heal');
-    // Heal restores 80 HP; 300 - 100 + 80 = 280 (not capped since below max).
     expect(after.partyHp).toBe(state.partyMaxHp - 100 + 80);
     expect(after.powerUpCharge).toBe(0);
     expect(after.players[0].powerUpCharge).toBe(0);
@@ -260,7 +253,6 @@ describe('campaign engine', () => {
     const charged = { ...state, powerUpCharge: 100, players: state.players.map(p => ({ ...p, powerUpCharge: 100 })) };
     const after = activateCoopPowerUp(charged, 'coop_freeze');
     expect(after.enemies.every(e => e.defeated || e.frozenTurns === 2)).toBe(true);
-    // Frozen enemies skip their turn during prepareEnemyTurn.
     const enemyPhase = { ...after, phase: 'enemy' as const };
     const prepared = prepareEnemyTurn(enemyPhase, () => 0.99);
     expect(prepared.pendingEnemyAttacks.length).toBe(0);
@@ -270,9 +262,6 @@ describe('campaign engine', () => {
   it('coop power-ups: killing the last enemy with an ability ends the battle (victory)', () => {
     const lvl = getLevel(1)!;
     const state = startBattle(lvl, makePlayers(1), settings);
-    // Damage every enemy down to 1 HP so a single Meteor (60 dmg) finishes
-    // them all. This reproduces the bug where an ability killed the last
-    // enemy but the game did not end.
     const wounded = {
       ...state,
       enemies: state.enemies.map(e => ({ ...e, hp: 1 })),
@@ -289,7 +278,6 @@ describe('campaign engine', () => {
   it('coop power-ups: ice_lance killing the last targeted enemy ends the battle', () => {
     const lvl = getLevel(1)!;
     const state = startBattle(lvl, makePlayers(1), settings);
-    // Leave exactly one alive enemy at 1 HP, target it, and lance it.
     const firstAliveIdx = state.enemies.findIndex(e => !e.defeated);
     const wounded = {
       ...state,
@@ -316,16 +304,11 @@ describe('campaign engine', () => {
     const state = startBattle(lvl, makePlayers(1), settings);
     const charged = { ...state, powerUpCharge: 80, players: state.players.map(p => ({ ...p, powerUpCharge: 80 })) };
     const after = activateCoopPowerUp(charged, 'coop_buff_acc');
-    // No player buff is granted — the effect targets enemies instead.
     expect(after.players.every(p => p.buffs.length === 0)).toBe(true);
     expect(after.enemies.every(e => e.defeated || (e.distractedTurns === 3 && e.distractAmount === 0.2))).toBe(true);
-    // A distracted enemy with 0.35 accuracy misses on rng >= 0.15.
     const enemyPhase = { ...after, phase: 'enemy' as const };
     const prepared = prepareEnemyTurn(enemyPhase, () => 0.5);
-    // With accuracy reduced to 0.15, rng=0.5 misses; precision reduced to
-    // 0.20, rng=0.5 scatters randomly — but every dart still resolves.
     expect(prepared.pendingEnemyAttacks.length).toBeGreaterThan(0);
-    // After the enemy turn finishes, the distract timer ticks down to 2.
     let applied = prepared;
     while (applied.pendingEnemyAttacks.length) applied = applyNextEnemyAttack(applied);
     expect(applied.enemies.every(e => e.defeated || e.distractedTurns === 2)).toBe(true);
@@ -349,13 +332,10 @@ describe('campaign engine', () => {
     const lvl = getLevel(1)!;
     const state = startBattle(lvl, makePlayers(1), settings);
     expect(state.powerUpCharge).toBe(0);
-    // T20: 12 (triple) + 60 * 0.05 = 15
     let s = addDart(state, 20, 3, undefined, false, settings);
     expect(s.powerUpCharge).toBe(15);
-    // Bull: 15 + 50 * 0.05 = 17.5
     s = addDart(s, 50, 1, 'Bull', true, settings);
     expect(s.powerUpCharge).toBeCloseTo(32.5, 5);
-    // Undo reverts the last dart's charge.
     s = undoDart(s, settings);
     expect(s.powerUpCharge).toBe(15);
   });
@@ -363,9 +343,7 @@ describe('campaign engine', () => {
   it('coop power-up orb charge is capped at chargeMax', () => {
     const lvl = getLevel(1)!;
     const state = startBattle(lvl, makePlayers(1), settings);
-    // Pre-charge close to the cap, then verify a dart can't push it past.
     const near = { ...state, powerUpCharge: 95, players: state.players.map(p => ({ ...p, powerUpCharge: 95 })) };
-    // Bull adds 15 + 50*0.05 = 17.5 → would be 112.5, capped at 100.
     const s = addDart(near, 50, 1, 'Bull', true, settings);
     expect(s.powerUpCharge).toBe(settings.powerUpScaling.chargeMax);
     expect(s.players[0].powerUpCharge).toBe(settings.powerUpScaling.chargeMax);
@@ -394,7 +372,6 @@ describe('campaign engine', () => {
     const state = startBattle(lvl, makePlayers(2), settings);
     expect(state.players[0].powerUpCharge).toBe(0);
     expect(state.players[1].powerUpCharge).toBe(0);
-    // Player 1 throws T20.
     let s = addDart(state, 20, 3, undefined, false, settings);
     expect(s.players[0].powerUpCharge).toBe(15);
     expect(s.players[1].powerUpCharge).toBe(0);
@@ -403,10 +380,8 @@ describe('campaign engine', () => {
   it('per-player charge: using a skill only consumes the thrower charge', () => {
     const lvl = getLevel(1)!;
     const state = startBattle(lvl, makePlayers(2), settings);
-    // Both players have full charge.
     const charged = { ...state, players: state.players.map(p => ({ ...p, powerUpCharge: 100 })), powerUpCharge: 100 };
     const after = activateCoopPowerUp(charged, 'coop_freeze');
-    // Thrower (player 1, idx 0) spent 100; player 2 keeps 100.
     expect(after.players[0].powerUpCharge).toBe(0);
     expect(after.players[1].powerUpCharge).toBe(100);
   });
@@ -430,7 +405,6 @@ describe('campaign engine', () => {
       coopProgress: { classId: 'priest' as CoopClassId, xp: 200, unlockedPassives: ['pri_hp_1', 'pri_hp_2', 'pri_hp_3'] as CoopPassiveId[], equippedPassives: ['pri_hp_3'] as CoopPassiveId[] },
     }));
     const state = startBattle(lvl, players, settings);
-    // 100 base + 300 bonus = 400, under the 1000 cap.
     expect(state.players[0].maxHp).toBe(400);
     expect(state.passiveBonus?.health).toBe(300);
   });
@@ -443,8 +417,6 @@ describe('campaign engine', () => {
       coopProgress: { classId: 'priest' as CoopClassId, xp: 0, unlockedPassives: ['pri_hp_1'] as CoopPassiveId[], equippedPassives: ['pri_hp_1'] as CoopPassiveId[] },
     }));
     const state = startBattle(lvl, players, settings);
-    // 100 base + 60 * 3 (one Blessing per priest) = 280 per priest; each
-    // player's equipped passive buffs the party independently.
     expect(state.passiveBonus?.health).toBe(180);
     expect(state.passiveBonus?.sources).toHaveLength(3);
     for (const p of state.players) {
@@ -461,8 +433,6 @@ describe('campaign engine', () => {
       coopProgress: { classId: 'priest' as CoopClassId, xp: 200, unlockedPassives: tiers, equippedPassives: [tiers[i]] as CoopPassiveId[] },
     }));
     const state = startBattle(lvl, players, settings);
-    // 60 + 150 + 300 = 510 bonus (base health is capped per player, but the
-    // priest bonus is added on top of the averaged base, not capped here).
     expect(state.passiveBonus?.health).toBe(510);
     expect(state.passiveBonus?.sources).toHaveLength(3);
   });
@@ -477,20 +447,11 @@ describe('campaign engine', () => {
         : { classId: 'rogue' as CoopClassId, xp: 0, unlockedPassives: ['rog_armor_1'] as CoopPassiveId[], equippedPassives: ['rog_armor_1'] as CoopPassiveId[] },
     }));
     const state = startBattle(lvl, players, settings);
-    // Two priests each contribute +60 HP, one rogue contributes +2 armor.
     expect(state.passiveBonus?.health).toBe(120);
     expect(state.passiveBonus?.armor).toBe(2);
     expect(state.passiveBonus?.sources).toHaveLength(3);
   });
 
-  // ── Health averaging + priest buffs ──────────────────────────────────
-  // Regression: the priest passive health bonus was previously added to
-  // each player's maxHp BEFORE averaging, so it was divided by the player
-  // count and capped per-player before the average. A 2-player party with
-  // 400 base HP and +120 priest buffs got 500 instead of 520. The bonus is
-  // now added to the shared party HP AFTER averaging, so the full priest
-  // contribution is always granted (and is not subject to the base
-  // healthMax cap — priest passives are meant to push past it).
   it('party HP includes the FULL priest bonus on top of the averaged base (not divided by player count)', () => {
     const lvl = getLevel(1)!;
     const players = makePlayers(2).map(p => ({
@@ -499,7 +460,6 @@ describe('campaign engine', () => {
       coopProgress: { classId: 'priest' as CoopClassId, xp: 0, unlockedPassives: ['pri_hp_1'] as CoopPassiveId[], equippedPassives: ['pri_hp_1'] as CoopPassiveId[] },
     }));
     const state = startBattle(lvl, players, settings);
-    // Base avg = 400. Two priests each grant +60 = +120 bonus. 400 + 120 = 520.
     expect(state.passiveBonus?.health).toBe(120);
     expect(state.partyMaxHp).toBe(520);
     expect(state.partyHp).toBe(520);
@@ -513,9 +473,6 @@ describe('campaign engine', () => {
       coopProgress: { classId: 'priest' as CoopClassId, xp: 200, unlockedPassives: ['pri_hp_3'] as CoopPassiveId[], equippedPassives: ['pri_hp_3'] as CoopPassiveId[] },
     }));
     const state = startBattle(lvl, players, settings);
-    // Base avg = 1000 (at the cap). Two priests each grant +300 = +600 bonus.
-    // 1000 + 600 = 1600 — past the 1000 base cap, which is the point of
-    // the priest class.
     expect(state.passiveBonus?.health).toBe(600);
     expect(state.partyMaxHp).toBe(1600);
   });
@@ -528,11 +485,9 @@ describe('campaign engine', () => {
       coopProgress: { classId: 'priest' as CoopClassId, xp: 200, unlockedPassives: ['pri_hp_3'] as CoopPassiveId[], equippedPassives: ['pri_hp_3'] as CoopPassiveId[] },
     }));
     const state = startBattle(lvl, players, settings);
-    // 100 base + 300 bonus = 400.
     expect(state.partyMaxHp).toBe(400);
   });
 
-  // ── Per-player coop progress ──────────────────────────────────────────
   it('defaultPlayerCampaignProgress returns empty progress', () => {
     const p = defaultPlayerCampaignProgress();
     expect(p.highest_level_beaten).toBe(0);
@@ -552,10 +507,8 @@ describe('campaign engine', () => {
     expect(after1.chapters?.crimson_vale).toBe(1);
     expect(after1.unlockedPowerUps).toContain('coop_meteor');
     expect(after1.highest_level_beaten).toBe(1);
-    // Clearing again does not double-grant the reward.
     const after1b = recordLevelClearForPlayer({ ...p, campaignProgress: after1 }, 'crimson_vale', 0, 1, 'coop_meteor');
     expect(after1b.unlockedPowerUps?.length).toBe(1);
-    // Clearing a later level advances the chapter cleared count.
     const after2 = recordLevelClearForPlayer({ ...p, campaignProgress: after1 }, 'crimson_vale', 1, 2, 'coop_phantom');
     expect(after2.chapters?.crimson_vale).toBe(2);
     expect(after2.unlockedPowerUps).toContain('coop_phantom');
@@ -584,13 +537,9 @@ describe('campaign engine', () => {
     const base = makePlayers(2);
     const p1: Player = { ...base[0], campaignProgress: { highest_level_beaten: 1, unlockedPowerUps: [], chapters: { crimson_vale: 1 } } };
     const p2: Player = { ...base[1], campaignProgress: { highest_level_beaten: 0, unlockedPowerUps: [], chapters: {} } };
-    // Level 1 is always unlocked.
     expect(isLevelUnlockedForParty('crimson_vale', 1, [p1, p2])).toBe(true);
-    // Level 2 is unlocked because p1 cleared level 1.
     expect(isLevelUnlockedForParty('crimson_vale', 2, [p1, p2])).toBe(true);
-    // Level 3 is locked because neither cleared level 2.
     expect(isLevelUnlockedForParty('crimson_vale', 3, [p1, p2])).toBe(false);
-    // Empty party: nothing unlocked (except level 1).
     expect(isLevelUnlockedForParty('crimson_vale', 2, [])).toBe(false);
   });
 });
