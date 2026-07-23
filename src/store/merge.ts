@@ -3,16 +3,29 @@ import type { PlayerCard } from '../cards/types';
 import type { PlayerCoopProgress } from '../campaign/types';
 import { uid } from './format';
 
+function normalizeCards(
+  cards: unknown,
+): Record<string, PlayerCard[]> | undefined {
+  if (!cards) return undefined;
+  if (Array.isArray(cards)) {
+    return cards.length ? { default: cards as PlayerCard[] } : undefined;
+  }
+  if (typeof cards === 'object') return cards as Record<string, PlayerCard[]>;
+  return undefined;
+}
+
 function mergeCards(
   a: Record<string, PlayerCard[]> | undefined,
   b: Record<string, PlayerCard[]> | undefined,
 ): Record<string, PlayerCard[]> | undefined {
-  if (!a && !b) return undefined;
-  const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+  const na = normalizeCards(a);
+  const nb = normalizeCards(b);
+  if (!na && !nb) return undefined;
+  const keys = new Set([...Object.keys(na || {}), ...Object.keys(nb || {})]);
   const out: Record<string, PlayerCard[]> = {};
   for (const k of keys) {
-    const av = a?.[k] || [];
-    const bv = b?.[k] || [];
+    const av = na?.[k] || [];
+    const bv = nb?.[k] || [];
     if (av.length === 0 && bv.length === 0) continue;
     const map = new Map<string, PlayerCard>();
     for (const c of [...av, ...bv]) {
