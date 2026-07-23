@@ -151,9 +151,10 @@ export function addDart(
   labelOverride?: string,
   isBull?: boolean,
   settings?: Settings,
+  maxDarts?: number,
 ): CampaignBattleState {
   if (state.phase !== 'player') return state;
-  if (state.darts.length >= 3) return state;
+  if (state.darts.length >= (maxDarts ?? 3)) return state;
   let value: number, label: string;
   if (isBull) { value = 50; label = 'Bull'; }
   else if (base === 25) { value = mult === 2 ? 50 : 25; label = mult === 2 ? 'Bull' : '25'; }

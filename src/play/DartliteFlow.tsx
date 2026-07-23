@@ -8,7 +8,7 @@ import {
   startRun, beginRound, resolveBattle,
   type DartliteRun,
 } from '../dartlite/engine';
-import { updateCoopState, getDeviceId, ownsPlayer } from '../multiplayer/client';
+import { updateCoopState, type LobbyPlayer } from '../multiplayer/client';
 
 export type DartliteStage = 'none' | 'setup' | 'battle' | 'gameover';
 
@@ -26,7 +26,7 @@ interface Props {
   /** Multiplayer: lobby ID for state sync. */
   lobbyId?: string;
   /** Multiplayer: lobby players for device-ownership checks. */
-  lobbyPlayers?: { player_id: string; device_id: string }[];
+  lobbyPlayers?: LobbyPlayer[];
   /** Multiplayer: true if this device is the host (writes state to DB). */
   isHost?: boolean;
   /** Multiplayer: remote run state received from the host via realtime. */

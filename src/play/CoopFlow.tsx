@@ -19,6 +19,7 @@ import {
 import { getChapter, isChapterComplete } from '../campaign/campaignLevels';
 import { cardsForLevelUp, addCard, getPlayerCards, setPlayerCards } from '../cards/deck';
 import { PostGameOverlay, type PostGameInfo, type LevelUpInfo, type XpAwardInfo } from './PostGameOverlay';
+import type { LobbyPlayer } from '../multiplayer/client';
 
 export type CoopStage = 'none' | 'setup' | 'chapters' | 'map' | 'battle' | 'postgame';
 
@@ -35,14 +36,14 @@ interface Props {
   /** Multiplayer: lobby ID for state sync. */
   lobbyId?: string;
   /** Multiplayer: lobby players for device-ownership checks. */
-  lobbyPlayers?: { player_id: string; device_id: string }[];
+  lobbyPlayers?: LobbyPlayer[];
   /** Multiplayer: true if this device is the host (writes state to DB). */
   isHost?: boolean;
   /** Multiplayer: remote state received from the host via realtime. */
   remoteRun?: any;
 }
 
-export function CoopFlow({ players, settings, music, setPlayers, toast, onExitToMenu, skipSetup, lobbyId, lobbyPlayers, isHost, remoteRun }: Props) {
+export function CoopFlow({ players, settings, music, setPlayers, toast, onExitToMenu, skipSetup }: Props) {
   const [stage, setStage] = useState<CoopStage>(skipSetup ? 'chapters' : 'none');
   const [playerIds, setPlayerIds] = useState<string[]>(skipSetup ? players.map(p => p.id) : []);
   const [chapterId, setChapterId] = useState<string | null>(null);
