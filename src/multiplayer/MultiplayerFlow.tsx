@@ -4,8 +4,10 @@ import type { Lobby, LobbyPlayer, GameConfig } from './client';
 import {
   createLobby, joinLobby, leaveLobby, deleteLobby,
   fetchLobbyPlayers, startGame, subscribeToLobby,
-  getDeviceId, setLobbyStatus,
+  getDeviceId, setLobbyStatus, setLobbyGameMode,
 } from './client';
+import type { MultiplayerGameMode } from './client';
+import { Target, Layers } from 'lucide-react';
 import { Sound } from '../sound';
 import type { MusicEngine } from '../music';
 import type { PopupControls } from '../Popups';
@@ -28,6 +30,7 @@ interface Props {
     setGame: (g: Game | null) => void;
     isMyTurn: boolean;
     popups: PopupControls;
+    gameMode: MultiplayerGameMode;
   }) => React.ReactNode;
 }
 
@@ -68,7 +71,7 @@ export function MultiplayerFlow({
   }, []);
 
   const handleCreate = useCallback(async (name: string, hostPlayer: Player) => {
-    const newLobby = await createLobby(name, hostPlayer);
+    const newLobby = await createLobby(name, hostPlayer, settings.gameMode);
     if (!newLobby) { toast('Could not create lobby'); return; }
     setLobby(newLobby);
     setStage('room');
@@ -78,7 +81,7 @@ export function MultiplayerFlow({
     const lp = await fetchLobbyPlayers(newLobby.id);
     setLobbyPlayers(lp);
     toast(`Lobby created! Code: ${newLobby.code}`);
-  }, [subscribe, toast]);
+  }, [subscribe, toast, settings.gameMode]);
 
   const handleJoin = useCallback(async (targetLobby: Lobby, joinPlayer: Player) => {
     setLobby(targetLobby);
@@ -100,6 +103,12 @@ export function MultiplayerFlow({
     }
   }, [lobby, toast]);
 
+  const isHost = lobby?.host_device_id === deviceId;
+  useEffect(() => {
+    localStorage.setItem('mp_hosting', isHost && lobby ? '1' : '0');
+    return () => { localStorage.setItem('mp_hosting', '0'); };
+  }, [isHost, lobby]);
+
   const handleLeave = useCallback(async () => {
     if (!lobby) return;
     const myPlayers = lobbyPlayers.filter(lp => lp.device_id === deviceId);
@@ -110,6 +119,7 @@ export function MultiplayerFlow({
     if (lobby.host_device_id === deviceId) {
       await deleteLobby(lobby.id);
     }
+    localStorage.setItem('mp_hosting', '0');
     setLobby(null);
     setLobbyPlayers([]);
     setGameState(null);
@@ -157,6 +167,8 @@ export function MultiplayerFlow({
     );
   }
 
+  const lobbyGameMode: MultiplayerGameMode = lobby?.game_mode ?? settings.gameMode;
+
   if (stage === 'game' && lobby && game) {
     return (
       <MultiplayerGameView
@@ -169,6 +181,7 @@ export function MultiplayerFlow({
         onGameUpdate={handleGameUpdate}
         onGameOver={handleGameOver}
         renderBoard={renderBoard}
+        gameMode={lobbyGameMode}
       />
     );
   }
