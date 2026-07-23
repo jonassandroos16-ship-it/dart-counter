@@ -250,7 +250,6 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   const partyHpPct = Math.max(0, Math.min(100, (state.partyHp / state.partyMaxHp) * 100));
   const maxDartsPerVisit = cardMode ? MAX_PLAYS_PER_TURN + bonusSlots : 3;
   const totalCardsPlayed = cardMode && thrower ? (cardStates[thrower.id]?.used.length ?? 0) : 0;
-  const canPlayMore = totalCardsPlayed < maxDartsPerVisit;
   const playerVisitDone = state.phase === 'player' && state.darts.length >= maxDartsPerVisit && state.outcome === 'ongoing';
   const showingFrozen = state.phase === 'enemy'
     && state.pendingEnemyAttacks.length === 0
