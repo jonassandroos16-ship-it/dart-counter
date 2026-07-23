@@ -7,7 +7,7 @@ import type { MusicEngine } from '../../music';
 import type { PopupControls } from '../../Popups';
 import { AttributeStrip, BadgeAvatar } from '../common';
 import { clearVisitPowerUpFlags, tickShield } from '../dart';
-import { runMilestones, awardXP, checkTitleUnlocks, awardBadges } from '../../rewards';
+import { runMilestones, awardXP, checkTitleUnlocks, awardBadges } from '../rewards';
 import { finishSimpleGame } from '../finish';
 import { GameOver } from '../GameOver';
 import type { PlayerCard, CardDef, CardPlayState } from '../../cards/types';
@@ -525,7 +525,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         ) : isKiller ? (
           <>
             <div className="pc-remaining" style={{ fontSize: 28 }}>
-              {(p.killerHits || 0) >= 5 ? {'\u{1F3AF}'} Aim at opponents' : `Hit ${p.killerNumber}`}
+              {(p.killerHits || 0) >= 5 ? '🎯 Aim at opponents' : `Hit ${p.killerNumber}`}
             </div>
             <div className="checkout-hint center">
               {(p.killerHits || 0) < 5 ? `Become a Killer: ${p.killerHits || 0}/5 hits on ${p.killerNumber}` : 'Hit opponent numbers to eliminate them'}
