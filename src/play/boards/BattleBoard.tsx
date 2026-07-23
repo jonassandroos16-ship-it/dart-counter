@@ -14,14 +14,12 @@ import { BattleVisitOverlay } from '../BattleVisitOverlay';
 import { RerollOverlay } from '../RerollOverlay';
 import type { RerollPlan } from '../../powerups';
 
-export function BattleBoard({ game, setGame, settings, players, games, toast, music, onQuit, setGames, setPlayers, popups, onGameOver }: {
-  game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[]; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void;
+export function BattleBoard({ game, setGame, settings, players, games, toast, music, onQuit, setGames, setPlayers, popups, onGameOver, isMyTurn = true }: {
+  game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[]; toast: (m: string) => void; music: MusicEngine; onQuit: () => void; setGames: (updater: any) => void; setPlayers: (updater: any) => void; popups: PopupControls; onGameOver: () => void; isMyTurn?: boolean;
 }) {
   const [targetId, setTargetId] = useState<string | null>(null);
   const [shaking, setShaking] = useState<Record<string, number>>({});
   const [lastHit, setLastHit] = useState<{ target: string; damage: number } | null>(null);
-  // When set, an animated overlay walks the user through the per-dart damage
-  // of the just-entered visit. The overlay's onDone advances the turn.
   const [overlay, setOverlay] = useState<{ attacker: GamePlayer; target: GamePlayer; darts: Dart[]; surgeActive: boolean; pending: Game } | null>(null);
   const [reroll, setReroll] = useState<RerollPlan | null>(null);
   const [rerollResolve, setRerollResolve] = useState<((v: boolean) => void) | null>(null);
@@ -79,16 +77,12 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
     const victim = newPlayers.find((pl: any) => pl.id === target);
     if (!victim || victim.defeated) { toast('That opponent is already defeated'); return; }
 
-    // Per-dart damage: each dart is calculated independently so armor applies
-    // to every dart and power boosts every successful hit. Surge doubles each
-    // dart's value for damage purposes (mirroring the score multiplier).
     const darts = [...game.darts] as Dart[];
     const power = cur.powerPct || 0;
     const armor = victim.armorPct || 0;
     let totalDamage = 0;
     let hp = victim.hp || 0;
     for (const d of darts) {
-      // Bullseye Frenzy: bull hits deal double damage in battle too.
       const isBull = d.value === 50 || d.value === 25;
       const dartBaseValue = bullseyeFrenzyActive && isBull ? d.value * 2 : d.value;
       const dartValue = surgeActive ? dartBaseValue * 2 : dartBaseValue;
@@ -119,9 +113,6 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
     }
 
     const finishedState: Game = { ...game, players: newPlayers, darts: [], mult: 1 };
-    // Show the animated per-dart overlay. Turn rotation happens in onDone
-    // so the overlay can animate the target's HP draining before the next
-    // player's board appears.
     setOverlay({ attacker: cur as GamePlayer, target: victim as GamePlayer, darts, surgeActive, pending: finishedState });
   };
 
@@ -140,7 +131,6 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
     Sound.play('enter', {}, settings);
     let nextTurn = (finishedState.turn + 1) % newPlayers.length;
     while (newPlayers[nextTurn].defeated) nextTurn = (nextTurn + 1) % newPlayers.length;
-    // Shield: tick down the current player's shield at the end of their visit.
     if (finishedState.powerUpsEnabled) newPlayers[finishedState.turn] = tickShield(newPlayers[finishedState.turn]);
     if (finishedState.powerUpsEnabled) {
       let guards = 0;
@@ -270,7 +260,7 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
       </div>
 
       <div className="play-input">
-        <KeypadPad game={game} setGame={setGame as any} onAdd={addDart} onUndo={() => setGame(undoDart(game))} onEnter={enterVisit} enterLabel="Attack!" />
+        <KeypadPad game={game} setGame={setGame as any} onAdd={addDart} onUndo={() => setGame(undoDart(game))} onEnter={enterVisit} enterLabel="Attack!" disabled={!isMyTurn} />
       </div>
       {overlay ? (
         <BattleVisitOverlay
