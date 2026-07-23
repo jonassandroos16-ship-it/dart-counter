@@ -20,6 +20,7 @@ import { DartliteFlow } from '../play/DartliteFlow';
 type Stage = 'browser' | 'create' | 'room' | 'game' | 'coop' | 'dartlite';
 interface Props {
   players: Player[];
+  setPlayers: (updater: any) => void;
   settings: Settings;
   music: MusicEngine;
   popups: PopupControls;
@@ -37,7 +38,7 @@ interface Props {
 
 
 export function MultiplayerFlow({
-  players, settings, music, popups, setGames, toast, onExitToMenu, renderBoard,
+  players, setPlayers, settings, music, popups, setGames, toast, onExitToMenu, renderBoard,
 }: Props) {
   const deviceId = getDeviceId();
   const [stage, setStage] = useState<Stage>('browser');
