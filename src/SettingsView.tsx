@@ -15,6 +15,7 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
   const mergeInputRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<MusicEngine | null>(null);
   const [previewing, setPreviewing] = useState<string | null>(null);
+  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
 
   if (!previewRef.current) previewRef.current = new MusicEngine();
 
@@ -182,10 +183,17 @@ export function SettingsView({ players, games, settings, setSettings, setPlayers
         <h3 style={{ marginBottom: 10 }}>Cloud Sync</h3>
         {!hasDatabase && <div className="muted small" style={{ marginBottom: 10 }}>Not configured — using local storage only.</div>}
         {hasDatabase && !connected && <div className="muted small" style={{ marginBottom: 10, color: 'var(--error)' }}>Not connected — check your database settings.</div>}
-        <button className="btn block primary" onClick={onSync} disabled={syncing || !hasDatabase} style={{ marginBottom: 8 }}>
+        <button className="btn block primary" onClick={async () => { const r = await onSync(); setSyncResult(r); toast(r.message); }} disabled={syncing || !hasDatabase} style={{ marginBottom: 8 }}>
           {syncing ? 'Syncing…' : 'Sync now'}
         </button>
+        {syncResult && !syncing && (
+          <div className="small" style={{ marginBottom: 8, padding: '8px 10px', borderRadius: 8, background: syncResult.ok ? 'var(--success-bg, #1a3a2a)' : 'var(--error-bg, #3a1a1a)', border: `1px solid ${syncResult.ok ? 'var(--success, #2a7a4a)' : 'var(--error, #aa3333)'}`, color: 'var(--text)' }}>
+            <strong>{syncResult.ok ? 'Synced' : 'Sync failed'}</strong> — {syncResult.message}
+          </div>
+        )}
         {(upToDate && hasDatabase && connected) && <div className="muted small center">Up to date{lastSyncLabel ? ` · ${lastSyncLabel}` : ''}</div>}
+        {hasDatabase && !connected && !syncResult && <div className="muted small" style={{ marginTop: 6 }}>The last sync attempt could not reach the database. Your changes are saved locally and will sync when the connection is restored.</div>}
+        {hasDatabase && connected && !upToDate && !syncing && <div className="muted small" style={{ marginTop: 6 }}>You have unsaved changes. Press "Sync now" to push them to the cloud.</div>}
         <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: 'var(--bg-3)', border: '1px solid var(--border)', fontSize: 11, lineHeight: 1.5, wordBreak: 'break-all' }}>
           <div className="muted small" style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>Connection</div>
           <div className="muted small">URL: <code style={{ color: 'var(--text)' }}>{import.meta.env.VITE_SUPABASE_URL || 'not configured'}</code></div>
