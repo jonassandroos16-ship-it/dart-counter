@@ -78,7 +78,7 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
       onExitToMenu={() => { setMode('menu'); music.startContext('setup', settings); }}
       renderBoard={({ game: g, setGame: sg, popups: mpPopups, isMyTurn: myTurn, gameMode: mpGameMode }) => {
         const quit = () => { sg(null); onQuit(); };
-        if (mpGameMode === 'cards') return <CardBoard game={g} setGame={sg} settings={settings} players={players} players={players} games={games} setGames={setGames} setPlayers={setPlayers} toast={toast} music={music} onQuit={quit} onGameOver={onGameOver} popups={mpPopups} isMyTurn={myTurn} />;
+        if (mpGameMode === 'cards') return <CardBoard game={g} setGame={sg} settings={settings} players={players} games={games} setGames={setGames} setPlayers={setPlayers} toast={toast} music={music} onQuit={quit} onGameOver={onGameOver} popups={mpPopups} isMyTurn={myTurn} />;
         if (g.atc) return <AtcBoard game={g} setGame={sg} settings={settings} players={players} games={games} toast={toast} music={music} onQuit={quit} setGames={setGames} setPlayers={setPlayers} popups={mpPopups} onGameOver={onGameOver} isMyTurn={myTurn} />;
         if (g.mode === 'killer') return <KillerBoard game={g} setGame={sg} settings={settings} players={players} games={games} toast={toast} music={music} onQuit={quit} setGames={setGames} setPlayers={setPlayers} popups={mpPopups} onGameOver={onGameOver} isMyTurn={myTurn} />;
         if (g.mode === 'highscore') return <HighScoreBoard game={g} setGame={sg} settings={settings} players={players} games={games} toast={toast} music={music} onQuit={quit} setGames={setGames} setPlayers={setPlayers} popups={mpPopups} onGameOver={onGameOver} isMyTurn={myTurn} />;
