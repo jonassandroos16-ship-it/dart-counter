@@ -93,16 +93,17 @@ export function DartliteFlow({ players, settings, music, setPlayers, onExitToMen
       settings={settings}
       music={music}
       lobbyPlayers={lobbyPlayers}
-      onBattleEnd={(won) => {
+      onBattleEnd={(won, finalBattle) => {
         if (!isHost && skipSetup) return; // only host resolves battles
+        const runWithBattle = finalBattle ? { ...run, battle: finalBattle } : run;
         if (won) {
-          const resolved = resolveBattle(run, true);
+          const resolved = resolveBattle(runWithBattle, true);
           syncRun(resolved);
           if (resolved.phase === 'gameover') {
             setStage('gameover');
           }
         } else {
-          const resolved = resolveBattle(run, false);
+          const resolved = resolveBattle(runWithBattle, false);
           syncRun(resolved);
           setStage('gameover');
         }

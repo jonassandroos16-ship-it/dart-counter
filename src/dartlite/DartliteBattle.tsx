@@ -34,7 +34,7 @@ interface Props {
   players: Player[];
   settings: Settings;
   music: MusicEngine;
-  onBattleEnd: (won: boolean) => void;
+  onBattleEnd: (won: boolean, finalBattle: CampaignBattleState | null) => void;
   onChoice: (run: DartliteRun) => void;
   onQuit: () => void;
   lobbyPlayers?: LobbyPlayer[];
@@ -126,10 +126,10 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     if (!state) return;
     if (state.outcome === 'victory') {
       Sound.play('win', {}, settings);
-      onBattleEnd(true);
+      onBattleEnd(true, state);
     } else if (state.outcome === 'defeat') {
       Sound.play('kill', {}, settings);
-      onBattleEnd(false);
+      onBattleEnd(false, state);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state?.outcome]);
