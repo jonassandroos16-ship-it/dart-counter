@@ -47,18 +47,10 @@ export interface Player {
   // own independent attribute pool tied to that class's level.
   classAttributes?: Record<string, ClassAttributes>;
   powerUps?: PlayerPowerUps;
-  developerMode?: boolean;
-  showdownBg?: string;
   coopProgress?: PlayerCoopProgress;
-  // Per-player Co-op Campaign progress. Each player tracks their own
-  // cleared levels and unlocked power-up rewards, so a level is only
-  // "beaten for everyone" when every party member has cleared it.
   campaignProgress?: PlayerCampaignProgress;
-  // Per-player Dartlite (rogue-lite) stats. Persist across runs; trinkets
-  // and run-time attributes do NOT carry over.
   dartliteStats?: PlayerDartliteStats;
-  // Per-player card collection for card-based mode, keyed by class id.
-  cards?: Record<string, PlayerCard[]>;
+  cards?: Record<string, PlayerCard[]>; // per-class card collection (card mode)
 }
 
 export interface Dart {
@@ -68,6 +60,16 @@ export interface Dart {
   mult: number;
   isDouble: boolean;
   isOuter?: boolean;
+}
+
+export interface PlayedCard {
+  playerId: string;
+  playerName: string;
+  playerColor: string;
+  cardId: string;
+  upgradeLevel: number;
+  turn: number;
+  timestamp: number;
 }
 
 export interface Visit {
@@ -148,6 +150,8 @@ export interface Game {
   winningTeam?: number | null;  // team that won (for team mode)
   powerUpsEnabled?: boolean;    // true when power ups are active for this match
   cardState?: Record<string, CardPlayState>; // per-player deck-builder state (card mode)
+  playedCards?: PlayedCard[]; // cards played this match, visible to everyone (card mode)
+  lastCardPlay?: { playerId: string; cardId: string; upgradeLevel: number; timestamp: number } | null; // last card played, for cross-device animation
 }
 
 export interface GameRecord {

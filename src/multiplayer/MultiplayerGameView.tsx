@@ -130,7 +130,7 @@ export function MultiplayerGameView({
         {gameMode === 'cards' ? 'Card Mode' : 'Board Mode'}
       </div>
       {renderBoard({ game, setGame, isMyTurn: myTurn, popups: wrappedPopups, gameMode })}
-      {!myTurn && !game.finished && (
+      {!myTurn && !game.finished && gameMode !== 'cards' && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: 50,
           background: 'rgba(0,0,0,0.45)', display: 'flex',
