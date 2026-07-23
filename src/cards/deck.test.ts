@@ -7,9 +7,9 @@ import {
 import { CARD_DEFS, cardDamage } from './definitions';
 
 describe('Deck Management', () => {
-  it('defaultPlayerCards returns 10 starter cards for a class', () => {
+  it('defaultPlayerCards returns 11 starter cards for a class', () => {
     const cards = defaultPlayerCards('warrior');
-    expect(cards).toHaveLength(10);
+    expect(cards).toHaveLength(11);
     expect(hasCard(cards, 'dmg_warrior_slam')).toBe(true);
     expect(hasCard(cards, 'dmg_warrior_cleave')).toBe(true);
     expect(hasCard(cards, 'spell_surge')).toBe(true);
@@ -20,11 +20,12 @@ describe('Deck Management', () => {
     expect(hasCard(cards, 'util_redraw')).toBe(true);
     expect(hasCard(cards, 'util_recycle')).toBe(true);
     expect(hasCard(cards, 'util_warrior_rage')).toBe(true);
+    expect(hasCard(cards, 'util_focus')).toBe(true);
   });
 
-  it('defaultPlayerCards returns 10 cards for priest', () => {
+  it('defaultPlayerCards returns 11 cards for priest', () => {
     const cards = defaultPlayerCards('priest');
-    expect(cards).toHaveLength(10);
+    expect(cards).toHaveLength(11);
     expect(hasCard(cards, 'dmg_priest_smite')).toBe(true);
     expect(hasCard(cards, 'dmg_priest_judgment')).toBe(true);
     expect(hasCard(cards, 'spell_heal')).toBe(true);
@@ -32,9 +33,9 @@ describe('Deck Management', () => {
     expect(hasCard(cards, 'util_priest_blessing')).toBe(true);
   });
 
-  it('defaultPlayerCards returns 10 cards for rogue', () => {
+  it('defaultPlayerCards returns 11 cards for rogue', () => {
     const cards = defaultPlayerCards('rogue');
-    expect(cards).toHaveLength(10);
+    expect(cards).toHaveLength(11);
     expect(hasCard(cards, 'dmg_rogue_backstab')).toBe(true);
     expect(hasCard(cards, 'dmg_rogue_poison')).toBe(true);
     expect(hasCard(cards, 'spell_enemy_debuff')).toBe(true);
@@ -42,9 +43,9 @@ describe('Deck Management', () => {
     expect(hasCard(cards, 'util_rogue_shadowstep')).toBe(true);
   });
 
-  it('defaultPlayerCards returns 10 cards without a class (fallback)', () => {
+  it('defaultPlayerCards returns 11 cards without a class (fallback)', () => {
     const cards = defaultPlayerCards();
-    expect(cards).toHaveLength(10);
+    expect(cards).toHaveLength(11);
   });
 
   it('does not include an Outer Bull card by default for warrior', () => {
@@ -56,16 +57,16 @@ describe('Deck Management', () => {
     const cards = defaultPlayerCards('warrior');
     const updated = addCard(cards, 'dmg_bull');
     expect(hasCard(updated, 'dmg_bull')).toBe(true);
-    expect(updated).toHaveLength(11);
+    expect(updated).toHaveLength(12);
     const duped = addCard(updated, 'dmg_bull');
-    expect(duped).toHaveLength(11);
+    expect(duped).toHaveLength(12);
   });
 
   it('removeCard removes a card', () => {
     const cards = defaultPlayerCards('warrior');
     const updated = removeCard(cards, 'dmg_s20');
     expect(hasCard(updated, 'dmg_s20')).toBe(false);
-    expect(updated).toHaveLength(9);
+    expect(updated).toHaveLength(10);
   });
 
   it('upgradeCard marks a card as upgraded (level 1)', () => {
@@ -166,8 +167,8 @@ describe('Deck Management', () => {
   });
 
   it('deckSize returns correct count', () => {
-    expect(deckSize(defaultPlayerCards('warrior'))).toBe(10);
-    expect(deckSize(addCard(defaultPlayerCards('warrior'), 'dmg_bull'))).toBe(11);
+    expect(deckSize(defaultPlayerCards('warrior'))).toBe(11);
+    expect(deckSize(addCard(defaultPlayerCards('warrior'), 'dmg_bull'))).toBe(12);
   });
 
   it('isDeckValid requires at least 4 cards', () => {
