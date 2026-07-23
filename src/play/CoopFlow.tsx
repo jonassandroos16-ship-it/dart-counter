@@ -29,11 +29,22 @@ interface Props {
   setPlayers: (updater: any) => void;
   toast: (m: string) => void;
   onExitToMenu: () => void;
+  /** When true, skip the party-selection setup screen — players are already
+   *  chosen by the lobby. Go directly to chapter select. */
+  skipSetup?: boolean;
+  /** Multiplayer: lobby ID for state sync. */
+  lobbyId?: string;
+  /** Multiplayer: lobby players for device-ownership checks. */
+  lobbyPlayers?: { player_id: string; device_id: string }[];
+  /** Multiplayer: true if this device is the host (writes state to DB). */
+  isHost?: boolean;
+  /** Multiplayer: remote state received from the host via realtime. */
+  remoteRun?: any;
 }
 
-export function CoopFlow({ players, settings, music, setPlayers, toast, onExitToMenu }: Props) {
-  const [stage, setStage] = useState<CoopStage>('setup');
-  const [playerIds, setPlayerIds] = useState<string[]>([]);
+export function CoopFlow({ players, settings, music, setPlayers, toast, onExitToMenu, skipSetup, lobbyId, lobbyPlayers, isHost, remoteRun }: Props) {
+  const [stage, setStage] = useState<CoopStage>(skipSetup ? 'chapters' : 'setup');
+  const [playerIds, setPlayerIds] = useState<string[]>(skipSetup ? players.map(p => p.id) : []);
   const [chapterId, setChapterId] = useState<string | null>(null);
   const [levelId, setLevelId] = useState<number | null>(null);
   const [postGame, setPostGame] = useState<PostGameInfo | null>(null);

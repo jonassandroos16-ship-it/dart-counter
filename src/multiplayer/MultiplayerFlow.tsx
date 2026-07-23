@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import type { Game, GameRecord, Player, Settings } from '../types';
-import type { Lobby, LobbyPlayer, GameConfig } from './client';
+import type { Lobby, LobbyPlayer, GameConfig, InputMode } from './client';
 import {
   createLobby, joinLobby, leaveLobby, deleteLobby,
   fetchLobbyPlayers, startGame, subscribeToLobby,
-  getDeviceId, setLobbyStatus,
+  getDeviceId, setLobbyStatus, startCoopGame,
 } from './client';
 import type { MultiplayerGameMode } from './client';
 import { Sound } from '../sound';
@@ -46,6 +46,7 @@ export function MultiplayerFlow({
   const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>([]);
   const [game, setGameState] = useState<Game | null>(null);
   const [coopPlayers, setCoopPlayers] = useState<Player[]>([]);
+  const [remoteRun, setRemoteRun] = useState<any>(null);
   const unsubRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     return () => { if (unsubRef.current) unsubRef.current(); };
@@ -58,8 +59,37 @@ export function MultiplayerFlow({
       (updated) => {
         setLobby(updated);
         if (updated.status === 'playing' && updated.game_state) {
-          setGameState(updated.game_state);
-          setStage('game');
+          const gs = updated.game_state as any;
+          // Coop/Dartlite runs are synced as game_state but don't have the
+          // standard Game shape (no .players array with .visits). Detect by
+          // checking for _coopRun marker or phase/round fields.
+          if (gs._coopRun || gs.phase === 'choice' || gs.phase === 'boss_victory' || gs.phase === 'reward' || gs.phase === 'battle' || gs.phase === 'gameover') {
+            setRemoteRun(gs);
+          } else {
+            setGameState(updated.game_state);
+            setStage('game');
+          }
+        }
+        if (updated.status === 'playing' && !updated.game_state && updated.game_config) {
+          // Coop/Dartlite start: host wrote game_config with _coopMode but no
+          // game_state. Remote devices read the config and transition to the
+          // coop/dartlite stage using the player IDs from the lobby.
+          const cfg = updated.game_config as any;
+          if (cfg._coopMode === 'dartlite') {
+            const coopPlayers = lobbyPlayers
+              .filter(lp => cfg.playerIds?.includes(lp.player_id))
+              .map(lp => ({ id: lp.player_id, name: lp.player_name, color: lp.player_color } as Player));
+            setCoopPlayers(coopPlayers);
+            setStage('dartlite');
+            music.stop();
+          } else if (cfg._coopMode === 'coop') {
+            const coopPlayers = lobbyPlayers
+              .filter(lp => cfg.playerIds?.includes(lp.player_id))
+              .map(lp => ({ id: lp.player_id, name: lp.player_name, color: lp.player_color } as Player));
+            setCoopPlayers(coopPlayers);
+            setStage('coop');
+            music.stop();
+          }
         }
         if (updated.status === 'lobby') {
           setStage('room');
@@ -71,10 +101,10 @@ export function MultiplayerFlow({
       },
       (lp) => setLobbyPlayers(lp),
     );
-  }, []);
+  }, [lobbyPlayers, music]);
 
   const handleCreate = useCallback(async (name: string, hostPlayer: Player) => {
-    const newLobby = await createLobby(name, hostPlayer, settings.gameMode);
+    const newLobby = await createLobby(name, hostPlayer, settings.gameMode, settings.gameMode);
     if (!newLobby) { toast('Could not create lobby'); return; }
     setLobby(newLobby);
     setStage('room');
@@ -135,9 +165,13 @@ export function MultiplayerFlow({
     if (mpGame._multiplayerCoop) {
       const coopMode = mpGame._coopMode as string;
       const coopPlayers = mpGame.players as Player[];
+      const inputMode = (mpGame._inputMode as InputMode) ?? (settings.gameMode === 'cards' ? 'cards' : 'dartboard');
+      const playerIds = coopPlayers.map(p => p.id);
       setCoopPlayers(coopPlayers);
       setStage(coopMode === 'dartlite' ? 'dartlite' : 'coop');
       music.stop();
+      // Notify remote devices via realtime so they also transition.
+      await startCoopGame(lobby.id, coopMode as 'coop' | 'dartlite', playerIds, inputMode);
       return;
     }
     await startGame(lobby.id, config, newGame);
@@ -180,6 +214,7 @@ export function MultiplayerFlow({
   }
 
   const lobbyGameMode: MultiplayerGameMode = lobby?.game_mode ?? settings.gameMode;
+  const lobbyInputMode: InputMode = lobby?.input_mode ?? (lobbyGameMode === 'cards' ? 'cards' : 'dartboard');
 
   if (stage === 'coop' && coopPlayers.length > 0) {
     return <CoopFlow
@@ -188,7 +223,12 @@ export function MultiplayerFlow({
       music={music}
       setPlayers={setPlayers}
       toast={toast}
-      onExitToMenu={() => { setCoopPlayers([]); handleLeave(); }}
+      onExitToMenu={() => { setCoopPlayers([]); setRemoteRun(null); handleLeave(); }}
+      skipSetup
+      lobbyId={lobby?.id}
+      lobbyPlayers={lobbyPlayers}
+      isHost={isHost}
+      remoteRun={remoteRun}
     />;
   }
 
@@ -198,7 +238,13 @@ export function MultiplayerFlow({
       settings={settings}
       music={music}
       setPlayers={setPlayers}
-      onExitToMenu={() => { setCoopPlayers([]); handleLeave(); }}
+      onExitToMenu={() => { setCoopPlayers([]); setRemoteRun(null); handleLeave(); }}
+      skipSetup
+      cardMode={lobbyInputMode === 'cards'}
+      lobbyId={lobby?.id}
+      lobbyPlayers={lobbyPlayers}
+      isHost={isHost}
+      remoteRun={remoteRun}
     />;
   }
 
