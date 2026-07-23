@@ -32,7 +32,17 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
   const [showDeck, setShowDeck] = useState(false);
   const [showGraveyard, setShowGraveyard] = useState(false);
   const [animatingOut, setAnimatingOut] = useState<number | null>(null);
+  const [popupClosing, setPopupClosing] = useState(false);
   const prevHandLen = useRef<number>(0);
+
+  const closeCardPopup = () => {
+    if (popupClosing) return;
+    setPopupClosing(true);
+    setTimeout(() => {
+      setSelectedCardIdx(null);
+      setPopupClosing(false);
+    }, 200);
+  };
 
   useEffect(() => {
     if (game.cardState && Object.keys(game.cardState).length === game.players.length) return;
@@ -699,8 +709,8 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
       </div>
 
       {selectedCard && (
-        <div className="card-popup-overlay" onClick={() => setSelectedCardIdx(null)}>
-          <div className="card-popup" onClick={e => e.stopPropagation()} style={{ '--card-color': cardTypeColor(selectedCard.type), '--card-rarity': cardRarityColor(selectedCard.rarity) } as React.CSSProperties}>
+        <div className="card-popup-overlay" onClick={closeCardPopup}>
+          <div className={`card-popup${popupClosing ? ' closing' : ''}`} onClick={e => e.stopPropagation()} style={{ '--card-color': cardTypeColor(selectedCard.type), '--card-rarity': cardRarityColor(selectedCard.rarity) } as React.CSSProperties}>
             <div className="card-popup-header">
               <span className="card-popup-icon">{selectedCard.icon}</span>
               <span className="card-popup-name">{selectedCard.name}</span>
@@ -714,7 +724,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
               {selectedCard.class !== 'any' && <div className="card-popup-class">Class: {selectedCard.class}</div>}
             </div>
             <div className="card-popup-actions">
-              <button className="btn block ghost" onClick={() => setSelectedCardIdx(null)}>Cancel</button>
+              <button className="btn block ghost" onClick={closeCardPopup}>Cancel</button>
               <button
                 className="btn block primary"
                 disabled={selectedCard.type === 'damage' && !canPlayMore}
