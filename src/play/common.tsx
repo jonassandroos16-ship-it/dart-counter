@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import type { Game, GameRecord, Player, Settings } from '../types';
 import { getPowerUpInfo } from '../powerups';
 import { getBadgeInfo, getBadgeContext, buildCoopBadgeCtx } from '../badges';
@@ -6,6 +6,7 @@ import { getPlayerXPById, effectiveAttributes } from '../logic';
 import { initials } from '../store';
 import { Modal } from '../Popups';
 import { chargesNeededFor } from './powerups';
+import { ChargeRing } from '../components/ChargeRing';
 
 // Avatar that shows the player's equipped badge icon (if any) and, when the
 // player has "show badge context" enabled, a small overlay pill with the
@@ -57,8 +58,6 @@ export function ChargedPlayerIcon({ game, curIdx, settings, players, games, onAc
   toast: (m: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [gainAnim, setGainAnim] = useState(false);
-  const prevChargeRef = useRef<number>(0);
 
   if (!game.powerUpsEnabled) return null;
   const pl = game.players[curIdx];
@@ -66,49 +65,25 @@ export function ChargedPlayerIcon({ game, curIdx, settings, players, games, onAc
   const pu = getPowerUpInfo(pl.powerUpId);
   const needed = chargesNeededFor(pl.powerUpId, settings);
   const charge = Math.min(needed, pl.powerUpCharge || 0);
-  const pct = needed > 0 ? Math.round((charge / needed) * 100) : 0;
   const ready = charge >= needed && !!pu && game.darts.length > 0;
   const chargedButWaiting = charge >= needed && !!pu && game.darts.length === 0;
   const uses = pl.powerUpUses || 0;
-
-  // Trigger the charge-gain animation when charge increases.
-  const chargeForAnim = pl.powerUpCharge || 0;
-  useEffect(() => {
-    if (chargeForAnim > prevChargeRef.current) {
-      setGainAnim(true);
-      const t = setTimeout(() => setGainAnim(false), 450);
-      prevChargeRef.current = chargeForAnim;
-      return () => clearTimeout(t);
-    }
-    prevChargeRef.current = chargeForAnim;
-  }, [chargeForAnim]);
-
-  const size = 36;
-  const R = 20;
-  const C = 2 * Math.PI * R;
-  const dash = C * (pct / 100);
+  const pct = needed > 0 ? Math.round((charge / needed) * 100) : 0;
 
   return (
     <>
-      <div className="pu-charge-wrap">
-        <div
-          className={`pu-charge-ring${ready ? ' ready' : ''}${gainAnim ? ' pu-charge-gain' : ''}`}
-          onClick={() => { if (ready) { onActivate(); } else { setOpen(true); } }}
-          title={pu ? `${pu.name} (${pct}% charged${chargedButWaiting ? ' — throw a dart to activate' : ''})` : 'No power-up equipped'}
-          style={{ width: size, height: size }}
-        >
-          <svg width={size} height={size} viewBox="0 0 52 52" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
-            <circle cx="26" cy="26" r={R + 2} fill="none" stroke="var(--border)" strokeWidth="2" />
-            <circle cx="26" cy="26" r={R} fill="none"
-              stroke={ready || chargedButWaiting ? 'var(--accent)' : 'color-mix(in srgb,var(--accent) 60%,var(--bg-3))'}
-              strokeWidth="2.5" strokeDasharray={`${dash} ${C}`} strokeLinecap="round"
-              style={{ transition: 'stroke-dasharray .4s ease, stroke .2s ease' }} />
-          </svg>
-          <BadgeAvatar playerId={pl.id} players={players} games={games} size={28} fontSize={13} color={pl.color} />
-          {pu && <span className="pu-charge-icon">{pu.icon}</span>}
-        </div>
-        <span className={`pu-charge-pct${ready || chargedButWaiting ? ' ready' : ''}`}>{pct}%</span>
-      </div>
+      <ChargeRing
+        charge={charge}
+        cap={needed}
+        ready={ready}
+        chargedButWaiting={chargedButWaiting}
+        icon={pu?.icon}
+        title={pu ? `${pu.name} (${pct}% charged${chargedButWaiting ? ' — throw a dart to activate' : ''})` : 'No power-up equipped'}
+        onActivate={onActivate}
+        onInfo={() => setOpen(true)}
+      >
+        <BadgeAvatar playerId={pl.id} players={players} games={games} size={28} fontSize={13} color={pl.color} />
+      </ChargeRing>
       {open && pu ? (
         <Modal onClose={() => setOpen(false)}>
           <div style={{ textAlign: 'center', padding: 8 }}>

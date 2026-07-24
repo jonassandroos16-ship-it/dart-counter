@@ -292,6 +292,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
 
             <PlayerChips
               state={state}
+              players={players}
               onPlayerClick={(pid) => setDetailPlayerId(pid)}
               playerClickTitle="Tap for run stats"
             />

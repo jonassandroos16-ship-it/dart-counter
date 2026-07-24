@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { CampaignBattleState, CampaignProgress, CoopPowerUpId } from './types';
 import {
   prepareEnemyTurn, applyNextEnemyAttack, setTarget, startBattle, getLevel,
-  describeShield, getCoopPowerUp, canActivateCoopPowerUp, activateCoopPowerUp,
+  describeShield, activateCoopPowerUp,
   levelRewardPowerUp, getCoopClass, effectivePower,
 } from './engine';
 import { getChapter } from './campaignLevels';
@@ -15,7 +15,6 @@ import { initCardPlayState } from '../cards/deck';
 import { Sound } from '../sound';
 import type { MusicEngine } from '../music';
 import { bumpCoopStat } from './coopStats';
-import { CoopChargedPlayerIcon } from './CoopChargedPlayerIcon';
 import { DartOverlay } from './DartOverlay';
 import { FrozenOverlay } from './FrozenOverlay';
 import { Modal } from '../Popups';
@@ -170,23 +169,6 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
     <div className="view-noscroll coop-battle" style={{ position: 'relative', background: chapter?.theme.background || undefined, borderRadius: 14, overflow: 'hidden' }}>
       <button className="btn danger sm quit-float" onClick={() => { if (confirm('Quit this battle? Progress will be saved.')) onQuit(); }}>Quit</button>
       {showingFrozen && <div className="battle-frost-tint" />}
-      {state.phase === 'player' && thrower && (() => {
-        const srcPlayer = players.find(p => p.id === thrower.id);
-        const equippedId = srcPlayer?.powerUps?.coopActive ?? null;
-        const pu = equippedId ? getCoopPowerUp(equippedId as CoopPowerUpId) : null;
-        if (!pu) return null;
-        const can = canActivateCoopPowerUp(state, pu.id);
-        return (
-          <div className="coop-orb-float">
-            <CoopChargedPlayerIcon
-              player={thrower}
-              players={players}
-              canActivate={can && state.darts.length === 0}
-              onActivate={() => onActivatePowerUp(pu.id)}
-            />
-          </div>
-        );
-      })()}
 
       <div className="play-current" style={{ position: 'relative', zIndex: 2 }}>
         <div className="pc-header">
@@ -205,7 +187,7 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
         </div>
         <PartyHpBar state={state} />
 
-        <PlayerChips state={state} extras={playerChipExtras} />
+        <PlayerChips state={state} players={players} extras={playerChipExtras} onActivatePowerUp={onActivatePowerUp} />
 
         {state.passiveBonus && (state.passiveBonus.power > 0 || state.passiveBonus.health > 0 || state.passiveBonus.armor > 0) && (
           <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
