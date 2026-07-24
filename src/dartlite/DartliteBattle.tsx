@@ -137,7 +137,107 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     return () => clearTimeout(t);
   }, [state?.phase, state?.outcome, state?.pendingEnemyAttacks.length, state?.appliedEnemyAttacks.length, state?.frozenEnemiesThisRound.length, settings]);
 
-  if (!state) return null;
+  // When the run transitions to choice / boss_victory / reward phases,
+  // resolveBattle nulls out the battle state. All code below assumes a live
+  // battle state, so render the non-battle UI separately and skip the rest.
+  if (!state) {
+    return (
+      <div className="view-noscroll coop-battle" style={{ position: 'relative', borderRadius: 14, overflow: 'hidden' }}>
+        {showDeckUpgrade && deckUpgradeOption && (
+          <DeckUpgradeScreen
+            run={run}
+            players={players}
+            onComplete={(updatedCards, actionLabel) => {
+              const idx = run.choicePlayerIdx;
+              const updatedRun: DartliteRun = {
+                ...run,
+                runPlayers: run.runPlayers.map((p, i) =>
+                  i === idx ? { ...p, cards: updatedCards } : p
+                ),
+              };
+              const resolvedOption: ChoiceOption = {
+                ...deckUpgradeOption,
+                label: 'Deck Upgrade',
+                desc: actionLabel,
+              };
+              const next = applyPlayerChoice(updatedRun, resolvedOption);
+              setDeckUpgradeOption(null);
+              setShowDeckUpgrade(false);
+              if (next.phase === 'reward') {
+                setChosenRun(next);
+                setShowRewardReveal(true);
+              } else {
+                onChoice(next);
+              }
+            }}
+            onCancel={() => { setShowDeckUpgrade(false); setDeckUpgradeOption(null); }}
+          />
+        )}
+
+        {showRewardReveal && chosenRun && (
+          <RewardRevealOverlay
+            run={chosenRun}
+            players={players}
+            onContinue={() => {
+              setShowRewardReveal(false);
+              setShowProgress(true);
+            }}
+          />
+        )}
+
+        {showProgress && chosenRun && (
+          <ProgressScreen
+            run={chosenRun}
+            players={players}
+            onContinue={() => {
+              setShowProgress(false);
+              onChoice(chosenRun);
+            }}
+          />
+        )}
+
+        {run.phase === 'boss_victory' && run.bossVictory && (
+          <BossVictoryScreen
+            run={run}
+            players={players}
+            canChoose={canChoose}
+            onPick={(trinketId) => {
+              if (!canChoose) return;
+              const next = applyBossTrinketChoice(run, trinketId);
+              setChosenRun(next);
+              setShowRewardReveal(true);
+            }}
+          />
+        )}
+
+        {run.phase === 'choice' && run.pendingChoice && (
+          <ChoiceScreen
+            run={run}
+            players={players}
+            options={run.pendingChoice}
+            canChoose={canChoose}
+            chooserPlayerId={chooserPlayerId}
+            onPick={(opt) => {
+              if (!canChoose) return;
+              if (opt.kind === 'deck_upgrade') {
+                setDeckUpgradeOption(opt);
+                setShowDeckUpgrade(true);
+                return;
+              }
+              const next = applyPlayerChoice(run, opt);
+              if (next.phase === 'reward') {
+                setChosenRun(next);
+                setShowRewardReveal(true);
+              } else {
+                onChoice(next);
+              }
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+
   const thrower = state.players[state.playerTurnIdx];
 
   const { maxDartsPerVisit, totalCardsPlayed, playCard, onUndo, onEnter } = cardBattle;
@@ -149,7 +249,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
 
   const onContinue = () => {
     if (pendingDefeat) {
-      onBattleEnd(false, state ?? undefined);
+      onBattleEnd(false, state);
       return;
     }
     if (state.pendingEnemyAttacks.length) {
@@ -168,7 +268,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
       return;
     }
     if (pendingDefeat) {
-      onBattleEnd(false, state ?? undefined);
+      onBattleEnd(false, state);
       return;
     }
     onEnter();

@@ -67,7 +67,7 @@ export function useCardBattle(params: UseCardBattleParams): CardBattleApi {
     setNextTurnSlots({});
     setNextTurnDraws({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardMode, battle?.visitNumber]);
+  }, [cardMode, battle?.visitNumber, battle?.levelId]);
 
   // Reset bonus slots at the start of each player's turn so they don't leak
   // from one player to the next within the same visit.
