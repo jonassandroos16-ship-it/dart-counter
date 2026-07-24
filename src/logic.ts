@@ -180,6 +180,7 @@ export function defaultAttributes(settings: Settings) {
     health: numOr(cfg.attributeStartHealth, 0),
     armor: numOr(cfg.attributeStartArmor, 0),
     power: numOr(cfg.attributeStartPower, 0),
+    crit: numOr(cfg.attributeStartCrit, 0),
     pointsAvailable: 0,
   };
 }
@@ -253,7 +254,7 @@ export function reconcilePlayerPoints(player: Player, settings: Settings): Playe
     nA = Math.min(cAMax, nA);
     nP = Math.min(cPwMax, nP);
     if (ca.health !== nH || ca.armor !== nA || ca.power !== nP || ca.pointsAvailable !== avail) {
-      classAttrs[cls.id] = { health: nH, armor: nA, power: nP, pointsAvailable: avail };
+      classAttrs[cls.id] = { health: nH, armor: nA, power: nP, crit: ca.crit ?? classStartCrit(cls.id, settings), pointsAvailable: avail };
       classChanged = true;
     }
   }
@@ -458,6 +459,14 @@ export function classStartPower(classId: string | null | undefined, settings: Se
   return numOr(settings.powerUpScaling.attributeStartPower, 0);
 }
 
+export function classStartCrit(classId: string | null | undefined, settings: Settings): number {
+  if (classId && settings.powerUpScaling.classStartCrit) {
+    const v = settings.powerUpScaling.classStartCrit[classId];
+    if (Number.isFinite(v)) return v;
+  }
+  return numOr(settings.powerUpScaling.attributeStartCrit, 0);
+}
+
 export function classHealthMax(classId: string | null | undefined, settings: Settings): number {
   if (classId && settings.powerUpScaling.classHealthMax) {
     const v = settings.powerUpScaling.classHealthMax[classId];
@@ -482,11 +491,20 @@ export function classPowerMax(classId: string | null | undefined, settings: Sett
   return Number.isFinite(settings.powerUpScaling.powerMax) ? settings.powerUpScaling.powerMax : Number.MAX_SAFE_INTEGER;
 }
 
+export function classCritMax(classId: string | null | undefined, settings: Settings): number {
+  if (classId && settings.powerUpScaling.classCritMax) {
+    const v = settings.powerUpScaling.classCritMax[classId];
+    if (Number.isFinite(v)) return v;
+  }
+  return Number.isFinite(settings.powerUpScaling.critMax) ? settings.powerUpScaling.critMax : Number.MAX_SAFE_INTEGER;
+}
+
 export function defaultClassAttributes(classId: string | null | undefined, settings: Settings): ClassAttributes {
   return {
     health: classStartHealth(classId, settings),
     armor: classStartArmor(classId, settings),
     power: classStartPower(classId, settings),
+    crit: classStartCrit(classId, settings),
     pointsAvailable: 0,
   };
 }
@@ -499,6 +517,7 @@ export function effectiveAttributes(player: Player, settings: Settings): PlayerA
       health: ca.health,
       armor: ca.armor,
       power: ca.power,
+      crit: ca.crit,
       pointsAvailable: ca.pointsAvailable,
     };
   }
@@ -516,6 +535,7 @@ export function ensureClassAttributes(player: Player, settings: Settings): Playe
           health: Number.isFinite(player.attributes.health) ? player.attributes.health : classStartHealth(cls.id, settings),
           armor: Number.isFinite(player.attributes.armor) ? player.attributes.armor : classStartArmor(cls.id, settings),
           power: Number.isFinite(player.attributes.power) ? player.attributes.power : classStartPower(cls.id, settings),
+          crit: Number.isFinite(player.attributes.crit) ? player.attributes.crit : classStartCrit(cls.id, settings),
           pointsAvailable: Number.isFinite(player.attributes.pointsAvailable) ? player.attributes.pointsAvailable : 0,
         };
       } else {
