@@ -113,11 +113,12 @@ export interface PartyPassiveBonus {
   power: number;
   health: number;
   armor: number;
+  crit: number;
   sources: { playerId: string; playerName: string; passiveName: string; icon: string; bonus: CoopPassiveDef['bonus'] }[];
 }
 
 export function computePartyPassiveBonus(players: Player[]): PartyPassiveBonus {
-  const bonus: PartyPassiveBonus = { power: 0, health: 0, armor: 0, sources: [] };
+  const bonus: PartyPassiveBonus = { power: 0, health: 0, armor: 0, crit: 0, sources: [] };
   for (const p of players) {
     const prog = p.coopProgress;
     if (!prog || !prog.classId) continue;

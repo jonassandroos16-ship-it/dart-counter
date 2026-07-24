@@ -338,6 +338,7 @@ export interface CampaignBattleState {
     health: number;
     armor: number;
     crit: number;
+    sources: { playerId: string; playerName: string; passiveName: string; icon: string; bonus: { power?: number; health?: number; armor?: number; crit?: number } }[];
   };
   // Card mode: true when playing with cards (campaign card mode / dartlite).
   cardMode?: boolean;
@@ -359,12 +360,13 @@ export interface CoopClassDef {
   icon: string;
   desc: string;
   // Passive bonus applied at battle start (permanent for the entire battle).
-  passive: {
+  passive?: {
     power?: number;
     health?: number;
     armor?: number;
     crit?: number;
   };
+  starterPassive?: CoopPassiveId;
 }
 
 // ── Classes — passives ─────────────────────────────────────────────────
@@ -406,7 +408,8 @@ export interface CoopPassiveDef {
 
 export interface PlayerCoopProgress {
   classId?: CoopClassId | null;
-  xp: number;
+  xp?: number;
+  classXp?: Partial<Record<CoopClassId, number>>;
   unlockedPassives: CoopPassiveId[];
   equippedPassives: CoopPassiveId[];
 }

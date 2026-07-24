@@ -86,7 +86,6 @@ export {
   effectivePower,
   computePlayerDartDamage,
   resolvePlayerVisit,
-  chargeFromDart,
 } from './engine/playerTurn';
 
 export {

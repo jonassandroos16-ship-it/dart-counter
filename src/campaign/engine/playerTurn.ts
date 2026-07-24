@@ -5,16 +5,14 @@ import type {
   ActiveEnemy,
   CoopPlayer,
   EnemyDatabase,
-  PlayerBuff,
   ResolvedDart,
 } from '../types';
 import type { Player, Settings } from '../../types';
 import { ENEMY_DATABASE } from '../enemyDatabase';
 import { nextInstanceId } from './instanceIds';
-import { computePartyPassiveBonus, type PartyPassiveBonus } from './classes';
+import { computePartyPassiveBonus } from './classes';
 import { toCoopPlayer } from './party';
 import { dartMatchesShield, describeShield } from './shields';
-import { finishEnemyTurn } from './enemyAi';
 import { effectiveAttributes } from '../../logic';
 
 // ── Battle initialization ─────────────────────────────────────────────────────
@@ -36,8 +34,6 @@ export function startBattle(
   });
   const passiveBonus = computePartyPassiveBonus(players);
   const healthMax = Number.isFinite(cfg?.healthMax) ? (cfg?.healthMax as number) : Number.MAX_SAFE_INTEGER;
-  const armorMax = Number.isFinite(cfg?.armorMax) ? (cfg?.armorMax as number) : Number.MAX_SAFE_INTEGER;
-  const powerMax = Number.isFinite(cfg?.powerMax) ? (cfg?.powerMax as number) : Number.MAX_SAFE_INTEGER;
   const startHealth = Number.isFinite(cfg?.attributeStartHealth) ? (cfg?.attributeStartHealth as number) : 0;
   const baseAvg = party.length
     ? Math.max(1, Math.min(healthMax, Math.round(players.reduce((s, p) => s + effectiveAttributes(p, settings).health + passiveBonus.health, startHealth) / players.length)))
@@ -271,9 +267,11 @@ function resolveDart(
 
 // ── Resolve the current player's visit ────────────────────────────────────────────
 
-export function resolvePlayerVisit(state: CampaignBattleState, isLastPlayer: boolean): CampaignBattleState {
+export function resolvePlayerVisit(state: CampaignBattleState, hasPlayedCards: boolean = false): CampaignBattleState {
   if (state.outcome !== 'ongoing') return state;
   if (state.outcome === 'victory' as any) return state;
+  if (state.darts.length === 0 && !hasPlayedCards) return state;
+  const isLastPlayer = state.playerTurnIdx >= state.players.length - 1;
   if (!isLastPlayer) {
     // More players to throw — advance playerTurnIdx, snapshot, reset darts.
     const next = (state.playerTurnIdx + 1) % state.players.length;
@@ -306,6 +304,12 @@ export function setTarget(state: CampaignBattleState, targetIdx: number): Campai
 
 
 // ── Utility helpers ────────────────────────────────────────────────────────────
+
+export function computePlayerDartDamage(dart: CampaignDart, power: number, armor: number): number {
+  const rawDmg = dart.value + power;
+  const postArmor = Math.max(1, Math.round(rawDmg * (1 - armor / 100)));
+  return postArmor;
+}
 
 export function effectivePower(player: CoopPlayer): number {
   return player.power + player.buffs.filter(b => b.kind === 'power').reduce((s, b) => s + b.amount, 0);
