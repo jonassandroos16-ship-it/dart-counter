@@ -186,7 +186,6 @@ describe('campaign engine', () => {
     const enemyHp = state.enemies[0].hp;
     const power = state.players[0].power;
     const enemyArmor = state.enemies[0].armor;
-    // Add a crit_guarantee buff with 2 charges
     state = {
       ...state,
       players: state.players.map(p => ({
@@ -195,12 +194,11 @@ describe('campaign engine', () => {
       })),
     };
     state = addDart(state, 20, 3, undefined, false, settings);
-    const flatDmg = 60 * 2; // crit doubles flat damage
+    const flatDmg = 60 * 2;
     const expectedDmg = Math.max(1, Math.round((flatDmg + power) * (1 - enemyArmor / 100)));
     expect(state.enemies[0].hp).toBe(Math.max(0, enemyHp - expectedDmg));
     expect(state.resolvedDarts[0].crit).toBe(true);
     expect(state.resolvedDarts[0].critMult).toBe(2);
-    // One charge consumed
     const remainingGuarantee = state.players[0].buffs.find(b => b.kind === 'crit_guarantee');
     expect(remainingGuarantee?.amount).toBe(1);
   });
@@ -212,7 +210,6 @@ describe('campaign engine', () => {
     const enemyHp = state.enemies[0].hp;
     const power = state.players[0].power;
     const enemyArmor = state.enemies[0].armor;
-    // Add both crit_guarantee (to force crit) and crit_multiplier (3x)
     state = {
       ...state,
       players: state.players.map(p => ({
@@ -225,7 +222,7 @@ describe('campaign engine', () => {
       })),
     };
     state = addDart(state, 20, 3, undefined, false, settings);
-    const flatDmg = 60 * 3; // 3x crit multiplier
+    const flatDmg = 60 * 3;
     const expectedDmg = Math.max(1, Math.round((flatDmg + power) * (1 - enemyArmor / 100)));
     expect(state.enemies[0].hp).toBe(Math.max(0, enemyHp - expectedDmg));
     expect(state.resolvedDarts[0].crit).toBe(true);
@@ -611,5 +608,66 @@ describe('campaign engine', () => {
     expect(isLevelUnlockedForParty('crimson_vale', 2, [p1, p2])).toBe(true);
     expect(isLevelUnlockedForParty('crimson_vale', 3, [p1, p2])).toBe(false);
     expect(isLevelUnlockedForParty('crimson_vale', 2, [])).toBe(false);
+  });
+
+  // ── Card-mode flat shields ───────────────────────────────────────────
+  // In card mode, segment-matching shields (TOP_HALF, T20, etc.) don't make
+  // sense because there's no dartboard targeting. They are converted to flat
+  // HP-absorbing shields at battle start.
+
+  it('startBattle with cardMode=true assigns flatHp to enemy shields', () => {
+    const lvl = getLevel(5)!; // ice_queen has shields
+    const state = startBattle(lvl, makePlayers(1), settings, undefined, 'frozen_throne', true);
+    const enemy = state.enemies.find(e => e.shields.length > 0)!;
+    expect(enemy).toBeDefined();
+    expect(enemy.shields[0].flatHp).toBeGreaterThan(0);
+  });
+
+  it('startBattle with cardMode=false leaves shields without flatHp', () => {
+    const lvl = getLevel(5)!;
+    const state = startBattle(lvl, makePlayers(1), settings, undefined, 'frozen_throne', false);
+    const enemy = state.enemies.find(e => e.shields.length > 0)!;
+    expect(enemy).toBeDefined();
+    expect(enemy.shields[0].flatHp).toBeUndefined();
+  });
+
+  it('flat shield absorbs damage without reducing enemy HP until depleted', () => {
+    const lvl = getLevel(5)!;
+    let state = startBattle(lvl, makePlayers(1), settings, undefined, 'frozen_throne', true);
+    const shieldedIdx = state.enemies.findIndex(e => e.shields.length > 0);
+    state = setTarget(state, shieldedIdx);
+    const enemyHp = state.enemies[shieldedIdx].hp;
+    const shieldHp = state.enemies[shieldedIdx].shields[0].flatHp!;
+    // Deal less damage than the shield — HP should not change.
+    state = addDart(state, 20, 1, undefined, false, settings);
+    expect(state.enemies[shieldedIdx].hp).toBe(enemyHp);
+    // Shield should be reduced but still present.
+    expect(state.enemies[shieldedIdx].shields[0].flatHp).toBe(shieldHp - 20);
+  });
+
+  it('flat shield breaks and overflow damage hits enemy HP', () => {
+    const lvl = getLevel(5)!;
+    let state = startBattle(lvl, makePlayers(1), settings, undefined, 'frozen_throne', true);
+    const shieldedIdx = state.enemies.findIndex(e => e.shields.length > 0);
+    state = setTarget(state, shieldedIdx);
+    const enemyHp = state.enemies[shieldedIdx].hp;
+    const shieldHp = state.enemies[shieldedIdx].shields[0].flatHp!;
+    // Deal more damage than the shield — overflow should hit HP.
+    state = addDart(state, 20, 3, undefined, false, settings); // 60 damage
+    expect(state.enemies[shieldedIdx].shields.length).toBe(0);
+    const overflow = Math.max(0, 60 - shieldHp);
+    const armor = state.enemies[shieldedIdx].armor;
+    const expectedDmg = Math.max(1, Math.round(overflow * (1 - armor / 100)));
+    expect(state.enemies[shieldedIdx].hp).toBe(Math.max(0, enemyHp - expectedDmg));
+  });
+
+  it('flat shield with 0 damage (miss) does not reduce shield', () => {
+    const lvl = getLevel(5)!;
+    let state = startBattle(lvl, makePlayers(1), settings, undefined, 'frozen_throne', true);
+    const shieldedIdx = state.enemies.findIndex(e => e.shields.length > 0);
+    state = setTarget(state, shieldedIdx);
+    const shieldHp = state.enemies[shieldedIdx].shields[0].flatHp!;
+    state = addDart(state, 0, 1, 'Miss', false, settings);
+    expect(state.enemies[shieldedIdx].shields[0].flatHp).toBe(shieldHp);
   });
 });
