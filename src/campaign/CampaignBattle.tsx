@@ -87,13 +87,13 @@ function applyUtilityCard(state: CampaignBattleState, card: CardDef, _settings: 
     }));
     return { ...state, players };
   }
-  if (effect === 'accuracy_buff') {
-    const enemies = state.enemies.map(e => e.defeated ? e : {
-      ...e,
-      distractedTurns: Math.max(e.distractedTurns, 3),
-      distractAmount: Math.max(e.distractAmount, mag / 100),
-    });
-    return { ...state, enemies };
+  if (effect === 'crit_buff') {
+    const buffId = `crit_${Date.now()}`;
+    const players = state.players.map(p => ({
+      ...p,
+      buffs: [...p.buffs, { id: buffId, kind: 'crit' as const, amount: mag, turnsLeft: 3, source: thrower.id }],
+    }));
+    return { ...state, players };
   }
   if (effect === 'armor_buff') {
     const buffId = `armor_${Date.now()}`;
@@ -133,6 +133,15 @@ import { DartOverlay } from './DartOverlay';
 import { FrozenOverlay } from './FrozenOverlay';
 import { Modal } from '../Popups';
 import { getEnemyDef } from './engine/enemies';
+import { BuffPill } from '../cards/EffectPill';
+import { effectIcon, effectLabel } from '../cards/effectMeta';
+
+function buffIconForKind(kind: string): string {
+  return effectIcon(kind);
+}
+function buffLabelForKind(kind: string): string {
+  return effectLabel(kind);
+}
 
 
 interface Props {
@@ -483,10 +492,7 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
                 {p.buffs.length > 0 && (
                   <span style={{ display: 'inline-flex', gap: 3, marginLeft: 4 }}>
                     {p.buffs.map(b => (
-                      <span key={b.id} title={`${b.kind} +${b.amount} (${b.turnsLeft} turns)`}
-                        style={{ fontSize: 10, padding: '1px 4px', borderRadius: 4, background: b.kind === 'power' ? 'color-mix(in srgb,#fbbf24 30%,transparent)' : 'color-mix(in srgb,#60a5fa 30%,transparent)', color: '#0b0e13' }}>
-                        {b.kind === 'power' ? '⚡' : '🎯'}{b.turnsLeft}
-                      </span>
+                      <BuffPill key={b.id} icon={buffIconForKind(b.kind)} label={buffLabelForKind(b.kind)} amount={b.amount} turnsLeft={b.turnsLeft} />
                     ))}
                   </span>
                 )}
