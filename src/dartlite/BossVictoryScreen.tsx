@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Player } from '../types';
 import { initials } from '../store';
 import type { DartliteRun } from './engine';
 import type { TrinketId } from './trinkets';
 import { getTrinket } from './trinkets';
+import { BOSS_VICTORY_STORIES } from './bossStories';
 
 interface Props {
   run: DartliteRun;
@@ -13,36 +14,72 @@ interface Props {
   canChoose?: boolean;
 }
 
-// Per-boss victory stories shown in the trinket-drop popup.
-const BOSS_VICTORY_STORIES: Record<string, string> = {
-  warlord_malakar:
-    "Malakar's war-banner falls in the dust. His iron grip on the vale is broken at last — the screams of his warhost fade as they scatter into the hills. A crimson crown rolls to your feet, still warm from the tyrant's brow. The vale will remember this day.",
-  ice_queen:
-    'The Ice Queen shatters into a thousand glittering shards, her frozen throne cracking beneath her. A biting wind rises and then dies, as if the mountain itself exhales. From the rubble, a crystal shard pulses with cold magic — a keepsake of the queen who would not yield.',
-  the_verdant_maw:
-    "The Verdant Maw collapses inward, vines retracting as its terrible hunger fades. The jungle goes still for the first time in years. In the creature's maw you find a seed — already sprouting, almost eager — thrumming with the life it once devoured.",
-};
-
-const DEFAULT_BOSS_VICTORY_STORY =
-  "The beast falls with a ground-shaking crash. Silence descends over the battlefield — a hard-earned silence. From the wreckage, something glints: a relic of the creature's dark power, now yours to wield.";
-
 export function BossVictoryScreen({ run, players, onPick, canChoose = true }: Props) {
   const [picked, setPicked] = useState<TrinketId | null>(null);
+  const [showStory, setShowStory] = useState(true);
+  const [storyText, setStoryText] = useState('');
+
+  useEffect(() => {
+    if (!run.bossVictory) return;
+    const story = BOSS_VICTORY_STORIES[Math.floor(Math.random() * BOSS_VICTORY_STORIES.length)];
+    setStoryText(story.replace('{name}', run.bossVictory.bossName));
+  }, []);
+
   if (!run.bossVictory) return null;
   const { bossName, trinketOptions } = run.bossVictory;
 
-  // Identify the boss defId from the display name to look up the right story.
-  const bossDefId = (() => {
-    const nameMap: Record<string, string> = {
-      'Warlord Malakar': 'warlord_malakar',
-      'Ice Queen': 'ice_queen',
-      'The Verdant Maw': 'the_verdant_maw',
-    };
-    return nameMap[bossName] ?? null;
-  })();
-  const victoryStory =
-    (bossDefId && BOSS_VICTORY_STORIES[bossDefId]) ?? DEFAULT_BOSS_VICTORY_STORY;
+  // Boss story / drop reveal popup shown first
+  if (showStory) {
+    return (
+      <div className="view-scroll" style={{
+        background: 'radial-gradient(ellipse at top, color-mix(in srgb,#f59e0b 22%,var(--bg)) 0%, var(--bg) 70%)',
+        minHeight: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        <div className="card" style={{ maxWidth: 520, margin: '0 auto', textAlign: 'center', border: '2px solid #f59e0b' }}>
+          <div style={{ fontSize: 56, marginBottom: 8 }}>🏆</div>
+          <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: '.14em', color: '#fbbf24', textTransform: 'uppercase' }}>
+            Boss Slain
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 900, marginTop: 6, color: '#f59e0b' }}>{bossName}</div>
+          <div style={{ marginTop: 16, fontSize: 15, lineHeight: 1.7, color: 'var(--text)', fontStyle: 'italic', padding: '0 8px' }}>
+            {storyText}
+          </div>
 
+          {/* Trinket teaser */}
+          <div style={{ marginTop: 20, padding: '12px 16px', borderRadius: 12, background: 'color-mix(in srgb,#f59e0b 10%,var(--bg-3))', border: '1px solid color-mix(in srgb,#f59e0b 30%,var(--border))' }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.12em', color: '#fbbf24', textTransform: 'uppercase', marginBottom: 6 }}>
+              Boss Trinket Dropped!
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap' }}>
+              {trinketOptions.map(tid => {
+                const t = getTrinket(tid);
+                return t ? (
+                  <div key={tid} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 22 }}>{t.icon}</span>
+                    <span style={{ fontWeight: 700, fontSize: 13 }}>{t.name}</span>
+                  </div>
+                ) : null;
+              })}
+            </div>
+            <div className="muted small" style={{ marginTop: 6 }}>Choose one to empower your run</div>
+          </div>
+
+          <button
+            className="btn primary block"
+            style={{ marginTop: 22, background: '#f59e0b', borderColor: '#f59e0b', color: '#0b0e13', fontWeight: 900 }}
+            onClick={() => setShowStory(false)}
+          >
+            Claim Your Reward
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Trinket selection screen
   return (
     <div className="view-scroll" style={{
       background: 'radial-gradient(ellipse at top, color-mix(in srgb,#f59e0b 18%,var(--bg)) 0%, var(--bg) 70%)',
@@ -50,38 +87,22 @@ export function BossVictoryScreen({ run, players, onPick, canChoose = true }: Pr
     }}>
       <div className="card" style={{ maxWidth: 520, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 18 }}>
-          <div style={{ fontSize: 48, marginBottom: 6 }}>🏆</div>
-          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#fbbf24', textTransform: 'uppercase' }}>Boss Defeated</div>
-          <div style={{ fontSize: 26, fontWeight: 900, marginTop: 6 }}>{bossName}</div>
-
-          {/* Boss-specific victory story */}
-          <div style={{
-            marginTop: 14,
-            padding: '12px 16px',
-            borderRadius: 10,
-            background: 'color-mix(in srgb,#f59e0b 10%,var(--bg-3))',
-            border: '1px solid color-mix(in srgb,#f59e0b 30%,var(--border))',
-            fontSize: 14,
-            lineHeight: 1.65,
-            color: 'var(--text)',
-            fontStyle: 'italic',
-            textAlign: 'left',
-          }}>
-            {victoryStory}
-          </div>
-
-          <div className="muted small" style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 40, marginBottom: 6 }}>🏆</div>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#fbbf24', textTransform: 'uppercase' }}>Boss Trinket</div>
+          <div style={{ fontSize: 22, fontWeight: 900, marginTop: 6 }}>{bossName} Defeated</div>
+          <div className="muted small" style={{ marginTop: 6 }}>
             {canChoose
-              ? 'The party has been healed to 100%. Choose a boss trinket to empower your run.'
-              : 'Waiting for the host to claim a boss trinket…'}
+              ? 'The party has been healed to full. Choose a boss trinket to empower your run.'
+              : 'Waiting for the host to claim a boss trinket\u2026'}
           </div>
         </div>
 
-        <div className="muted small" style={{ fontWeight: 700, marginBottom: 8 }}>Boss Trinket Reward</div>
+        <div className="muted small" style={{ fontWeight: 700, marginBottom: 8 }}>Choose Your Reward</div>
         <div style={{ display: 'grid', gap: 10 }}>
           {trinketOptions.map((id) => {
             const def = getTrinket(id);
             const isPicked = picked === id;
+            if (!def) return null;
             return (
               <button key={id} className="btn block" style={{
                 padding: 14, textAlign: 'left',
@@ -109,7 +130,7 @@ export function BossVictoryScreen({ run, players, onPick, canChoose = true }: Pr
 
         <button
           className="btn primary block"
-          style={{ marginTop: 18 }}
+          style={{ marginTop: 18, background: picked ? '#f59e0b' : undefined, borderColor: picked ? '#f59e0b' : undefined, color: picked ? '#0b0e13' : undefined }}
           disabled={!picked || !canChoose}
           onClick={() => canChoose && picked && onPick(picked)}
         >
