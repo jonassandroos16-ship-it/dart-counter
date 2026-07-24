@@ -1,26 +1,19 @@
 import { useEffect, useState, useRef } from 'react';
 import type { Game, GameRecord, Player, Settings, PlayedCard } from '../../types';
-import { TEAM_COLORS } from '../../constants';
-import { checkoutHint, leadTrailBadge } from '../../logic';
-import { Sound } from '../../sound';
 import type { MusicEngine } from '../../music';
 import type { PopupControls } from '../../Popups';
-import { AttributeStrip, BadgeAvatar } from '../common';
+import { BadgeAvatar } from '../common';
 import {
-  initCardPlayState, startTurn, drawCards,
-  endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
+  initCardPlayState, endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
   getPlayerCards, defaultPlayerCards,
 } from '../../cards/deck';
-import type { PlayerCard, CardDef, CardPlayState } from '../../cards/types';
-import { CardBoardOthers } from './CardBoardOthers';
-import { CardBoardHand, CardPopup } from './CardBoardHand';
-import { DeckPopup, GraveyardPopup, PlayedPopup, CardDetailPopup, CardPlayAnimOverlay } from './CardBoardPopups';
-import type { CardPlayAnim } from './CardBoardPopups';
+import { startTurnWithExtraDraws } from '../../cards/turnLogic';
+import type { CardDef } from '../../cards/types';
+import { CardHand } from '../../cards/CardHand';
 import { playCard } from './cardBoardPlay';
 import { enterVisit } from './cardBoardVisit';
+import { PlayedPopup, CardDetailPopup } from './CardBoardPopups';
 import { GameOver } from '../GameOver';
-
-const HIGH_SCORE_VISITS = 7;
 
 export function CardBoard({ game, setGame, settings, players, games, setGames, setPlayers, toast, music, onQuit, onGameOver, popups, isMyTurn = true }: {
   game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[];
@@ -29,122 +22,129 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
 }) {
   const [, force] = useState(0);
   const [targetId, setTargetId] = useState<string | null>(null);
-  const [selectedCardIdx, setSelectedCardIdx] = useState<number | null>(null);
-  const [showDeck, setShowDeck] = useState(false);
-  const [showGraveyard, setShowGraveyard] = useState(false);
   const [showPlayed, setShowPlayed] = useState(false);
   const [selectedPlayedCard, setSelectedPlayedCard] = useState<PlayedCard | null>(null);
-  const [playedPopupClosing, setPlayedPopupClosing] = useState(false);
-  const [cardPlayAnim, setCardPlayAnim] = useState<CardPlayAnim | null>(null);
-  const [cardStates, setCardStates] = useState<Record<string, CardPlayState>>({});
-  const [bonusSlots, setBonusSlots] = useState(0);
-  const [nextTurnSlots, setNextTurnSlots] = useState<Record<string, number>>({});
-  const [nextTurnDraws, setNextTurnDraws] = useState<Record<string, number>>({});
-  const [showHandDetail, setShowHandDetail] = useState(false);
-  const rerollResolve = useRef<((v: boolean) => void) | null>(null);
-  const [reroll, setReroll] = useState<any>(null);
-  const rerollRef = useRef(reroll);
-  rerollRef.current = reroll;
-  const [pendingTurnStart, setPendingTurnStart] = useState(true);
-  const prevTurnRef = useRef(-1);
-  const prevHandLen = useRef(0);
-  const [animatingOut, setAnimatingOut] = useState<number | null>(null);
+  const prevHandRef = useRef<number | null>(null);
 
   const p = game.players[game.turn];
   const alive = game.players.filter(pl => !pl.defeated);
   const aliveOthers = alive.filter(pl => pl.id !== p?.id);
   const others = game.players.filter(pl => pl.id !== p?.id);
-  const targetEnemy = others.find(pl => pl.id === targetId) || aliveOthers[0];
-  if (targetId === null && targetEnemy) setTargetId(targetEnemy.id);
-  const lastHit = game.lastHit;
-  const isCardMode = (p as any).cardMode || game.darts.length === 0 && (p as any).cards;
 
   useEffect(() => {
-    if (isCardMode && p && !cardStates[p.id]) {
-      const cards = getPlayerCards(p);
-      setCardStates(prev => ({ ...prev, [p.id]: initCardPlayState(cards) }));
-    }
-  }, [isCardMode, p, cardStates]);
+    if (aliveOthers.length === 1) setTargetId(aliveOthers[0].id);
+    else if (targetId && !aliveOthers.find(pl => pl.id === targetId)) setTargetId(null);
+  }, [game.turn, aliveOthers.length]);
 
   useEffect(() => {
-    if (!isCardMode || !p) return;
-    if (game.turn !== prevTurnRef.current) {
-      prevTurnRef.current = game.turn;
-      setPendingTurnStart(true);
-    }
-  }, [game.turn, isCardMode, p]);
-
-  useEffect(() => {
-    if (!isCardMode || !p || !pendingTurnStart) return;
-    const cs = cardStates[p.id];
-    if (!cs) return;
-    const extraDraw = nextTurnDraws[p.id] ?? 0;
-    const extraSlot = nextTurnSlots[p.id] ?? 0;
-    if (extraDraw > 0 || extraSlot > 0) {
-      setNextTurnDraws(prev => { const n = { ...prev }; delete n[p.id]; return n; });
-      setNextTurnSlots(prev => { const n = { ...prev }; delete n[p.id]; return n; });
-    }
-    const next = startTurnWithExtraDraws(cs, extraDraw, extraSlot, (n) => setBonusSlots(n));
-    setCardStates(prev => ({ ...prev, [p.id]: next }));
-    setPendingTurnStart(false);
-  }, [isCardMode, p, pendingTurnStart, cardStates, nextTurnDraws, nextTurnSlots]);
-
-  useEffect(() => {
-    if (handDefsLen < prevHandLen.current) {
-      setAnimatingOut(prevHandLen.current - 1);
-      const t = setTimeout(() => setAnimatingOut(null), 300);
-      prevHandLen.current = handDefsLen;
-      return () => clearTimeout(t);
-    }
-    prevHandLen.current = handDefsLen;
-  }, [handDefsLen]);
-
-  const cs = p ? cardStates[p.id] : undefined;
-  const handDefs = cs ? cs.hand.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[] : [];
-  const usedDefs = cs ? cs.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[] : [];
-  const handDefsLen = handDefs.length;
-
-  const onAdd = (base: number, mult: number, label: string, isBull: boolean) => {
     if (!p) return;
-    const newDart = { value: base * mult, label, mult, isDouble: mult === 2, isTriple: mult === 3, isBull, player: p.id, target: targetId || undefined } as any;
-    setGame({ ...game, darts: [...game.darts, newDart], lastHit: { ...newDart, damage: base * mult } });
-  };
+    let cs = game.cardState?.[p.id];
+    if (!cs) {
+      const playerData = players.find(pl => pl.id === p.id);
+      const cards = playerData ? getPlayerCards(playerData) : defaultPlayerCards();
+      cs = initCardPlayState(cards);
+      setGame({
+        ...game,
+        cardState: { ...(game.cardState || {}), [p.id]: cs },
+      });
+      return;
+    }
+    if (cs.hand.length === 0 && cs.used.length === 0) {
+      const extraDraw = game.nextTurnDraws?.[p.id] ?? 0;
+      const extraSlot = game.nextTurnSlots?.[p.id] ?? 0;
+      const next = startTurnWithExtraDraws(cs, extraDraw, extraSlot, () => {});
 
-  const onUndo = () => {
-    if (!game.darts.length) return;
-    setGame({ ...game, darts: game.darts.slice(0, -1), lastHit: null });
-    if (cs && cs.used.length > 0) {
-      setCardStates(prev => {
-        const s = prev[p!.id];
-        if (!s) return prev;
-        const lastUsed = s.used[s.used.length - 1];
-        return { ...prev, [p!.id]: { ...s, used: s.used.slice(0, -1), hand: [...s.hand, lastUsed] } };
+      const newNextTurnDraws = { ...(game.nextTurnDraws || {}) };
+      delete newNextTurnDraws[p.id];
+      const newNextTurnSlots = { ...(game.nextTurnSlots || {}) };
+      delete newNextTurnSlots[p.id];
+
+      setGame({
+        ...game,
+        cardState: { ...(game.cardState || {}), [p.id]: next },
+        nextTurnDraws: newNextTurnDraws,
+        nextTurnSlots: newNextTurnSlots,
+        bonusSlots: (game.bonusSlots || 0) + extraSlot,
       });
     }
-  };
+  }, [game.turn, p?.id, game.cardState]);
 
-  const onEnter = () => {
-    if (!p || game.darts.length === 0) return;
-    enterVisit(game, setGame, settings, toast, popups, {
-      onReroll: (plan) => new Promise<boolean>((resolve) => {
-        setReroll(plan);
-        setRerollResolve(() => resolve);
-      }),
-    });
-  };
+  const cs = p ? game.cardState?.[p.id] : undefined;
+  const totalCardsPlayed = cs?.used.length ?? 0;
+  const maxPlays = MAX_PLAYS_PER_TURN + (game.bonusSlots || 0);
 
   const handlePlayCard = (handIdx: number) => {
     if (!p || !cs) return;
+    const handDefs = cs.hand.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
     playCard({
-      handIdx, game, setGame, cs, setCardStates, p, targetId,
-      bonusSlots, setBonusSlots, setNextTurnSlots, setNextTurnDraws,
-      settings, toast, setCardPlayAnim, onAdd,
+      handIdx,
+      handDefs,
+      state: cs,
+      game,
+      p: { id: p.id, name: p.name, color: p.color },
+      settings,
+      toast,
+      setGame: setGame as (g: Game) => void,
+      totalCardsPlayed,
+      maxPlays,
+      bonusSlots: game.bonusSlots || 0,
+      prevHandRef,
+      setSelectedCardIdx: () => {},
+      force,
+    });
+  };
+
+  const onUndo = () => {
+    if (!p || !cs || game.darts.length === 0) return;
+    const lastDart = game.darts[game.darts.length - 1];
+    const usedIdx = [...cs.used].reverse().findIndex(pc => {
+      const def = resolveCardDef(pc);
+      return def?.name === lastDart.label;
+    });
+    if (usedIdx === -1) return;
+    const realIdx = cs.used.length - 1 - usedIdx;
+    const card = cs.used[realIdx];
+    setGame({
+      ...game,
+      darts: game.darts.slice(0, -1),
+      cardState: {
+        ...(game.cardState || {}),
+        [p.id]: {
+          ...cs,
+          hand: [...cs.hand, card],
+          used: cs.used.filter((_, i) => i !== realIdx),
+        },
+      },
+    });
+  };
+
+  const onEnter = () => {
+    if (!p || !cs || game.darts.length === 0) return;
+    const endedState = endTurn(cs);
+    enterVisit({
+      game,
+      setGame,
+      settings,
+      players,
+      games,
+      setGames,
+      setPlayers,
+      toast,
+      music,
+      popups,
+      targetId,
+      setTargetId,
+      state: cs,
+      endedState,
+      isMyTurn,
     });
   };
 
   if (game.finished) return <GameOver game={game} onNewGame={() => { setGame(null); onGameOver(); music.startContext('setup', settings); }} onViewStats={() => { setGame(null); onGameOver(); }} />;
+  if (!p || !cs) return null;
 
   const hpPct = (pl: any) => Math.max(0, Math.min(100, ((pl.hp || 0) / (pl.maxHp || 1)) * 100));
+  const playedCount = game.playedCards?.length ?? 0;
 
   return (
     <div className="view-noscroll coop-battle">
@@ -163,9 +163,9 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
           <div style={{ height: '100%', width: `${hpPct(p)}%`, background: p.color, transition: 'width .3s' }} />
         </div>
         <div className="pc-slots">
-          {Array.from({ length: 3 }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
+          {Array.from({ length: maxPlays }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
         </div>
-        <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{game.darts.reduce((a, d) => a + d.value, 0)}</b>{lastHit && lastHit.target ? <span style={{ marginLeft: 8, color: 'var(--danger)' }}> · {lastHit.damage} dmg → {game.players.find(pl => pl.id === lastHit.target)?.name || 'target'}</span> : null}</div>
+        <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{game.darts.reduce((a, d) => a + d.value, 0)}</b></div>
         {aliveOthers.length > 1 && (
           <div style={{ width: '100%', marginTop: 6 }}>
             <div className="muted small" style={{ marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Attack target</div>
@@ -202,43 +202,34 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         })}
       </div>
 
-      {isCardMode && cs && (
-        <CardBoardHand
-          cardState={cs}
-          playerName={p.name}
-          isMyTurn={isMyTurn}
-          isBattle={true}
-          canEndVisit={game.darts.length > 0}
-          canUndo={game.darts.length > 0}
-          canPlayMore={game.darts.length < 3}
-          onPlayCard={handlePlayCard}
-          onUndo={onUndo}
-          onEndVisit={onEnter}
-          animatingOut={animatingOut}
-          showPlayedButton={usedDefs.length > 0}
-          playedCount={usedDefs.length}
-          onShowPlayed={() => setShowPlayed(true)}
-          onShowHandDetail={() => setShowHandDetail(true)}
+      <CardHand
+        cardState={cs}
+        playerName={p.name}
+        isMyTurn={isMyTurn}
+        isBattle={true}
+        canEndVisit={game.darts.length > 0}
+        canUndo={game.darts.length > 0}
+        canPlayMore={totalCardsPlayed < maxPlays}
+        onPlayCard={handlePlayCard}
+        onUndo={onUndo}
+        onEndVisit={onEnter}
+        showPlayedButton={playedCount > 0}
+        playedCount={playedCount}
+        onShowPlayed={() => setShowPlayed(true)}
+      />
+
+      {showPlayed && (
+        <PlayedPopup
+          playedCards={game.playedCards || []}
+          onClose={() => setShowPlayed(false)}
+          onSelect={(pc) => { setSelectedPlayedCard(pc); setShowPlayed(false); }}
         />
       )}
-
-      {showDeck && <DeckPopup cardState={cs} onClose={() => setShowDeck(false)} />}
-      {showGraveyard && <GraveyardPopup cardState={cs} onClose={() => setShowGraveyard(false)} />}
-      {showPlayed && (
-        <PlayedPopup cards={usedDefs} onClose={() => { setPlayedPopupClosing(true); setTimeout(() => { setShowPlayed(false); setPlayedPopupClosing(false); }, 200); }} closing={playedPopupClosing} />
-      )}
       {selectedPlayedCard && (
-        <CardDetailPopup card={selectedPlayedCard} onClose={() => setSelectedPlayedCard(null)} />
-      )}
-      {cardPlayAnim && (
-        <CardPlayAnimOverlay anim={cardPlayAnim} onDone={() => setCardPlayAnim(null)} />
-      )}
-      {showHandDetail && cs && (
-        <CardPopup
-          card={handDefs[0]}
-          canPlayMore={game.darts.length < 3}
-          onPlay={() => { handlePlayCard(0); setShowHandDetail(false); }}
-          onClose={() => setShowHandDetail(false)}
+        <CardDetailPopup
+          playedCard={selectedPlayedCard}
+          closing={false}
+          onClose={() => setSelectedPlayedCard(null)}
         />
       )}
     </div>
