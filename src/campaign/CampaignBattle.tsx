@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { CampaignBattleState, CampaignProgress, CoopPowerUpId } from './types';
 import type { CardPlayState, PlayerCard } from '../cards/types';
-import { initCardPlayState, startTurn, endTurn, getPlayerCards, MAX_PLAYS_PER_TURN, resolveCardDef, playCardFromHand, redrawHand, recycleGraveyard, drawCards, HAND_SIZE } from '../cards/deck';
+import { initCardPlayState, endTurn, getPlayerCards, MAX_PLAYS_PER_TURN, resolveCardDef, playCardFromHand } from '../cards/deck';
+import { applyCardEffect } from '../cards/cardEffects';
+import { startTurnWithExtraDraws } from '../cards/turnLogic';
 import { CardHand } from '../cards/CardHand';
 import {
   addDart, undoDart, resolvePlayerVisit,
@@ -13,135 +15,17 @@ import { getChapter } from './campaignLevels';
 import type { Player, Settings } from '../types';
 import type { CardDef } from '../cards/types';
 
-function applyUtilityCard(state: CampaignBattleState, card: CardDef, _settings: Settings): CampaignBattleState {
-  if (state.phase !== 'player') return state;
-  const thrower = state.players[state.playerTurnIdx];
-  if (!thrower) return state;
-  const mag = card.magnitude ?? 0;
-  const effect = card.effect ?? '';
-
-  // Healing effects
-  if (effect === 'heal' || effect === 'blessing') {
-    const heal = effect === 'blessing' ? Math.min(mag, 40) : mag;
-    const partyHp = Math.min(state.partyMaxHp, state.partyHp + heal);
-    return { ...state, partyHp };
-  }
-
-  // Heal-over-time: add a regen buff to all players
-  if (effect === 'heal_over_time') {
-    const buffId = `regen_${Date.now()}`;
-    const players = state.players.map(p => ({
-      ...p,
-      buffs: [...p.buffs, { id: buffId, kind: 'regen' as const, amount: mag, turnsLeft: 3, source: thrower.id }],
-    }));
-    return { ...state, players };
-  }
-
-  // Party shields
-  if (effect === 'party_shield_flat' || effect === 'party_shield') {
-    const heal = effect === 'party_shield_flat' ? Math.min(mag, state.partyMaxHp - state.partyHp) : 0;
-    const buffId = `shield_${Date.now()}`;
-    const players = state.players.map(p => ({
-      ...p,
-      buffs: [...p.buffs, { id: buffId, kind: 'shield' as const, amount: mag, turnsLeft: 2, source: thrower.id }],
-    }));
-    return { ...state, players, partyHp: Math.min(state.partyMaxHp, state.partyHp + heal) };
-  }
-
-  // Enemy debuffs: curse, weaken, miss, bleed, freeze
-  if (effect === 'enemy_curse' || effect === 'enemy_debuff') {
-    const enemies = state.enemies.map(e => e.defeated ? e : {
-      ...e,
-      distractedTurns: Math.max(e.distractedTurns, 3),
-      distractAmount: Math.max(e.distractAmount, mag / 100),
-    });
-    return { ...state, enemies };
-  }
-  if (effect === 'enemy_miss') {
-    const enemies = state.enemies.map(e => e.defeated ? e : {
-      ...e,
-      distractedTurns: Math.max(e.distractedTurns, 2),
-      distractAmount: Math.max(e.distractAmount, mag / 100),
-    });
-    return { ...state, enemies };
-  }
-  if (effect === 'bleed') {
-    const buffId = `bleed_${Date.now()}`;
-    const enemies = state.enemies.map(e => e.defeated ? e : {
-      ...e,
-      buffs: [...(e as any).buffs, { id: buffId, kind: 'bleed', amount: mag, turnsLeft: 3 }],
-    });
-    return { ...state, enemies };
-  }
-  if (effect === 'freeze') {
-    const enemies = state.enemies.map(e => e.defeated ? e : { ...e, frozenTurns: Math.max(e.frozenTurns, 1) });
-    return { ...state, enemies };
-  }
-
-  // Power/accuracy/armor buffs
-  if (effect === 'power_buff') {
-    const buffId = `power_${Date.now()}`;
-    const players = state.players.map(p => ({
-      ...p,
-      buffs: [...p.buffs, { id: buffId, kind: 'power' as const, amount: mag, turnsLeft: 3, source: thrower.id }],
-    }));
-    return { ...state, players };
-  }
-  if (effect === 'crit_buff') {
-    const buffId = `crit_${Date.now()}`;
-    const players = state.players.map(p => ({
-      ...p,
-      buffs: [...p.buffs, { id: buffId, kind: 'crit' as const, amount: mag, turnsLeft: 3, source: thrower.id }],
-    }));
-    return { ...state, players };
-  }
-  if (effect === 'armor_buff') {
-    const buffId = `armor_${Date.now()}`;
-    const players = state.players.map(p => ({
-      ...p,
-      buffs: [...p.buffs, { id: buffId, kind: 'armor' as const, amount: mag, turnsLeft: 3, source: thrower.id }],
-    }));
-    return { ...state, players };
-  }
-
-  // Surge / hot streak / reflect / bust protect / double_up / extra_dart / revive
-  if (effect === 'surge' || effect === 'hot_streak' || effect === 'bust_protect' || effect === 'double_up' || effect === 'extra_dart' || effect === 'reflect') {
-    const buffId = `${effect}_${Date.now()}`;
-    const players = state.players.map(p => ({
-      ...p,
-      buffs: [...p.buffs, { id: buffId, kind: effect as any, amount: mag, turnsLeft: 2, source: thrower.id }],
-    }));
-    return { ...state, players };
-  }
-  if (effect === 'revive') {
-    return { ...state, partyHp: Math.max(state.partyHp, Math.round(state.partyMaxHp * 0.25)) };
-  }
-
-  // Draw / shadowstep / redraw / recycle — handled in playCampaignCard (deck operations)
-  if (effect === 'draw' || effect === 'shadowstep' || effect === 'redraw' || effect === 'recycle' || effect === 'extra_slot' || effect === 'blessing') {
-    return state;
-  }
-
-  return state;
-}
 import { Sound } from '../sound';
 import type { MusicEngine } from '../music';
 import { initials } from '../store';
 import { bumpCoopStat } from './coopStats';
-import { CoopPowerUpOrb } from './CoopPowerUpOrb';
+import { CoopChargedPlayerIcon } from './CoopChargedPlayerIcon';
 import { DartOverlay } from './DartOverlay';
 import { FrozenOverlay } from './FrozenOverlay';
 import { Modal } from '../Popups';
 import { getEnemyDef } from './engine/enemies';
-import { BuffPill } from '../cards/EffectPill';
-import { effectIcon, effectLabel } from '../cards/effectMeta';
-
-function buffIconForKind(kind: string): string {
-  return effectIcon(kind);
-}
-function buffLabelForKind(kind: string): string {
-  return effectLabel(kind);
-}
+import { PartyBuffBadges } from '../cards/BuffBadges';
+import { EnemyDebuffBadges } from '../cards/DebuffBadges';
 
 
 interface Props {
@@ -192,10 +76,8 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
     if (cs.hand.length === 0 && cs.used.length === 0) {
       const extraDraw = nextTurnDraws[thrower.id] ?? 0;
       const extraSlot = nextTurnSlots[thrower.id] ?? 0;
-      let next = startTurn(cs);
-      if (extraDraw > 0) next = drawCards(next, HAND_SIZE + extraDraw);
+      const next = startTurnWithExtraDraws(cs, extraDraw, extraSlot, (n) => setBonusSlots(b => b + n));
       setCardStates(prev => ({ ...prev, [thrower.id]: next }));
-      if (extraSlot > 0) setBonusSlots(b => b + extraSlot);
       setNextTurnDraws(prev => { const c = { ...prev }; delete c[thrower.id]; return c; });
       setNextTurnSlots(prev => { const c = { ...prev }; delete c[thrower.id]; return c; });
     }
@@ -276,32 +158,10 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
     if (cs.used.length >= maxPlays) return;
 
     if (card.type !== 'damage') {
-      let updated = playCardFromHand(cs, handIdx);
-      if (!updated) return;
-      if (card.effect === 'redraw') {
-        updated = redrawHand(updated);
-      } else if (card.effect === 'recycle') {
-        updated = recycleGraveyard(updated);
-      } else if (card.effect === 'extra_dart') {
-        setBonusSlots(b => b + 1);
-      } else if (card.effect === 'extra_slot') {
-        setNextTurnSlots(prev => ({ ...prev, [thrower.id]: (prev[thrower.id] ?? 0) + (card.magnitude ?? 1) }));
-      } else if (card.effect === 'draw') {
-        setNextTurnDraws(prev => ({ ...prev, [thrower.id]: (prev[thrower.id] ?? 0) + (card.magnitude ?? 1) }));
-      } else if (card.effect === 'blessing') {
-        setNextTurnDraws(prev => ({ ...prev, [thrower.id]: (prev[thrower.id] ?? 0) + 1 }));
-      } else if (card.effect === 'shadowstep') {
-        setNextTurnDraws(prev => ({ ...prev, [thrower.id]: (prev[thrower.id] ?? 0) + (card.magnitude ?? 1) }));
-        if (updated.used.length > 0) {
-          const swapBack = updated.used[updated.used.length - 1];
-          updated = {
-            ...updated,
-            hand: [...updated.hand, swapBack],
-            used: updated.used.slice(0, -1),
-          };
-        }
-      }
-      setState(prev => applyUtilityCard(prev, card, settings));
+      const updated = applyCardEffect({
+        card, handIdx, state: cs, battleState: state, throwerId: thrower.id,
+        bonusSlots, setBonusSlots, setNextTurnSlots, setNextTurnDraws, setBattleState: setState as any,
+      });
       Sound.play('powerup', {}, settings);
       setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
       return;
@@ -422,9 +282,9 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
         const can = canActivateCoopPowerUp(state, pu.id);
         return (
           <div className="coop-orb-float">
-            <CoopPowerUpOrb
-              charge={thrower.powerUpCharge}
-              pu={pu}
+            <CoopChargedPlayerIcon
+              player={thrower}
+              players={players}
               canActivate={can && state.darts.length === 0}
               onActivate={() => onActivatePowerUp(pu.id)}
             />
@@ -490,11 +350,7 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
                   {Math.round(p.powerUpCharge)}%
                 </span>
                 {p.buffs.length > 0 && (
-                  <span style={{ display: 'inline-flex', gap: 3, marginLeft: 4 }}>
-                    {p.buffs.map(b => (
-                      <BuffPill key={b.id} icon={buffIconForKind(b.kind)} label={buffLabelForKind(b.kind)} amount={b.amount} turnsLeft={b.turnsLeft} />
-                    ))}
-                  </span>
+                  <PartyBuffBadges buffs={p.buffs} />
                 )}
               </div>
             );
@@ -599,12 +455,10 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
               }}
             >
               <div className="row between">
-                <div className="row" style={{ gap: 6 }}>
+                <div className="row" style={{ gap: 6, alignItems: 'center' }}>
                   <span className="po-name">{e.name}</span>
-                  {e.defeated && <span className="pill" style={{ fontSize: 9, background: '#ef4444', color: '#fff' }}>DEFEATED</span>}
-                  {frozen && <span className="pill" style={{ fontSize: 9, background: '#60a5fa', color: '#0b0e13' }}>❄ FROZEN {e.frozenTurns}</span>}
-                  {distracted && !e.defeated && <span className="pill" style={{ fontSize: 9, background: '#a78bfa', color: '#0b0e13' }}>🎯 DISTRACTED {e.distractedTurns}</span>}
-                  {vulnerable && !e.defeated && <span className="pill" style={{ fontSize: 9, background: '#fbbf24', color: '#0b0e13' }}>⏳ VULN {e.vulnerableTurns}</span>}
+                  {e.defeated && <span style={{ fontSize: 14, color: '#ef4444', fontWeight: 900 }}>☠</span>}
+                  {!e.defeated && <EnemyDebuffBadges enemy={e} />}
                 </div>
                 <span className="pill" style={{ fontSize: 10 }}>{e.hp} HP</span>
               </div>
