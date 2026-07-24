@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Star } from 'lucide-react';
 import type { Dart, GamePlayer, Settings } from '../types';
 import { computeBattleDartDamage } from '../logic';
 import { initials } from '../store';
@@ -9,6 +10,7 @@ export interface BattleVisitStep {
   damage: number;
   hpAfter: number;
   formula: string;
+  isCrit: boolean;
 }
 
 export interface BattleVisitOverlayProps {
@@ -33,15 +35,23 @@ export function BattleVisitOverlay({ attacker, target, darts, settings, surgeAct
   const steps = useMemo<BattleVisitStep[]>(() => {
     let hp = target.hp ?? target.maxHp ?? 0;
     return darts.map((dart) => {
-      const dartValue = surgeActive ? dart.value * 2 : dart.value;
+      const isCrit = !!surgeActive && dart.value > 0;
+      const dartValue = isCrit ? dart.value * 2 : dart.value;
       const damage = computeBattleDartDamage(dartValue, power, armor, settings);
       hp = Math.max(0, hp - damage);
-      const formula = dartValue <= 0
-        ? `Miss · 0 dmg`
-        : surgeActive
-          ? `Surge ×2 → ${dartValue} · (${dartValue} + ${power}) × (1 − ${armor}%) = ${damage} dmg`
-          : `(${dartValue} + ${power}) × (1 − ${armor}%) = ${damage} dmg`;
-      return { dart, damage, hpAfter: hp, formula };
+      let formula: string;
+      if (dartValue <= 0) {
+        formula = `Miss · 0 dmg`;
+      } else if (isCrit) {
+        formula = armor > 0
+          ? `${dart.value} × 2 + ${power} × (1 − ${armor}%) = ${damage} dmg`
+          : `${dart.value} × 2 + ${power} = ${damage} dmg`;
+      } else {
+        formula = armor > 0
+          ? `${dartValue} + ${power} × (1 − ${armor}%) = ${damage} dmg`
+          : `${dartValue} + ${power} = ${damage} dmg`;
+      }
+      return { dart, damage, hpAfter: hp, formula, isCrit };
     });
   }, [darts, power, armor, settings, cfg.battleMinDamage, target.hp, target.maxHp, surgeActive]);
 
@@ -55,6 +65,7 @@ export function BattleVisitOverlay({ attacker, target, darts, settings, surgeAct
   const totalDamage = steps.reduce((s, st) => s + st.damage, 0);
   const finalHp = steps.length ? steps[steps.length - 1].hpAfter : startHpRef.current;
   const defeated = finalHp <= 0;
+  const anyCrit = steps.some((s) => s.isCrit && s.damage > 0);
 
   // Advance through each dart with a small delay so the user can read the
   // formula and see the HP bar animate. After the last dart, the overlay
@@ -142,8 +153,25 @@ export function BattleVisitOverlay({ attacker, target, darts, settings, surgeAct
                 className={`bo-step ${isCurrent ? 'current' : ''} ${isPast ? 'past' : ''} ${isFuture ? 'future' : ''} ${s.damage <= 0 ? 'miss' : ''}`}
               >
                 <span className="bo-step-dart">{s.dart.label}</span>
-                <span className="bo-step-formula">{s.formula}</span>
-                <span className="bo-step-dmg">{s.damage <= 0 ? '—' : `−${s.damage}`}</span>
+                <span className="bo-step-formula" style={s.isCrit && s.damage > 0 ? { color: '#facc15' } : undefined}>
+                  {s.isCrit && s.damage > 0 && (
+                    <span style={{ fontWeight: 700, color: '#facc15', marginRight: 3 }}>CRIT ×2 ·</span>
+                  )}
+                  {s.formula}
+                </span>
+                <span
+                  className="bo-step-dmg"
+                  style={s.isCrit && s.damage > 0 ? { color: '#facc15', display: 'flex', alignItems: 'center', gap: 2 } : undefined}
+                >
+                  {s.damage <= 0 ? '—' : (
+                    <>
+                      {`−${s.damage}`}
+                      {s.isCrit && (
+                        <Star size={11} fill="#facc15" color="#facc15" style={{ marginLeft: 2, flexShrink: 0 }} />
+                      )}
+                    </>
+                  )}
+                </span>
               </div>
             );
           })}
@@ -151,7 +179,12 @@ export function BattleVisitOverlay({ attacker, target, darts, settings, surgeAct
 
         <div className="bo-footer">
           <span className="muted small">Total this visit</span>
-          <span className="bo-total">−{totalDamage} HP</span>
+          <span className="bo-total" style={anyCrit && done ? { color: '#facc15', display: 'flex', alignItems: 'center', gap: 4 } : undefined}>
+            {`−${totalDamage} HP`}
+            {anyCrit && done && (
+              <Star size={13} fill="#facc15" color="#facc15" />
+            )}
+          </span>
         </div>
 
         <button className="btn ghost sm block" style={{ marginTop: 10 }} onClick={onDone}>
