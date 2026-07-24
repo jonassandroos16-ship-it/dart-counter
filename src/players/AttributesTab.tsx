@@ -1,5 +1,5 @@
 import type { Player, Settings, ClassAttributes } from '../types';
-import { totalAttributePointsForLevel, defaultClassAttributes, classStartHealth, classStartArmor, classStartPower, classHealthMax, classArmorMax, classPowerMax } from '../logic';
+import { totalAttributePointsForLevel, defaultClassAttributes, classStartHealth, classStartArmor, classStartPower, classStartCrit, classHealthMax, classArmorMax, classPowerMax, classCritMax } from '../logic';
 import { COOP_CLASSES, getCoopClass, selectClassForPlayer } from '../campaign/engine';
 import type { CoopClassId } from '../campaign/types';
 import { spentOn, effectiveLevel } from './helpers';
@@ -21,15 +21,19 @@ export function AttributesTab({ player, settings, setPlayers, toast }: {
   const hMax = classHealthMax(activeClassId, settings);
   const aMax = classArmorMax(activeClassId, settings);
   const pMax = classPowerMax(activeClassId, settings);
+  const cMax = classCritMax(activeClassId, settings);
   const startH = classStartHealth(activeClassId, settings);
   const startA = classStartArmor(activeClassId, settings);
   const startP = classStartPower(activeClassId, settings);
+  const startC = classStartCrit(activeClassId, settings);
   const safeHealth = Number.isFinite(active.health) ? active.health : startH;
   const safeArmor = Number.isFinite(active.armor) ? active.armor : startA;
   const safePower = Number.isFinite(active.power) ? active.power : startP;
+  const safeCrit = Number.isFinite(active.crit) ? active.crit : startC;
   const spent = spentOn(safeHealth, startH, cfg.healthPerPoint)
     + spentOn(safeArmor, startA, cfg.armorPerPoint)
-    + spentOn(safePower, startP, cfg.powerPerPoint);
+    + spentOn(safePower, startP, cfg.powerPerPoint)
+    + spentOn(safeCrit, startC, cfg.critPerPoint);
   const available = Math.max(0, totalPoints - spent);
 
   const pickClass = (classId: CoopClassId) => {
@@ -52,8 +56,9 @@ export function AttributesTab({ player, settings, setPlayers, toast }: {
   const healthAtCap = safeHealth >= hMax;
   const armorAtCap = safeArmor >= aMax;
   const powerAtCap = safePower >= pMax;
+  const critAtCap = safeCrit >= cMax;
 
-  const spend = (kind: 'health' | 'armor' | 'power') => {
+  const spend = (kind: 'health' | 'armor' | 'power' | 'crit') => {
     if (!Number.isFinite(available) || available <= 0) { toast('No attribute points available'); return; }
     setPlayers((prev: Player[]) => prev.map(p => {
       if (p.id !== player.id) return p;
@@ -63,15 +68,18 @@ export function AttributesTab({ player, settings, setPlayers, toast }: {
       const cH = classStartHealth(cid, settings);
       const cA = classStartArmor(cid, settings);
       const cP = classStartPower(cid, settings);
+      const cC = classStartCrit(cid, settings);
       const cHMax = classHealthMax(cid, settings);
       const cAMax = classArmorMax(cid, settings);
       const cPMax = classPowerMax(cid, settings);
+      const cCMax = classCritMax(cid, settings);
       const curH = Number.isFinite(ca.health) ? ca.health : cH;
       const curA = Number.isFinite(ca.armor) ? ca.armor : cA;
       const curP = Number.isFinite(ca.power) ? ca.power : cP;
+      const curC = Number.isFinite(ca.crit) ? ca.crit : cC;
       const lv = effectiveLevel(p, settings);
       const tp = totalAttributePointsForLevel(lv, settings) + (p.developerMode ? 100 : 0);
-      const sp = spentOn(curH, cH, cfg.healthPerPoint) + spentOn(curA, cA, cfg.armorPerPoint) + spentOn(curP, cP, cfg.powerPerPoint);
+      const sp = spentOn(curH, cH, cfg.healthPerPoint) + spentOn(curA, cA, cfg.armorPerPoint) + spentOn(curP, cP, cfg.powerPerPoint) + spentOn(curC, cC, cfg.critPerPoint);
       const avail = Math.max(0, tp - sp);
       if (kind === 'health') {
         if (curH >= cHMax) { toast(`Health capped at ${cHMax}`); return p; }
@@ -87,9 +95,16 @@ export function AttributesTab({ player, settings, setPlayers, toast }: {
         caMap[cid] = nextCa;
         return { ...p, classAttributes: caMap, attributes: { ...nextCa } };
       }
-      if (curP >= cPMax) { toast(`Power capped at ${cPMax}`); return p; }
-      const step = Number.isFinite(cfg.powerPerPoint) && cfg.powerPerPoint > 0 ? cfg.powerPerPoint : 1;
-      const nextCa: ClassAttributes = { ...ca, power: Math.min(cPMax, curP + step), pointsAvailable: Math.max(0, avail - 1) };
+      if (kind === 'power') {
+        if (curP >= cPMax) { toast(`Power capped at ${cPMax}`); return p; }
+        const step = Number.isFinite(cfg.powerPerPoint) && cfg.powerPerPoint > 0 ? cfg.powerPerPoint : 1;
+        const nextCa: ClassAttributes = { ...ca, power: Math.min(cPMax, curP + step), pointsAvailable: Math.max(0, avail - 1) };
+        caMap[cid] = nextCa;
+        return { ...p, classAttributes: caMap, attributes: { ...nextCa } };
+      }
+      if (curC >= cCMax) { toast(`Crit capped at ${cCMax}%`); return p; }
+      const step = Number.isFinite(cfg.critPerPoint) && cfg.critPerPoint > 0 ? cfg.critPerPoint : 1;
+      const nextCa: ClassAttributes = { ...ca, crit: Math.min(cCMax, curC + step), pointsAvailable: Math.max(0, avail - 1) };
       caMap[cid] = nextCa;
       return { ...p, classAttributes: caMap, attributes: { ...nextCa } };
     }));
@@ -112,7 +127,7 @@ export function AttributesTab({ player, settings, setPlayers, toast }: {
   return (
     <>
       <div className="muted small" style={{ marginBottom: 10 }}>
-        {activeClass ? `${activeClass.icon} ${activeClass.name}` : 'No class'} starts with {startH} HP, {startA}% armor and {startP} power. Each level grants {cfg.attributePointsPerLevel} attribute points. Health caps at {hMax}, armor at {aMax}% (percentage damage reduction per dart) and power at {pMax} (flat per dart).
+        {activeClass ? `${activeClass.icon} ${activeClass.name}` : 'No class'} starts with {startH} HP, {startA}% armor, {startP} power and {startC}% crit. Each level grants {cfg.attributePointsPerLevel} attribute points. Health caps at {hMax}, armor at {aMax}% (percentage damage reduction per dart), power at {pMax} (flat per dart) and crit at {cMax}% (chance to double damage before armor).
       </div>
       <div className="card" style={{ padding: 12, marginBottom: 10 }}>
         <div className="row between"><b>{activeClass ? `${activeClass.icon} ${activeClass.name}` : 'No Class'}</b><span className="xp-pill">Lvl {level}</span></div>
@@ -135,6 +150,11 @@ export function AttributesTab({ player, settings, setPlayers, toast }: {
         <div className="muted small" style={{ marginTop: 4 }}>Each point adds +{cfg.powerPerPoint} power (max {pMax}). Flat damage bonus added to EVERY dart that hits in Battle.</div>
         <button className="btn primary block" style={{ marginTop: 8 }} disabled={!Number.isFinite(available) || available <= 0 || powerAtCap} onClick={() => spend('power')}>{powerAtCap ? 'Power at cap' : '+ Spend 1 point on Power'}</button>
       </div>
+      <div className="card" style={{ padding: 12, marginBottom: 10 }}>
+        <div className="row between"><b>🎯 Crit</b><span style={{ fontWeight: 800, fontSize: 18 }}>{safeCrit}%{critAtCap ? <span className="muted small" style={{ marginLeft: 6 }}>MAX</span> : null}</span></div>
+        <div className="muted small" style={{ marginTop: 4 }}>Each point adds +{cfg.critPerPoint}% crit (max {cMax}%). Chance to double flat damage before armor on each dart in Battle.</div>
+        <button className="btn primary block" style={{ marginTop: 8 }} disabled={!Number.isFinite(available) || available <= 0 || critAtCap} onClick={() => spend('crit')}>{critAtCap ? 'Crit at cap' : '+ Spend 1 point on Crit'}</button>
+      </div>
 
       {/* Per-class overview */}
       <div className="card" style={{ padding: 12, marginBottom: 10 }}>
@@ -149,7 +169,8 @@ export function AttributesTab({ player, settings, setPlayers, toast }: {
           const cStartH = classStartHealth(cls.id, settings);
           const cStartA = classStartArmor(cls.id, settings);
           const cStartP = classStartPower(cls.id, settings);
-          const clsSpent = spentOn(ca.health, cStartH, cfg.healthPerPoint) + spentOn(ca.armor, cStartA, cfg.armorPerPoint) + spentOn(ca.power, cStartP, cfg.powerPerPoint);
+          const cStartC = classStartCrit(cls.id, settings);
+          const clsSpent = spentOn(ca.health, cStartH, cfg.healthPerPoint) + spentOn(ca.armor, cStartA, cfg.armorPerPoint) + spentOn(ca.power, cStartP, cfg.powerPerPoint) + spentOn(ca.crit, cStartC, cfg.critPerPoint);
           const clsAvail = Math.max(0, clsTotal - clsSpent);
           return (
             <button key={cls.id} onClick={() => pickClass(cls.id as CoopClassId)} disabled={isCurrent}
@@ -166,7 +187,7 @@ export function AttributesTab({ player, settings, setPlayers, toast }: {
                 <span className="muted small">Lvl {clsLv}</span>
               </div>
               <div className="muted small" style={{ marginTop: 4 }}>
-                ❤️ {ca.health} HP · 🛡️ {ca.armor}% · ⚡ {ca.power} · {clsAvail} pts available
+                ❤️ {ca.health} HP · 🛡️ {ca.armor}% · ⚡ {ca.power} · 🎯 {ca.crit}% · {clsAvail} pts available
               </div>
             </button>
           );

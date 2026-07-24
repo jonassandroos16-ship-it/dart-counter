@@ -62,7 +62,7 @@ export function PlayerCard({ player, games, settings, customTitles, onEdit, onDe
             {p.developerMode ? <span className="xp-pill" title="Developer mode — bonus points for testing">DEV</span> : null}
           </div>
           <div className="muted small">{s.games} games ({s.competitiveGames} competitive) · {s.avg.toFixed(1)} avg · {s.n180} × 180 · {classXpVal} XP{cls ? ` (${cls})` : ''} · {(xp.unlockedBadges || []).length} badges · {totalBadgeEarns} earned</div>
-          <div className="muted small" style={{ marginTop: 2 }}>❤️ {Number.isFinite(attrs.health) ? attrs.health : 0} HP · 🛡️ {Number.isFinite(attrs.armor) ? attrs.armor : 0}% armor · ⚡ {Number.isFinite(attrs.power) ? attrs.power : 0} power · {pwr.unlocked.length} power-ups · {pwr.pointsAvailable} PU pts · {attrs.pointsAvailable} attr pts</div>
+          <div className="muted small" style={{ marginTop: 2 }}>❤️ {Number.isFinite(attrs.health) ? attrs.health : 0} HP · 🛡️ {Number.isFinite(attrs.armor) ? attrs.armor : 0}% armor · ⚡ {Number.isFinite(attrs.power) ? attrs.power : 0} power · 🎯 {Number.isFinite(attrs.crit) ? attrs.crit : 0}% crit · {pwr.unlocked.length} power-ups · {pwr.pointsAvailable} PU pts · {attrs.pointsAvailable} attr pts</div>
           <div className="xp-bar" style={{ width: '100%', maxWidth: 240 }}><div style={{ width: `${Math.round((classXpInfo ?? li).xpIntoLevel / (classXpInfo ?? li).xpNeeded * 100)}%` }} /></div>
         </div>
       </div>
