@@ -20,6 +20,8 @@ import { ownsPlayer, type LobbyPlayer } from '../multiplayer/client';
 import { DeckUpgradeScreen } from './DeckUpgradeScreen';
 import { BOSS_INTRO_STORIES, MINIBOSS_INTRO_STORIES } from './bossStories';
 import { ProgressScreen } from './ProgressScreen';
+import { BuffPill } from '../cards/EffectPill';
+import { effectIcon, effectLabel } from '../cards/effectMeta';
 import { PlayerDetailModal } from './PlayerDetailModal';
 import { BossVictoryScreen } from './BossVictoryScreen';
 import { RewardRevealOverlay } from './RewardRevealOverlay';
@@ -399,6 +401,13 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
                     <span className="avatar" style={{ width: 18, height: 18, fontSize: 9, background: isThrower ? 'rgba(0,0,0,.25)' : p.color }}>{initials(p.name)}</span>
                     {p.name}
                     <span style={{ fontSize: 10, opacity: 0.8 }}>⚡{effectivePower(p)}</span>
+                    {p.buffs.length > 0 && (
+                      <span style={{ display: 'inline-flex', gap: 2 }}>
+                        {p.buffs.map(b => (
+                          <BuffPill key={b.id} icon={effectIcon(b.kind)} label={effectLabel(b.kind)} amount={b.amount} turnsLeft={b.turnsLeft} />
+                        ))}
+                      </span>
+                    )}
                   </div>
                 );
               })}
@@ -596,7 +605,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             />
           )}
         </>
-      ))}
+      )}
 
       {showDeckUpgrade && deckUpgradeOption && (
         <DeckUpgradeScreen
