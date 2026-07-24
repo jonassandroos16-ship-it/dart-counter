@@ -44,8 +44,8 @@ export const CARD_DEFS: CardDef[] = [
   { id: 'dmg_s19', name: 'Single 19', icon: '🎯', type: 'damage', mode: 'both', class: 'any', rarity: 'common', desc: 'Deal 19 damage.', base: 19, mult: 1, levelRequired: 2 },
   { id: 'dmg_s18', name: 'Single 18', icon: '🎯', type: 'damage', mode: 'both', class: 'any', rarity: 'common', desc: 'Deal 18 damage.', base: 18, mult: 1, levelRequired: 2 },
   // ── Level 2 — Spells & utility ────────────────────────────────────
-  { id: 'spell_bust_protect', name: 'Soul Barrier', icon: '🛡️', type: 'spell', mode: 'both', class: 'any', rarity: 'rare', desc: 'A protective ward absorbs overflow damage, preventing self-harm from overkill strikes.', effect: 'bust_protect', levelRequired: 2 },
-  { id: 'spell_double_up', name: 'Spell Disruption', icon: '🌀', type: 'spell', mode: 'both', class: 'any', rarity: 'rare', desc: 'Disrupt enemy focus: their next empowered strike fizzles to nothing.', effect: 'double_up', levelRequired: 2 },
+  { id: 'spell_bust_protect', name: 'Aegis Ward', icon: '🛡️', type: 'spell', mode: 'both', class: 'any', rarity: 'rare', desc: 'Party gains a shield absorbing 50 flat damage for 2 turns.', effect: 'party_shield_flat', magnitude: 50, levelRequired: 2 },
+  { id: 'spell_double_up', name: 'Hexbolt', icon: '🌀', type: 'spell', mode: 'both', class: 'any', rarity: 'rare', desc: 'Curse all enemies: -25% damage for 2 turns.', effect: 'enemy_curse', magnitude: 25, levelRequired: 2 },
   { id: 'util_draw', name: 'Quick Draw', icon: '🃏', type: 'utility', mode: 'both', class: 'any', rarity: 'rare', desc: 'Draw an extra card next turn.', effect: 'draw', magnitude: 1, levelRequired: 2 },
   // ── Level 2 — Class-specific cards ────────────────────────────────
   { id: 'dmg_warrior_mighty_blow', name: 'Mighty Blow', icon: '💥', type: 'damage', mode: 'both', class: 'warrior', rarity: 'rare', desc: 'Deal 70 damage with overwhelming force.', base: 70, mult: 1, levelRequired: 2 },

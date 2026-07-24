@@ -19,7 +19,7 @@ import {
   levelRewardPowerUp,
 } from '../campaign/engine';
 import { getChapter, isChapterComplete } from '../campaign/campaignLevels';
-import { cardsForLevelUp, addCard, getPlayerCards, setPlayerCards } from '../cards/deck';
+import { cardsForLevelUp, getPlayerCards } from '../cards/deck';
 import { PostGameOverlay, type PostGameInfo, type LevelUpInfo, type XpAwardInfo } from './PostGameOverlay';
 import type { LobbyPlayer } from '../multiplayer/client';
 
@@ -97,13 +97,6 @@ export function CoopFlow({ players, settings, music, setPlayers, toast, onExitTo
           if (li.level > oldLevel && settings.gameMode === 'cards') {
             const curCards = getPlayerCards(next);
             const newCardDefs = cardsForLevelUp(next.coopProgress?.classId || null, li.level, 'coop', curCards);
-            if (newCardDefs.length > 0) {
-              let updatedCards = curCards;
-              for (const def of newCardDefs) {
-                updatedCards = addCard(updatedCards, def.id);
-              }
-              next = setPlayerCards(next, updatedCards);
-            }
             levelUps.push({ playerId: p.id, oldLevel, newLevel: li.level, newCards: newCardDefs.map(d => ({ id: d.id, name: d.name, icon: d.icon })), newPassives: [] });
           } else if (li.level > oldLevel) {
             levelUps.push({ playerId: p.id, oldLevel, newLevel: li.level, newCards: [], newPassives: [] });
@@ -127,17 +120,6 @@ export function CoopFlow({ players, settings, music, setPlayers, toast, onExitTo
           const li = classLevelFromXp(updatedProg, classId, settings);
           const { progress: nextProg } = reconcileCoopPassivesForPlayer(updatedProg, li.level);
           let next: Player = { ...p, coopProgress: nextProg };
-          if (li.level > oldLevel && settings.gameMode === 'cards') {
-            const curCards = getPlayerCards(next);
-            const newCardDefs = cardsForLevelUp(next.coopProgress?.classId || null, li.level, 'coop', curCards);
-            if (newCardDefs.length > 0) {
-              let updatedCards = curCards;
-              for (const def of newCardDefs) {
-                updatedCards = addCard(updatedCards, def.id);
-              }
-              next = setPlayerCards(next, updatedCards);
-            }
-          }
           return next;
         }));
         toast(`Party defeated — earned ${xpGained} XP. Try again.`);

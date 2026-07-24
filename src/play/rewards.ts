@@ -4,7 +4,6 @@ import { allVisitsFor } from '../logic';
 import { Sound } from '../sound';
 import type { PopupControls } from '../Popups';
 import { computeGameBadges } from '../badges';
-import { addCard, cardsForLevelUpCompetitive, getPlayerCards, setPlayerCards } from '../cards/deck';
 import { reconcileCoopPassivesForPlayer, addClassXp, classLevelFromXp } from '../campaign/engine/classes';
 import { COOP_CLASSES } from '../campaign/engine/classes';
 import type { CoopClassId } from '../campaign/types';
@@ -57,17 +56,6 @@ export function awardXP(playerId: string, amount: number, reason: string, settin
     if (li.level > oldLevel && settings.popups.xp) { popups.setLevelUp({ level: li.level, name: p.name, xpGained: amount, reason }); Sound.play('levelup', {}, settings); }
     let next: Player = { ...p, coopProgress: updatedProg };
     if (li.level > oldLevel) {
-      if (settings.gameMode === 'cards') {
-        const curCards = getPlayerCards(next);
-        const newCards = cardsForLevelUpCompetitive(classId, li.level, curCards);
-        if (newCards.length > 0) {
-          let updatedCards = curCards;
-          for (const def of newCards) {
-            updatedCards = addCard(updatedCards, def.id);
-          }
-          next = setPlayerCards(next, updatedCards);
-        }
-      }
       const coopProg = next.coopProgress;
       if (coopProg?.classId) {
         const { progress: reconciledProg } = reconcileCoopPassivesForPlayer(coopProg, li.level);

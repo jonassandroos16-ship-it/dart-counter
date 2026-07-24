@@ -26,8 +26,8 @@ const EFFECT_MESSAGES: Record<string, string> = {
   reroll: '🎲 {name} — Reroll available!',
   shadowstep: '🌑 {name} — Shadowstep active!',
   blessing: '🙏 {name} — Blessed!',
-  bust_protect: '🛡️ {name} — Soul barrier active!',
-  double_up: '🌀 {name} — Enemy strike disrupted!',
+  bust_protect: '🛡️ {name} — Aegis Ward active!',
+  double_up: '🌀 {name} — Enemies cursed!',
   extra_dart: '➕ {name} — Extra throw granted!',
   redraw: '🔄 {name} — Hand discarded, fresh cards drawn!',
   recycle: '♻️ {name} — Graveyard shuffled into deck!',
@@ -109,8 +109,12 @@ export function playCard(params: PlayCardParams): void {
       if (game.mode === 'battle') {
         applyGame({ players: game.players.map((pl, i) => i === game.turn ? { ...pl, hp: Math.min((pl as any).maxHp || 100, (pl.hp || 0) + (card.magnitude ?? 0)) } as any : pl) });
       }
-    } else if (card.effect === 'bust_protect') {
-      applyGame({ players: game.players.map((pl, i) => i === game.turn ? { ...pl, _luckyMiss: true } as any : pl) });
+    } else if (card.effect === 'party_shield_flat' || card.effect === 'party_shield') {
+      if (game.mode === 'battle') {
+        applyGame({ players: game.players.map((pl, i) => i === game.turn ? { ...pl, hp: Math.min((pl as any).maxHp || 100, (pl.hp || 0) + (card.magnitude ?? 0)) } as any : pl) });
+      }
+    } else if (card.effect === 'enemy_curse' || card.effect === 'enemy_miss') {
+      // Curse/miss effects are handled by the battle engine, not the board.
     }
 
     const playedCard: PlayedCard = {

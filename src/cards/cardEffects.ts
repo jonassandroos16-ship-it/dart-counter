@@ -11,7 +11,7 @@ export interface CardEffectParams {
   battleState: CampaignBattleState;
   throwerId: string;
   bonusSlots: number;
-  setBonusSlots: (fn: (b: number) => number) => void;
+  setBonusSlots: (fn: (b: number) => number) => number;
   setNextTurnSlots: (fn: (prev: Record<string, number>) => Record<string, number>) => void;
   setNextTurnDraws: (fn: (prev: Record<string, number>) => Record<string, number>) => void;
   setBattleState: (fn: (prev: CampaignBattleState | null) => CampaignBattleState | null) => void;
@@ -91,7 +91,7 @@ export function applyCardEffect(params: CardEffectParams): CardPlayState {
   } else if (effect === 'armor_buff') {
     const buffId = `armor_${Date.now()}`;
     setBattleState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'armor' as const, amount: mag, turnsLeft: 3, source: throwerId }] })) } : prev);
-  } else if (effect === 'surge' || effect === 'hot_streak' || effect === 'bust_protect' || effect === 'double_up' || effect === 'reflect') {
+  } else if (effect === 'surge' || effect === 'hot_streak' || effect === 'reflect') {
     const buffId = `${effect}_${Date.now()}`;
     setBattleState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: effect as any, amount: mag, turnsLeft: 2, source: throwerId }] })) } : prev);
   } else if (effect === 'revive') {

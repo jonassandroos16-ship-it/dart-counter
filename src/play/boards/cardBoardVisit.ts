@@ -254,7 +254,7 @@ export function enterVisit(params: EnterVisitParams): void {
       delete cur._luckyMiss;
       cur.visits.push({ darts: [...game.darts], scored: 0, remaining: cur.score, leg: game.leg, bust: true, luckyMiss: true, date: new Date().toISOString() });
       Sound.play('enter', {}, settings);
-      toast('Soul Barrier! Bust cancelled — score stays.');
+      toast('Aegis Ward! Bust cancelled — score stays.');
       const thrown = [...game.thrownThisRound, cur.id];
       const next = advanceTurn({ ...resetBonus, players: newPlayers, thrownThisRound: thrown, darts: [], mult: 1, cardState: { ...game.cardState, [cur.id]: endedState } }, ctx);
       setGame(next);
