@@ -6,7 +6,41 @@ import {
   playCardFromHand, redrawHand, recycleGraveyard,
 } from '../../cards/deck';
 
-export function playCard(params: {
+const EFFECT_MESSAGES: Record<string, string> = {
+  heal: '✨ {name} — Party healed!',
+  heal_over_time: '💚 {name} — Party regenerating HP!',
+  party_shield_flat: '🛡️ {name} — Party shielded from flat damage!',
+  party_shield: '🛡️ {name} — Party takes less damage!',
+  enemy_curse: '🔮 {name} — Enemies cursed!',
+  enemy_debuff: '💀 {name} — Enemies weakened!',
+  enemy_miss: '🌀 {name} — Enemies debuffed, may miss!',
+  bleed: '🩸 {name} — Enemies bleeding!',
+  freeze: '❄️ {name} — Enemies frozen!',
+  surge: '⚡ {name} — Next visit scores double!',
+  hot_streak: '🔥 {name} — Cumulative bonus active!',
+  power_buff: '💪 {name} — Party power increased!',
+  crit_buff: '🔮 {name} — Critical hit chance granted to the party!',
+  armor_buff: '🏰 {name} — Party armor fortified!',
+  reflect: '🪞 {name} — Damage reflection active!',
+  draw: '🃏 {name} — Extra cards drawn!',
+  reroll: '🎲 {name} — Reroll available!',
+  shadowstep: '🌑 {name} — Shadowstep active!',
+  blessing: '🙏 {name} — Blessed!',
+  bust_protect: '🛡️ {name} — Soul barrier active!',
+  double_up: '🌀 {name} — Enemy strike disrupted!',
+  extra_dart: '➕ {name} — Extra throw granted!',
+  redraw: '🔄 {name} — Hand discarded, fresh cards drawn!',
+  recycle: '♻️ {name} — Graveyard shuffled into deck!',
+  revive: '❤️ {name} — Party revived!',
+};
+
+export function effectToastMessage(card: CardDef): string {
+  const template = EFFECT_MESSAGES[card.effect || ''];
+  if (!template) return `${card.name}: ${card.desc}`;
+  return template.replace('{name}', card.name);
+}
+
+export interface PlayCardParams {
   handIdx: number;
   handDefs: CardDef[];
   state: CardPlayState;
@@ -18,138 +52,108 @@ export function playCard(params: {
   totalCardsPlayed: number;
   maxPlays: number;
   bonusSlots: number;
-  prevHandRef: React.MutableRefObject<number | null>;
+  prevHandRef: { current: number | null };
   setSelectedCardIdx: (idx: number | null) => void;
   force: (fn: (n: number) => number) => void;
-}) {
-  const { handIdx, handDefs, state, game, p, settings, toast, setGame, totalCardsPlayed, maxPlays, prevHandRef, setSelectedCardIdx, force } = params;
+}
+
+export function playCard(params: PlayCardParams): void {
+  const { handIdx, handDefs, state, game, p, settings, toast, setGame, totalCardsPlayed, maxPlays, bonusSlots, prevHandRef, setSelectedCardIdx, force } = params;
   const card = handDefs[handIdx];
   if (!card) return;
-  if (totalCardsPlayed >= maxPlays) {
-    toast('No more card plays this turn');
+  if (totalCardsPlayed >= maxPlays) { toast(`Only ${maxPlays} cards per visit`); return; }
+  if (card.type !== 'damage') {
+    const msg = effectToastMessage(card);
+    toast(msg);
+    const soundType = card.type === 'spell' ? 'card_spell' : 'card_utility';
+    Sound.play(soundType, {}, settings);
+    let updated = playCardFromHand(state, handIdx);
+    if (!updated) return;
+
+    let gameUpdates: Partial<Game> = {};
+    const applyGame = (updates: Partial<Game>) => { gameUpdates = { ...gameUpdates, ...updates }; };
+
+    if (card.effect === 'redraw') {
+      updated = redrawHand(updated);
+    } else if (card.effect === 'recycle') {
+      updated = recycleGraveyard(updated);
+    } else if (card.effect === 'extra_dart') {
+      applyGame({ bonusSlots: bonusSlots + 1 });
+    } else if (card.effect === 'extra_slot') {
+      const slots = { ...(game.nextTurnSlots || {}) };
+      slots[p.id] = (slots[p.id] ?? 0) + (card.magnitude ?? 1);
+      applyGame({ nextTurnSlots: slots });
+    } else if (card.effect === 'draw' || card.effect === 'blessing') {
+      const drawCount = card.effect === 'blessing' ? 1 : (card.magnitude ?? 1);
+      const draws1 = { ...(game.nextTurnDraws || {}) };
+      draws1[p.id] = (draws1[p.id] ?? 0) + drawCount;
+      applyGame({ nextTurnDraws: draws1 });
+    } else if (card.effect === 'shadowstep') {
+      const drawCount = card.magnitude ?? 1;
+      const draws2 = { ...(game.nextTurnDraws || {}) };
+      draws2[p.id] = (draws2[p.id] ?? 0) + drawCount;
+      applyGame({ nextTurnDraws: draws2 });
+      if (updated.used.length > 0) {
+        const swapBack = updated.used[updated.used.length - 1];
+        updated = {
+          ...updated,
+          hand: [...updated.hand, swapBack],
+          used: updated.used.slice(0, -1),
+        };
+      }
+    } else if (card.effect === 'surge') {
+      applyGame({ players: game.players.map((pl, i) => i === game.turn ? { ...pl, _surgeNext: true } as any : pl) });
+    } else if (card.effect === 'hot_streak') {
+      applyGame({ players: game.players.map((pl, i) => i === game.turn ? { ...pl, _hotStreak: true } as any : pl) });
+    } else if (card.effect === 'heal') {
+      if (game.mode === 'battle') {
+        applyGame({ players: game.players.map((pl, i) => i === game.turn ? { ...pl, hp: Math.min((pl as any).maxHp || 100, (pl.hp || 0) + (card.magnitude ?? 0)) } as any : pl) });
+      }
+    } else if (card.effect === 'bust_protect') {
+      applyGame({ players: game.players.map((pl, i) => i === game.turn ? { ...pl, _luckyMiss: true } as any : pl) });
+    }
+
+    const playedCard: PlayedCard = {
+      playerId: p.id, playerName: p.name, playerColor: p.color,
+      cardId: card.id, upgradeLevel: state.hand[handIdx]?.upgradeLevel ?? 0,
+      turn: game.turn, timestamp: Date.now(),
+    };
+    const pc = state.hand[handIdx];
+    setGame({
+      ...game,
+      ...gameUpdates,
+      cardState: { ...game.cardState, [p.id]: updated },
+      playedCards: [...(game.playedCards || []), playedCard],
+      lastCardPlay: { playerId: p.id, cardId: card.id, upgradeLevel: pc?.upgradeLevel ?? 0, timestamp: playedCard.timestamp },
+    } as Game);
+    force(n => n + 1);
     return;
   }
-
+  if (game.darts.length >= maxPlays) { toast(`Only ${maxPlays} cards per visit`); return; }
   const updated = playCardFromHand(state, handIdx);
   if (!updated) return;
-
-  const effectMessages: Record<string, string> = {
-    heal: '✨ {name} — Party healed!',
-    heal_over_time: '💚 {name} — Party regenerating HP!',
-    crit_buff: '🔮 {name} — Critical hit chance granted to the party!',
-    party_shield_flat: '🛡️ {name} — Party shielded!',
-    party_shield: '🛡️ {name} — Party damage reduction!',
-    enemy_curse: '🔮 {name} — Enemies cursed!',
-    enemy_debuff: '💀 {name} — Enemies weakened!',
-    enemy_miss: '🌀 {name} — Enemies distracted!',
-    bleed: '🩸 {name} — Enemies bleeding!',
-    freeze: '❄️ {name} — Enemies frozen!',
-    surge: '⚡ {name} — Next visit scores double!',
-    hot_streak: '🔥 {name} — Hot streak active!',
-    power_buff: '💪 {name} — Party power increased!',
-    armor_buff: '🏰 {name} — Party armor increased!',
-    reflect: '🪞 {name} — Damage reflection active!',
-    draw: '🃏 {name} — Extra cards next turn!',
-    blessing: '🙏 {name} — Blessed!',
-    bust_protect: '🛡️ {name} — Soul barrier active!',
-    double_up: '🌀 {name} — Enemy strike disrupted!',
-    extra_dart: '➕ {name} — Extra dart throw granted!',
-    extra_slot: '➕ {name} — Extra card slots next turn!',
-    redraw: '🔄 {name} — Hand redrawn!',
-    recycle: '♻️ {name} — Graveyard recycled!',
-    shadowstep: '🌑 {name} — Shadowstep!',
-    revive: '❤️ {name} — Party revived!',
-  };
-
-  if (card.effect && effectMessages[card.effect]) {
-    toast(effectMessages[card.effect].replace('{name}', card.name));
-  }
-
   const base = card.base ?? 0;
-  const cardMult = card.mult ?? 1;
+  const mult = card.mult ?? 1;
   const isBull = base === 50;
+  const value = cardDamage(card);
   const label = card.name;
-  const value = isBull ? 50 : base * (isBull ? 2 : cardMult);
-
-  let nextGame: Game = {
-    ...game,
-    cardState: { ...game.cardState, [p.id]: updated },
-    lastCardPlay: {
-      playerId: p.id,
-      cardId: card.id,
-      upgradeLevel: 0,
-      timestamp: Date.now(),
-    },
-  };
-
-  if (card.effect === 'redraw') {
-    const redrawn = redrawHand(updated);
-    nextGame = { ...nextGame, cardState: { ...nextGame.cardState, [p.id]: redrawn } };
-  } else if (card.effect === 'recycle') {
-    const recycled = recycleGraveyard(updated);
-    nextGame = { ...nextGame, cardState: { ...nextGame.cardState, [p.id]: recycled } };
-  } else if (card.effect === 'extra_dart') {
-    nextGame = { ...nextGame, bonusSlots: (nextGame.bonusSlots || 0) + 1 };
-  } else if (card.effect === 'extra_slot') {
-    nextGame = {
-      ...nextGame,
-      nextTurnSlots: { ...nextGame.nextTurnSlots, [p.id]: (nextGame.nextTurnSlots?.[p.id] ?? 0) + (card.magnitude ?? 1) },
-    };
-  } else if (card.effect === 'draw') {
-    nextGame = {
-      ...nextGame,
-      nextTurnDraws: { ...nextGame.nextTurnDraws, [p.id]: (nextGame.nextTurnDraws?.[p.id] ?? 0) + (card.magnitude ?? 1) },
-    };
-  } else if (card.effect === 'blessing') {
-    nextGame = {
-      ...nextGame,
-      nextTurnDraws: { ...nextGame.nextTurnDraws, [p.id]: (nextGame.nextTurnDraws?.[p.id] ?? 0) + 1 },
-    };
-  } else if (card.effect === 'shadowstep') {
-    nextGame = {
-      ...nextGame,
-      nextTurnDraws: { ...nextGame.nextTurnDraws, [p.id]: (nextGame.nextTurnDraws?.[p.id] ?? 0) + (card.magnitude ?? 1) },
-    };
-    if (updated.used.length > 0) {
-      const swapBack = updated.used[updated.used.length - 1];
-      const shadowstepState: CardPlayState = {
-        ...updated,
-        hand: [...updated.hand, swapBack],
-        used: updated.used.slice(0, -1),
-      };
-      nextGame = { ...nextGame, cardState: { ...nextGame.cardState, [p.id]: shadowstepState } };
-    }
-  }
-
-  const playedCards = game.playedCards || [];
-  const playedCard: PlayedCard = {
-    playerId: p.id,
-    playerName: p.name,
-    playerColor: p.color,
-    cardId: card.id,
-    cardName: card.name,
-    cardIcon: card.icon,
-    cardType: card.type,
-    cardRarity: card.rarity,
-    value,
-    timestamp: Date.now(),
-  };
-  nextGame = { ...nextGame, playedCards: [...playedCards, playedCard] };
-
-  if (card.type === 'damage') {
-    const soundType = 'dart';
-    Sound.play(soundType, { score: value }, settings);
-    Sound.play('impact', {}, settings);
-    nextGame = {
-      ...nextGame,
-      darts: [...game.darts, { value, label }],
-    };
-  } else {
-    Sound.play('powerup', {}, settings);
-  }
-
-  setGame(nextGame);
-  setSelectedCardIdx(null);
+  const dart = { value, label, base, mult: isBull ? 2 : (base === 25 && value === 50 ? 2 : mult), isDouble: !!(isBull || (base === 25 && value === 50) || mult === 2), isOuter: false };
+  Sound.play('card_damage', {}, settings);
   prevHandRef.current = handIdx;
+  setSelectedCardIdx(null);
+  const playedCard: PlayedCard = {
+    playerId: p.id, playerName: p.name, playerColor: p.color,
+    cardId: card.id, upgradeLevel: state.hand[handIdx]?.upgradeLevel ?? 0,
+    turn: game.turn, timestamp: Date.now(),
+  };
+  const pc = state.hand[handIdx];
+  setGame({
+    ...game,
+    darts: [...game.darts, dart],
+    mult: 1,
+    cardState: { ...game.cardState, [p.id]: updated },
+    playedCards: [...(game.playedCards || []), playedCard],
+    lastCardPlay: { playerId: p.id, cardId: card.id, upgradeLevel: pc?.upgradeLevel ?? 0, timestamp: playedCard.timestamp },
+  } as Game);
   force(n => n + 1);
 }
