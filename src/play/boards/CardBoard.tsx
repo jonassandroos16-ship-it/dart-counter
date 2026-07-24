@@ -7,7 +7,7 @@ import type { MusicEngine } from '../../music';
 import type { PopupControls } from '../../Popups';
 import { AttributeStrip, BadgeAvatar } from '../common';
 import {
-  initCardPlayState, startTurn, drawCards, HAND_SIZE,
+  initCardPlayState, startTurn, drawCards,
   endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
   getPlayerCards, defaultPlayerCards,
 } from '../../cards/deck';
@@ -35,240 +35,138 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
   const [showPlayed, setShowPlayed] = useState(false);
   const [selectedPlayedCard, setSelectedPlayedCard] = useState<PlayedCard | null>(null);
   const [playedPopupClosing, setPlayedPopupClosing] = useState(false);
-  const [animatingOut, setAnimatingOut] = useState<number | null>(null);
-  const [popupClosing, setPopupClosing] = useState(false);
   const [cardPlayAnim, setCardPlayAnim] = useState<CardPlayAnim | null>(null);
-  const prevHandLen = useRef<number>(0);
-  const prevLastCardPlay = useRef<{ playerId: string; cardId: string; timestamp: number } | null>(null);
+  const [cardStates, setCardStates] = useState<Record<string, CardPlayState>>({});
+  const [bonusSlots, setBonusSlots] = useState(0);
+  const [nextTurnSlots, setNextTurnSlots] = useState<Record<string, number>>({});
+  const [nextTurnDraws, setNextTurnDraws] = useState<Record<string, number>>({});
+  const [showHandDetail, setShowHandDetail] = useState(false);
+  const rerollResolve = useRef<((v: boolean) => void) | null>(null);
+  const [reroll, setReroll] = useState<any>(null);
+  const rerollRef = useRef(reroll);
+  rerollRef.current = reroll;
+  const [pendingTurnStart, setPendingTurnStart] = useState(true);
+  const prevTurnRef = useRef(-1);
+  const prevHandLen = useRef(0);
+  const [animatingOut, setAnimatingOut] = useState<number | null>(null);
 
-  const closeCardPopup = () => {
-    if (popupClosing) return;
-    setPopupClosing(true);
-    setTimeout(() => {
-      setSelectedCardIdx(null);
-      setPopupClosing(false);
-    }, 200);
-  };
-
-  const closePlayedPopup = () => {
-    if (playedPopupClosing) return;
-    setPlayedPopupClosing(true);
-    setTimeout(() => {
-      setSelectedPlayedCard(null);
-      setPlayedPopupClosing(false);
-    }, 200);
-  };
+  const p = game.players[game.turn];
+  const alive = game.players.filter(pl => !pl.defeated);
+  const aliveOthers = alive.filter(pl => pl.id !== p?.id);
+  const others = game.players.filter(pl => pl.id !== p?.id);
+  const targetEnemy = others.find(pl => pl.id === targetId) || aliveOthers[0];
+  if (targetId === null && targetEnemy) setTargetId(targetEnemy.id);
+  const lastHit = game.lastHit;
+  const isCardMode = (p as any).cardMode || game.darts.length === 0 && (p as any).cards;
 
   useEffect(() => {
-    const lcp = game.lastCardPlay;
-    if (!lcp) return;
-    if (prevLastCardPlay.current &&
-        prevLastCardPlay.current.playerId === lcp.playerId &&
-        prevLastCardPlay.current.timestamp === lcp.timestamp) return;
-    prevLastCardPlay.current = { playerId: lcp.playerId, cardId: lcp.cardId, timestamp: lcp.timestamp };
-    const player = game.players.find(pl => pl.id === lcp.playerId);
-    setCardPlayAnim({
-      cardId: lcp.cardId,
-      upgradeLevel: lcp.upgradeLevel,
-      playerName: player?.name || 'Player',
-      playerColor: player?.color || '#888',
+    if (isCardMode && p && !cardStates[p.id]) {
+      const cards = getPlayerCards(p);
+      setCardStates(prev => ({ ...prev, [p.id]: initCardPlayState(cards) }));
+    }
+  }, [isCardMode, p, cardStates]);
+
+  useEffect(() => {
+    if (!isCardMode || !p) return;
+    if (game.turn !== prevTurnRef.current) {
+      prevTurnRef.current = game.turn;
+      setPendingTurnStart(true);
+    }
+  }, [game.turn, isCardMode, p]);
+
+  useEffect(() => {
+    if (!isCardMode || !p || !pendingTurnStart) return;
+    const cs = cardStates[p.id];
+    if (!cs) return;
+    const extraDraw = nextTurnDraws[p.id] ?? 0;
+    const extraSlot = nextTurnSlots[p.id] ?? 0;
+    if (extraDraw > 0 || extraSlot > 0) {
+      setNextTurnDraws(prev => { const n = { ...prev }; delete n[p.id]; return n; });
+      setNextTurnSlots(prev => { const n = { ...prev }; delete n[p.id]; return n; });
+    }
+    const next = startTurnWithExtraDraws(cs, extraDraw, extraSlot, (n) => setBonusSlots(n));
+    setCardStates(prev => ({ ...prev, [p.id]: next }));
+    setPendingTurnStart(false);
+  }, [isCardMode, p, pendingTurnStart, cardStates, nextTurnDraws, nextTurnSlots]);
+
+  useEffect(() => {
+    if (handDefsLen < prevHandLen.current) {
+      setAnimatingOut(prevHandLen.current - 1);
+      const t = setTimeout(() => setAnimatingOut(null), 300);
+      prevHandLen.current = handDefsLen;
+      return () => clearTimeout(t);
+    }
+    prevHandLen.current = handDefsLen;
+  }, [handDefsLen]);
+
+  const cs = p ? cardStates[p.id] : undefined;
+  const handDefs = cs ? cs.hand.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[] : [];
+  const usedDefs = cs ? cs.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[] : [];
+  const handDefsLen = handDefs.length;
+
+  const onAdd = (base: number, mult: number, label: string, isBull: boolean) => {
+    if (!p) return;
+    const newDart = { value: base * mult, label, mult, isDouble: mult === 2, isTriple: mult === 3, isBull, player: p.id, target: targetId || undefined } as any;
+    setGame({ ...game, darts: [...game.darts, newDart], lastHit: { ...newDart, damage: base * mult } });
+  };
+
+  const onUndo = () => {
+    if (!game.darts.length) return;
+    setGame({ ...game, darts: game.darts.slice(0, -1), lastHit: null });
+    if (cs && cs.used.length > 0) {
+      setCardStates(prev => {
+        const s = prev[p!.id];
+        if (!s) return prev;
+        const lastUsed = s.used[s.used.length - 1];
+        return { ...prev, [p!.id]: { ...s, used: s.used.slice(0, -1), hand: [...s.hand, lastUsed] } };
+      });
+    }
+  };
+
+  const onEnter = () => {
+    if (!p || game.darts.length === 0) return;
+    enterVisit(game, setGame, settings, toast, popups, {
+      onReroll: (plan) => new Promise<boolean>((resolve) => {
+        setReroll(plan);
+        setRerollResolve(() => resolve);
+      }),
     });
-    const def = resolveCardDef({ cardId: lcp.cardId, upgradeLevel: lcp.upgradeLevel, upgraded: lcp.upgradeLevel > 0 });
-    if (def) {
-      const soundType = def.type === 'damage' ? 'card_damage' : def.type === 'spell' ? 'card_spell' : 'card_utility';
-      Sound.play(soundType, {}, settings);
-    }
-    const t = setTimeout(() => setCardPlayAnim(null), 3000);
-    return () => clearTimeout(t);
-  }, [game.lastCardPlay]);
+  };
 
-  useEffect(() => {
-    if (game.cardState && Object.keys(game.cardState).length === game.players.length) return;
-    const cardState: Record<string, CardPlayState> = {};
-    for (const gp of game.players) {
-      const playerData = players.find(pl => pl.id === gp.id);
-      const collection: PlayerCard[] = playerData ? getPlayerCards(playerData) : defaultPlayerCards(undefined);
-      cardState[gp.id] = initCardPlayState(collection);
-    }
-    setGame({ ...game, cardState });
-  }, [game.players.length]);
-
-  useEffect(() => {
-    if (!game.cardState) return;
-    const p = game.players[game.turn];
-    const state = game.cardState[p.id];
-    if (!state) return;
-    if (state.hand.length === 0 && state.used.length === 0) {
-      let next = startTurn(state);
-      const extraDraw = (game.nextTurnDraws || {})[p.id] ?? 0;
-      const extraSlot = (game.nextTurnSlots || {})[p.id] ?? 0;
-      if (extraDraw > 0) next = drawCards(next, HAND_SIZE + extraDraw);
-      const updatedGame: Game = { ...game, cardState: { ...game.cardState, [p.id]: next } };
-      if (extraDraw > 0 || extraSlot > 0) {
-        const nd = { ...updatedGame.nextTurnDraws || {} };
-        delete nd[p.id];
-        const ns = { ...updatedGame.nextTurnSlots || {} };
-        delete ns[p.id];
-        updatedGame.nextTurnDraws = nd;
-        updatedGame.nextTurnSlots = ns;
-      }
-      if (extraSlot > 0) updatedGame.bonusSlots = (updatedGame.bonusSlots || 0) + extraSlot;
-      setGame(updatedGame);
-    }
-  }, [game.turn, game.cardState]);
+  const handlePlayCard = (handIdx: number) => {
+    if (!p || !cs) return;
+    playCard({
+      handIdx, game, setGame, cs, setCardStates, p, targetId,
+      bonusSlots, setBonusSlots, setNextTurnSlots, setNextTurnDraws,
+      settings, toast, setCardPlayAnim, onAdd,
+    });
+  };
 
   if (game.finished) return <GameOver game={game} onNewGame={() => { setGame(null); onGameOver(); music.startContext('setup', settings); }} onViewStats={() => { setGame(null); onGameOver(); }} />;
 
-  const p = game.players[game.turn];
-  const playerData = players.find(pl => pl.id === p.id);
-  const collection: PlayerCard[] = playerData ? getPlayerCards(playerData) : defaultPlayerCards(undefined);
-  const state: CardPlayState = game.cardState?.[p.id] ?? initCardPlayState(collection);
-  const handDefs = state.hand.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
-  const usedDefs = state.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
-
-  const isBattle = game.mode === 'battle';
-  const isKiller = game.mode === 'killer';
-  const isHighScore = game.mode === 'highscore';
-  const bonusSlots = game.bonusSlots || 0;
-  const maxPlays = MAX_PLAYS_PER_TURN + bonusSlots;
-  const totalCardsPlayed = state.used.length;
-  const canPlayMore = totalCardsPlayed < maxPlays;
-  const buffScored = game.darts.reduce((a, d) => a + d.value, 0);
-  const projected = game.practice ? p.score + buffScored : p.score - buffScored;
-  const others = [...game.players.slice(game.turn + 1), ...game.players.slice(0, game.turn)];
-  const throwOrder = (idx: number) => (idx - game.roundStartTurn + game.players.length) % game.players.length;
-  const curTeam = game.teamMode ? (p.team ?? 0) : -1;
-  const curTeamColor = game.teamMode ? TEAM_COLORS[curTeam % TEAM_COLORS.length] : p.color;
-
-  const aliveOthers = isBattle ? others.filter(pl => !pl.defeated) : [];
-  useEffect(() => {
-    if (isBattle) {
-      if (aliveOthers.length === 1) setTargetId(aliveOthers[0].id);
-      else setTargetId(null);
-    }
-  }, [game.turn, aliveOthers.length, isBattle]);
-
-  const prevHandRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    const curLen = state.hand.length;
-    if (curLen < prevHandLen.current && prevHandRef.current !== null) {
-      setAnimatingOut(prevHandRef.current);
-      const t = setTimeout(() => setAnimatingOut(null), 300);
-      prevHandRef.current = null;
-      return () => clearTimeout(t);
-    }
-    prevHandLen.current = curLen;
-  }, [state.hand.length]);
-
-  const handlePlayCard = (handIdx: number) => {
-    if (!isMyTurn) return;
-    playCard({
-      handIdx, handDefs, state, game, p: { id: p.id, name: p.name, color: p.color },
-      settings, toast, setGame: setGame as (g: Game) => void,
-      totalCardsPlayed, maxPlays, bonusSlots, prevHandRef, setSelectedCardIdx, force,
-    });
-  };
-
-  const undoCard = () => {
-    if (!isMyTurn) return;
-    if (!game.darts.length) return;
-    const lastDart = game.darts[game.darts.length - 1];
-    const usedIdx = [...state.used].reverse().findIndex(pc => {
-      const def = resolveCardDef(pc);
-      return def?.name === lastDart.label;
-    });
-    if (usedIdx === -1) {
-      setGame({ ...game, darts: game.darts.slice(0, -1) });
-      return;
-    }
-    const realIdx = state.used.length - 1 - usedIdx;
-    const card = state.used[realIdx];
-    const updated: CardPlayState = {
-      deck: state.deck,
-      hand: [...state.hand, card],
-      used: state.used.filter((_, i) => i !== realIdx),
-      graveyard: state.graveyard,
-    };
-    setGame({ ...game, darts: game.darts.slice(0, -1), cardState: { ...game.cardState, [p.id]: updated } });
-    force(n => n + 1);
-  };
-
-  const handleEnterVisit = () => {
-    if (!isMyTurn) return;
-    const endedState = endTurn(state);
-    enterVisit({
-      game, setGame, settings, players, games, setGames, setPlayers,
-      toast, music, popups, targetId, setTargetId, state, endedState, isMyTurn,
-    });
-  };
-
   const hpPct = (pl: any) => Math.max(0, Math.min(100, ((pl.hp || 0) / (pl.maxHp || 1)) * 100));
-  const aliveCount = isBattle ? game.players.filter(pl => !pl.defeated).length : isKiller ? game.players.filter(pl => !pl.eliminated).length : 0;
-
-  const selectedCard = selectedCardIdx !== null ? handDefs[selectedCardIdx] : null;
 
   return (
-    <div className="view-noscroll">
-      <button className="btn danger sm quit-float" onClick={() => { if (confirm('Quit this game? Progress will not be saved.')) onQuit(); }}>Quit</button>
-      <div className="play-current" style={game.teamMode ? { borderColor: curTeamColor, boxShadow: `0 0 0 2px ${curTeamColor}33` } : {}}>
+    <div className="view-noscroll coop-battle">
+      <button className="btn danger sm quit-float" onClick={() => { if (confirm('Quit this game?')) onQuit(); }}>Quit</button>
+      <div className="play-current">
         <div className="pc-header">
           <div className="row" style={{ gap: 8 }}>
-            <span className={`turn-order-badge${game.turn === game.roundStartTurn ? ' starter' : ''}`}>{throwOrder(game.turn) + 1}</span>
-            <BadgeAvatar playerId={p.id} players={players} games={games} size={32} fontSize={16} color={p.color} />
+            <BadgeAvatar playerId={p.id} players={players} games={games} size={32} fontSize={13} color={p.color} />
             <span className="pc-name">{p.name}</span>
-            {game.teamMode && <span className="pill" style={{ background: curTeamColor, color: '#04150a' }}>Team {curTeam + 1}</span>}
-            {isKiller && (p.killerHits || 0) >= 5 && <span className="pill" style={{ background: '#ef4444', color: '#fff', fontSize: 10 }}>KILLER</span>}
-            {!game.teamMode && !game.practice && !isBattle && !isKiller && !isHighScore && (() => { const badge = leadTrailBadge(p, game); return badge ? <span className={`lead-badge ${badge.startsWith('+') ? 'lead' : 'trail'}`}>{badge}</span> : null; })()}
           </div>
-          <div className="row" style={{ gap: 6 }}>
-            {!game.teamMode && game.legsBestOf > 1 && !isBattle && !isKiller && !isHighScore ? <span className="pill">{p.legsWon} legs</span> : null}
-            <span className="muted small">
-              {isBattle ? `BATTLE · ${aliveCount} ALIVE` :
-               isKiller ? `KILLER · ${aliveCount} ALIVE` :
-               isHighScore ? `HIGH SCORE · VISIT ${(p.visits.length || 0) + 1}/${HIGH_SCORE_VISITS}` :
-               game.practice ? 'PRACTICE' : `LEG ${game.leg} · ${game.doubleOut ? 'DOUBLE OUT' : 'STRAIGHT OUT'}`}
-            </span>
-          </div>
+          <span className="muted small">BATTLE · {alive.length} ALIVE</span>
         </div>
-        {isBattle ? (
-          <>
-            <div className="pc-remaining" style={{ fontSize: 28 }}>{p.hp} HP</div>
-            <div className="checkout-hint center">❤️ {p.hp}/{p.maxHp} · 🛡️ {p.armorPct}% armor · ⚡ {p.powerPct} power</div>
-            <div style={{ width: '100%', height: 8, borderRadius: 4, background: 'var(--bg-3)', overflow: 'hidden', margin: '4px 0' }}>
-              <div style={{ height: '100%', width: `${hpPct(p)}%`, background: p.color, transition: 'width .3s' }} />
-            </div>
-          </>
-        ) : isKiller ? (
-          <>
-            <div className="pc-remaining" style={{ fontSize: 28 }}>
-              {(p.killerHits || 0) >= 5 ? '🎯 Aim at opponents' : `Hit ${p.killerNumber}`}
-            </div>
-            <div className="checkout-hint center">
-              {(p.killerHits || 0) < 5 ? `Become a Killer: ${p.killerHits || 0}/5 hits on ${p.killerNumber}` : 'Hit opponent numbers to eliminate them'}
-            </div>
-            <div className="muted small">Lives: <b style={{ color: 'var(--text)' }}>{'❤️'.repeat(p.lives || 0) || 'none'}</b></div>
-          </>
-        ) : isHighScore ? (
-          <>
-            <div className="pc-remaining">{p.score + buffScored}</div>
-            <div className="checkout-hint center">{(p.visits.length || 0) + 1 >= HIGH_SCORE_VISITS ? 'Final visit — go big!' : 'Score as high as you can!'}</div>
-          </>
-        ) : (
-          <>
-            <div className="pc-remaining" style={{ color: projected < 0 ? 'var(--danger)' : 'var(--text)' }}>{projected}</div>
-            <div className="checkout-hint center">{checkoutHint(game.practice ? null : projected, game.doubleOut, game.practice)}</div>
-          </>
-        )}
+        <div className="pc-remaining" style={{ fontSize: 28 }}>{p.hp} HP</div>
+        <div className="checkout-hint center">❤️ {p.hp}/{p.maxHp} · 🛡️ {p.armorPct}% armor · ⚡ {p.powerPct} power</div>
+        <div style={{ width: '100%', height: 8, borderRadius: 4, background: 'var(--bg-3)', overflow: 'hidden', margin: '4px 0' }}>
+          <div style={{ height: '100%', width: `${hpPct(p)}%`, background: p.color, transition: 'width .3s' }} />
+        </div>
         <div className="pc-slots">
-          {Array.from({ length: maxPlays }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
-          {bonusSlots > 0 && Array.from({ length: bonusSlots }).map((_, i) => <div key={`bonus-${i}`} className="pc-slot" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>+</div>)}
+          {Array.from({ length: 3 }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
         </div>
-        <div className="muted small">
-          This visit: <b style={{ color: 'var(--text)' }}>{buffScored}</b> · Cards played: <b style={{ color: 'var(--text)' }}>{totalCardsPlayed}</b>/{maxPlays}{bonusSlots > 0 ? ` (incl. ${bonusSlots} bonus)` : ''}
-          {isBattle && <span style={{ marginLeft: 8 }}> · {buffScored} dmg</span>}
-        </div>
-        {isBattle && aliveOthers.length > 1 && (
+        <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{game.darts.reduce((a, d) => a + d.value, 0)}</b>{lastHit && lastHit.target ? <span style={{ marginLeft: 8, color: 'var(--danger)' }}> · {lastHit.damage} dmg → {game.players.find(pl => pl.id === lastHit.target)?.name || 'target'}</span> : null}</div>
+        {aliveOthers.length > 1 && (
           <div style={{ width: '100%', marginTop: 6 }}>
             <div className="muted small" style={{ marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>Attack target</div>
             <div className="row wrap" style={{ gap: 6 }}>
@@ -281,76 +179,68 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
             </div>
           </div>
         )}
-        <AttributeStrip playerId={p.id} players={players} mode={game.mode} settings={settings} />
       </div>
 
-      {game.players.length > 1 && (
-        <CardBoardOthers
-          game={game}
-          players={players}
-          games={games}
-          settings={settings}
-          isBattle={isBattle}
-          isKiller={isKiller}
-          isHighScore={isHighScore}
-          throwOrder={throwOrder}
-          hpPct={hpPct}
+      <div className="play-others">
+        {others.map(pl => {
+          const defeated = pl.defeated;
+          return (
+            <div key={pl.id} className="play-other" style={{ ...(defeated ? { opacity: 0.4, filter: 'grayscale(.6)' } : {}) }}>
+              <div className="row between">
+                <div className="row" style={{ gap: 6 }}>
+                  <BadgeAvatar playerId={pl.id} players={players} games={games} size={22} fontSize={10} color={pl.color} />
+                  <span className="po-name">{pl.name}</span>
+                  {defeated && <span style={{ fontSize: 14, color: '#ef4444', fontWeight: 900 }}>☠</span>}
+                </div>
+                <span className="pill" style={{ fontSize: 10 }}>{pl.hp} HP</span>
+              </div>
+              <div style={{ marginTop: 4, height: 6, borderRadius: 3, background: 'var(--bg-3)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${hpPct(pl)}%`, background: pl.color, transition: 'width .3s' }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {isCardMode && cs && (
+        <CardBoardHand
+          cardState={cs}
+          playerName={p.name}
+          isMyTurn={isMyTurn}
+          isBattle={true}
+          canEndVisit={game.darts.length > 0}
+          canUndo={game.darts.length > 0}
+          canPlayMore={game.darts.length < 3}
+          onPlayCard={handlePlayCard}
+          onUndo={onUndo}
+          onEndVisit={onEnter}
+          animatingOut={animatingOut}
+          showPlayedButton={usedDefs.length > 0}
+          playedCount={usedDefs.length}
+          onShowPlayed={() => setShowPlayed(true)}
+          onShowHandDetail={() => setShowHandDetail(true)}
         />
       )}
 
-      <CardBoardHand
-        handDefs={handDefs}
-        usedDefs={usedDefs}
-        isMyTurn={isMyTurn}
-        animatingOut={animatingOut}
-        isBattle={isBattle}
-        playerName={p.name}
-        deckCount={state.deck.length}
-        graveyardCount={state.graveyard.length}
-        playedCount={game.playedCards?.length || 0}
-        onCardClick={setSelectedCardIdx}
-        onShowDeck={() => setShowDeck(true)}
-        onShowGraveyard={() => setShowGraveyard(true)}
-        onShowPlayed={() => setShowPlayed(true)}
-        onUndo={undoCard}
-        onEnterVisit={handleEnterVisit}
-      />
-
-      {selectedCard && (
-        <CardPopup
-          card={selectedCard}
-          popupClosing={popupClosing}
-          canPlayMore={canPlayMore}
-          onClose={closeCardPopup}
-          onPlay={() => handlePlayCard(selectedCardIdx!)}
-        />
-      )}
-
-      {showDeck && (
-        <DeckPopup deck={state.deck} onClose={() => setShowDeck(false)} />
-      )}
-
-      {showGraveyard && (
-        <GraveyardPopup graveyard={state.graveyard} onClose={() => setShowGraveyard(false)} />
-      )}
-
+      {showDeck && <DeckPopup cardState={cs} onClose={() => setShowDeck(false)} />}
+      {showGraveyard && <GraveyardPopup cardState={cs} onClose={() => setShowGraveyard(false)} />}
       {showPlayed && (
-        <PlayedPopup
-          playedCards={game.playedCards || []}
-          onClose={() => setShowPlayed(false)}
-          onSelect={(pc) => { setSelectedPlayedCard(pc); setShowPlayed(false); }}
-        />
+        <PlayedPopup cards={usedDefs} onClose={() => { setPlayedPopupClosing(true); setTimeout(() => { setShowPlayed(false); setPlayedPopupClosing(false); }, 200); }} closing={playedPopupClosing} />
       )}
-
       {selectedPlayedCard && (
-        <CardDetailPopup
-          playedCard={selectedPlayedCard}
-          closing={playedPopupClosing}
-          onClose={closePlayedPopup}
+        <CardDetailPopup card={selectedPlayedCard} onClose={() => setSelectedPlayedCard(null)} />
+      )}
+      {cardPlayAnim && (
+        <CardPlayAnimOverlay anim={cardPlayAnim} onDone={() => setCardPlayAnim(null)} />
+      )}
+      {showHandDetail && cs && (
+        <CardPopup
+          card={handDefs[0]}
+          canPlayMore={game.darts.length < 3}
+          onPlay={() => { handlePlayCard(0); setShowHandDetail(false); }}
+          onClose={() => setShowHandDetail(false)}
         />
       )}
-
-      {cardPlayAnim && <CardPlayAnimOverlay anim={cardPlayAnim} />}
     </div>
   );
 }
