@@ -264,7 +264,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
 
   const handleEnter = () => {
     if (pendingVictory) {
-      onBattleEnd(true);
+      onBattleEnd(true, state ?? undefined);
       return;
     }
     if (pendingDefeat) {
@@ -424,6 +424,8 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
               enemyIcon={enemyIcon}
               cardMode={cardMode}
               cardPlayState={cardMode && thrower ? (cardBattle.cardStates[thrower.id] ?? null) : null}
+              maxPlays={cardMode ? maxDartsPerVisit : undefined}
+              cardsPlayed={cardMode ? totalCardsPlayed : undefined}
             />
             )}
 
