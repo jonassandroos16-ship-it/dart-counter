@@ -20,18 +20,17 @@ import { ownsPlayer, type LobbyPlayer } from '../multiplayer/client';
 import { DeckUpgradeScreen } from './DeckUpgradeScreen';
 import { BOSS_INTRO_STORIES, MINIBOSS_INTRO_STORIES } from './bossStories';
 import { ProgressScreen } from './ProgressScreen';
-import { BuffPill } from '../cards/EffectPill';
-import { effectIcon, effectLabel } from '../cards/effectMeta';
+import { PartyBuffBadges } from '../cards/BuffBadges';
 import { PlayerDetailModal } from './PlayerDetailModal';
 import { BossVictoryScreen } from './BossVictoryScreen';
 import { RewardRevealOverlay } from './RewardRevealOverlay';
 import type { PlayerCard, CardDef, CardPlayState } from '../cards/types';
 import {
-  initCardPlayState, startTurn, drawCards, HAND_SIZE,
-  playCardFromHand, endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
-  getPlayerCards,
+  initCardPlayState, endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
+  getPlayerCards, playCardFromHand,
 } from '../cards/deck';
-import { applyCardEffect } from './cardEffects';
+import { startTurnWithExtraDraws } from '../cards/turnLogic';
+import { applyCardEffect } from '../cards/cardEffects';
 import { CardHand } from '../cards/CardHand';
 
 interface Props {
@@ -130,10 +129,8 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     if (cs.hand.length === 0 && cs.used.length === 0) {
       const extraDraw = nextTurnDraws[thrower.id] ?? 0;
       const extraSlot = nextTurnSlots[thrower.id] ?? 0;
-      let next = startTurn(cs);
-      if (extraDraw > 0) next = drawCards(next, HAND_SIZE + extraDraw);
+      const next = startTurnWithExtraDraws(cs, extraDraw, extraSlot, (n) => setBonusSlots(b => b + n));
       setCardStates(prev => ({ ...prev, [thrower.id]: next }));
-      if (extraSlot > 0) setBonusSlots(b => b + extraSlot);
       setNextTurnDraws(prev => { const c = { ...prev }; delete c[thrower.id]; return c; });
       setNextTurnSlots(prev => { const c = { ...prev }; delete c[thrower.id]; return c; });
     }
@@ -431,11 +428,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
                     {p.name}
                     <span style={{ fontSize: 10, opacity: 0.8 }}>⚡{effectivePower(p)}</span>
                     {p.buffs.length > 0 && (
-                      <span style={{ display: 'inline-flex', gap: 2 }}>
-                        {p.buffs.map(b => (
-                          <BuffPill key={b.id} icon={effectIcon(b.kind)} label={effectLabel(b.kind)} amount={b.amount} turnsLeft={b.turnsLeft} />
-                        ))}
-                      </span>
+                      <PartyBuffBadges buffs={p.buffs} />
                     )}
                   </div>
                 );
@@ -485,7 +478,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
                         <span style={{ fontWeight: 800, fontSize: 14 }}>{e.name}</span>
                         {isBoss && <span style={{ fontSize: 10, fontWeight: 800, color: '#ef4444', textTransform: 'uppercase', letterSpacing: '.08em' }}>Boss</span>}
                       </span>
-                      <span className="muted small">{e.defeated ? 'DEFEATED' : `${e.hp}/${e.maxHp} HP`}</span>
+                      <span className="muted small">{e.defeated ? '☠' : `${e.hp}/${e.maxHp} HP`}</span>
                     </div>
                     {!e.defeated && (
                       <div style={{ marginTop: 6, height: 6, borderRadius: 3, background: 'var(--bg)', overflow: 'hidden' }}>
