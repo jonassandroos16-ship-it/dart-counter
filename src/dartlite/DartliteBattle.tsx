@@ -26,7 +26,6 @@ import { PlayerDetailModal } from './PlayerDetailModal';
 import { BossVictoryScreen } from './BossVictoryScreen';
 import { RewardRevealOverlay } from './RewardRevealOverlay';
 import type { PlayerCard, CardDef, CardPlayState } from '../cards/types';
-import { cardTypeColor } from '../cards/definitions';
 import {
   initCardPlayState, startTurn, drawCards, HAND_SIZE,
   playCardFromHand, endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
@@ -452,11 +451,11 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
 
           {state.phase === 'player' && thrower && (
             <div className="play-targets" style={{ marginTop: 8 }}>
-              {state.enemies.map(e => {
+              {state.enemies.map((e, ei) => {
                 const def = getEnemyDef(e.defId);
                 const icon = enemyIcon(e.defId);
                 const hpPct = Math.max(0, Math.min(100, (e.hp / e.maxHp) * 100));
-                const isTarget = state.targetEnemyId === e.id;
+                const isTarget = state.targetIdx === ei;
                 const isBoss = def?.difficulty === 'Boss';
                 return (
                   <div key={e.id} onClick={() => canThrow && setState(prev => prev ? setTarget(prev, e.id) : prev)}
@@ -493,14 +492,15 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
           {state.phase === 'player' && cardMode && thrower && (
             <CardHand
               cardState={cardStates[thrower.id]}
-              canPlay={canThrow}
-              onPlay={playCard}
+              playerName={thrower.name}
+              isMyTurn={canThrow}
+              isBattle={true}
+              canEndVisit={totalCardsPlayed > 0}
+              canUndo={state.darts.length > 0}
+              canPlayMore={totalCardsPlayed < maxDartsPerVisit}
+              onPlayCard={playCard}
               onUndo={onUndo}
-              onEnter={onEnter}
-              mult={mult}
-              setMult={setMult}
-              maxPlays={maxDartsPerVisit}
-              usedCount={totalCardsPlayed}
+              onEndVisit={onEnter}
             />
           )}
 
@@ -584,19 +584,14 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             </Modal>
           )}
 
-          {detailPlayerId && (() => {
-            const rp = run.runPlayers.find(p => p.id === detailPlayerId);
-            const playerData = players.find(p => p.id === detailPlayerId);
-            if (!rp) return null;
-            return (
-              <PlayerDetailModal
-                rp={rp}
-                playerData={playerData}
-                runPlayerStats={run.playerStats.find(ps => ps.playerId === detailPlayerId)}
-                onClose={() => setDetailPlayerId(null)}
-              />
-            );
-          })()}
+          {detailPlayerId && (
+            <PlayerDetailModal
+              playerId={detailPlayerId}
+              run={run}
+              players={players}
+              onClose={() => setDetailPlayerId(null)}
+            />
+          )}
         </>
       )
     )}
