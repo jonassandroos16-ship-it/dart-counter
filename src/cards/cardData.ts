@@ -40,7 +40,7 @@ export const CARD_DEFS: CardDef[] = [
   { id: 'dmg_priest_smite', name: 'Holy Smite', icon: '✨', type: 'damage', mode: 'both', class: 'priest', rarity: 'common', desc: 'Deal 35 damage with divine power.', base: 35, mult: 1, levelRequired: 1 },
   { id: 'dmg_priest_judgment', name: 'Divine Judgment', icon: '⚖️', type: 'damage', mode: 'both', class: 'priest', rarity: 'common', desc: 'Deal 50 damage with holy judgment.', base: 50, mult: 1, levelRequired: 1 },
   { id: 'spell_heal', name: 'Healing Light', icon: '✨', type: 'spell', mode: 'both', class: 'priest', rarity: 'common', desc: 'Restore 80 HP to the party.', effect: 'heal', magnitude: 80, levelRequired: 1 },
-  { id: 'spell_accuracy_buff', name: 'Divine Foresight', icon: '🔮', type: 'spell', mode: 'both', class: 'priest', rarity: 'common', desc: 'Bless the party with divine sight: +20% hit chance for 3 turns.', effect: 'accuracy_buff', magnitude: 20, levelRequired: 1 },
+  { id: 'spell_accuracy_buff', name: 'Critical Vision', icon: '🔮', type: 'spell', mode: 'both', class: 'priest', rarity: 'common', desc: 'Grant the party divine sight: next 3 turns have a 20% chance to score critical hits (double damage).', effect: 'crit_buff', magnitude: 20, levelRequired: 1 },
   { id: 'util_priest_blessing', name: 'Divine Blessing', icon: '🙏', type: 'utility', mode: 'both', class: 'priest', rarity: 'common', desc: 'Restore 40 HP and draw 1 extra card.', effect: 'blessing', magnitude: 40, levelRequired: 1 },
   // ── Starter rogue cards (Level 1) ────────────────────────────────
   { id: 'dmg_rogue_backstab', name: 'Backstab', icon: '🗡️', type: 'damage', mode: 'both', class: 'rogue', rarity: 'common', desc: 'Deal 40 damage from the shadows.', base: 40, mult: 1, levelRequired: 1 },

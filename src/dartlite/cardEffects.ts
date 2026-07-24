@@ -57,8 +57,11 @@ export function applyCardEffect(params: CardEffectParams): CardPlayState {
   } else if (effect === 'party_shield_flat' || effect === 'party_shield') {
     const buffId = `shield_${Date.now()}`;
     setBattleState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'shield' as const, amount: mag, turnsLeft: 2, source: throwerId }] })) } : prev);
-  } else if (effect === 'enemy_curse' || effect === 'enemy_debuff' || effect === 'enemy_miss' || effect === 'accuracy_buff') {
+  } else if (effect === 'enemy_curse' || effect === 'enemy_debuff' || effect === 'enemy_miss') {
     setBattleState(prev => prev ? { ...prev, enemies: prev.enemies.map(e => e.defeated ? e : { ...e, distractedTurns: Math.max(e.distractedTurns, 3), distractAmount: Math.max(e.distractAmount, mag / 100) }) } : prev);
+  } else if (effect === 'crit_buff') {
+    const buffId = `crit_${Date.now()}`;
+    setBattleState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'crit' as const, amount: mag, turnsLeft: 3, source: throwerId }] })) } : prev);
   } else if (effect === 'bleed') {
     const buffId = `bleed_${Date.now()}`;
     setBattleState(prev => prev ? { ...prev, enemies: prev.enemies.map(e => e.defeated ? e : { ...e, buffs: [...(e as any).buffs, { id: buffId, kind: 'bleed', amount: mag, turnsLeft: 3 }] }) } : prev);
