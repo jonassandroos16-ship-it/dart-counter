@@ -56,7 +56,7 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
     runPlayers: state.players,
     players,
     settings,
-    onStateChange: setState,
+    onStateChange: setState as (updater: (prev: CampaignBattleState | null) => CampaignBattleState | null) => void,
   });
 
   const enemyNumberMap: Record<string, number> = {};
@@ -318,7 +318,6 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
             onEnter={onEnter}
             canThrow={true}
             darts={state.darts}
-            dartCount={state.darts.length}
           />
         )
       )}

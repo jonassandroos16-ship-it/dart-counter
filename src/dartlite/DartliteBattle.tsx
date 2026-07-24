@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Settings, Player } from '../types';
 import type { CampaignBattleState } from '../campaign/types';
 import {
-  prepareEnemyTurn, applyNextEnemyAttack, setTarget, effectivePower,
+  prepareEnemyTurn, applyNextEnemyAttack, setTarget,
 } from '../campaign/engine';
 import { getEnemyDef } from '../campaign/engine/enemies';
 import { Sound } from '../sound';
@@ -345,7 +345,6 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
               onEnter={handleEnter}
               canThrow={canThrow}
               darts={state.darts}
-              dartCount={state.darts.length}
             />
           )}
 
