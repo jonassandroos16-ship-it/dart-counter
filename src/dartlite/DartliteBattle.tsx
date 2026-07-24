@@ -149,7 +149,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
 
   const onContinue = () => {
     if (pendingDefeat) {
-      onBattleEnd(false);
+      onBattleEnd(false, state ?? undefined);
       return;
     }
     if (state.pendingEnemyAttacks.length) {
@@ -164,13 +164,11 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
 
   const handleEnter = () => {
     if (pendingVictory) {
-      // Pass the live battle state so resolveBattle picks up the latest
-      // per-player kills and damageDealt from addDart.
-      onBattleEnd(true, state ?? undefined);
+      onBattleEnd(true);
       return;
     }
     if (pendingDefeat) {
-      onBattleEnd(false);
+      onBattleEnd(false, state ?? undefined);
       return;
     }
     onEnter();
@@ -182,7 +180,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     && state.pendingEnemyAttacks.length === 0
     && state.appliedEnemyAttacks.length === 0
     && state.frozenEnemiesThisRound.length > 0;
-  const showingOverlay = playerVisitDone || playerVictoryPending || state.pendingEnemyAttacks.length > 0 || showingFrozen || pendingDefeat;
+  const showingOverlay = playerVisitDone || playerVictoryPending || state.pendingEnemyAttacks.length > 0 || showingFrozen;
 
   const enemyNumberMap: Record<string, number> = {};
   let enemyCounter = 0;
@@ -382,8 +380,23 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             />
           )}
 
-          {showingFrozen && <FrozenOverlay state={state} onContinue={onContinue} />}
-          {showingOverlay && !showingFrozen && (
+          {pendingDefeat && (
+            <div style={{ position: 'absolute', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.82)' }}>
+              <div style={{ textAlign: 'center', padding: 32, maxWidth: 400 }}>
+                <div style={{ fontSize: 64, marginBottom: 12 }}>☠</div>
+                <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: '.14em', color: '#fca5a5', textTransform: 'uppercase', marginBottom: 6 }}>Party Defeated</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: '#ef4444', marginBottom: 8 }}>Round {run.round}</div>
+                <div className="muted small" style={{ marginBottom: 20 }}>
+                  {run.stats.roundsCleared} rounds cleared · {run.stats.enemiesDefeated + (state?.stats.enemiesDefeated ?? 0)} enemies defeated
+                </div>
+                <button className="btn primary block" style={{ background: '#dc2626', borderColor: '#dc2626' }} onClick={() => onBattleEnd(false, state ?? undefined)}>
+                  See Results
+                </button>
+              </div>
+            </div>
+          )}
+          {!pendingDefeat && showingFrozen && <FrozenOverlay state={state} onContinue={onContinue} />}
+          {!pendingDefeat && showingOverlay && !showingFrozen && (
             <DartOverlay state={state} onContinue={onContinue} onEndVisit={handleEnter} settings={settings} enemyIcon={enemyIcon} playerVisitDone={playerVisitDone || playerVictoryPending} playedCards={cardMode && thrower ? (cardBattle.cardStates[thrower.id]?.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[] ?? []) : undefined} />
           )}
 
@@ -409,8 +422,8 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
                 <h3 style={{ margin: '0 0 12px 0' }}>Run Info</h3>
                 <div className="muted small" style={{ marginBottom: 8 }}>Round {run.round} · {run.phase}</div>
                 <div className="row between" style={{ marginBottom: 4 }}><span className="muted small">Rounds cleared</span><span className="small" style={{ fontWeight: 700 }}>{run.stats.roundsCleared}</span></div>
-                <div className="row between" style={{ marginBottom: 4 }}><span className="muted small">Enemies defeated</span><span className="small" style={{ fontWeight: 700 }}>{run.stats.enemiesDefeated}</span></div>
-                <div className="row between" style={{ marginBottom: 4 }}><span className="muted small">Damage dealt</span><span className="small" style={{ fontWeight: 700 }}>{run.stats.damageDealt}</span></div>
+                <div className="row between" style={{ marginBottom: 4 }}><span className="muted small">Enemies defeated</span><span className="small" style={{ fontWeight: 700 }}>{run.stats.enemiesDefeated + (state?.stats.enemiesDefeated ?? 0)}</span></div>
+                <div className="row between" style={{ marginBottom: 4 }}><span className="muted small">Damage dealt</span><span className="small" style={{ fontWeight: 700 }}>{run.stats.damageDealt + (state?.stats.damageDealt ?? 0)}</span></div>
                 <div className="row between" style={{ marginBottom: 4 }}><span className="muted small">XP gained</span><span className="small" style={{ fontWeight: 700 }}>{run.stats.xpGained}</span></div>
                 <div className="row between" style={{ marginBottom: 12 }}><span className="muted small">Trinkets</span><span className="small" style={{ fontWeight: 700 }}>{run.trinkets.length}</span></div>
                 <button className="btn block ghost" onClick={() => setShowInfo(false)}>Close</button>
