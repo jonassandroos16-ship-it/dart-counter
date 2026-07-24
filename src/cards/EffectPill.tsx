@@ -44,38 +44,3 @@ export function EffectPill({ card }: EffectPillProps) {
     </>
   );
 }
-
-export function BuffPill({ icon, label, amount, turnsLeft }: { icon: string; label: string; amount: number; turnsLeft: number }) {
-  const [showTooltip, setShowTooltip] = useState(false);
-  return (
-    <>
-      <button
-        className="card-effect-pill"
-        style={{ '--effect-color': 'var(--accent)' } as React.CSSProperties}
-        onClick={(e) => {
-          e.stopPropagation();
-          setShowTooltip(true);
-        }}
-        title={label}
-      >
-        <span className="card-effect-pill-icon">{icon}</span>
-        <span className="card-effect-pill-turns">{turnsLeft}</span>
-      </button>
-      {showTooltip && (
-        <div className="card-effect-tooltip-overlay" onClick={() => setShowTooltip(false)}>
-          <div
-            className="card-effect-tooltip"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="card-effect-tooltip-header">
-              <span className="card-effect-tooltip-icon">{icon}</span>
-              <span className="card-effect-tooltip-label">{label}</span>
-              <button className="btn sm ghost" onClick={() => setShowTooltip(false)}>Close</button>
-            </div>
-            <div className="card-effect-tooltip-desc">+{amount} for {turnsLeft} turn{turnsLeft !== 1 ? 's' : ''}</div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
