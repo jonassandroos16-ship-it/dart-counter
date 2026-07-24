@@ -40,8 +40,8 @@ interface Props {
   players: Player[];
   settings: Settings;
   music: MusicEngine;
-  onBattleEnd: (won: boolean, finalBattle?: CampaignBattleState | null) => void;
-  onChoice: (run: DartliteRun) => void;
+  onBattleEnd: (won: boolean, finalBattle?: CampaignBattleState) => void;
+  onChoice: (nextRun: DartliteRun) => void;
   onQuit: () => void;
   lobbyPlayers?: LobbyPlayer[];
 }
@@ -49,7 +49,15 @@ interface Props {
 export function DartliteBattle({ run, players, settings, music, onBattleEnd, onChoice, onQuit, lobbyPlayers }: Props) {
   const battle = run.battle!;
   const [state, setState] = useState<CampaignBattleState | null>(battle);
-  useEffect(() => { if (battle) setState(battle); }, [battle]);
+  const [pendingVictory, setPendingVictory] = useState(false);
+  const [pendingDefeat, setPendingDefeat] = useState(false);
+  useEffect(() => {
+    if (battle) {
+      setState(battle);
+      setPendingVictory(false);
+      setPendingDefeat(false);
+    }
+  }, [battle]);
   const [showProgress, setShowProgress] = useState(false);
   const [detailPlayerId, setDetailPlayerId] = useState<string | null>(null);
   const [showInfo, setShowInfo] = useState(false);
@@ -132,9 +140,6 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     return () => { music.stop(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const [pendingVictory, setPendingVictory] = useState(false);
-  const [pendingDefeat, setPendingDefeat] = useState(false);
 
   useEffect(() => {
     if (!state) return;
@@ -430,148 +435,117 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             </div>
 
             {state.phase === 'player' && thrower && (
-              <>
-                <div className="pc-slots" style={{ marginTop: 6 }}>
-                  {cardMode ? (() => {
-                    const cs = cardStates[thrower.id];
-                    const usedDefs = cs ? cs.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[] : [];
-                    const slots: React.ReactNode[] = [];
-                    let dartIdx = 0;
-                    for (let i = 0; i < maxDartsPerVisit; i++) {
-                      const usedDef = usedDefs[i];
-                      if (!usedDef) { slots.push(<div key={i} className="pc-slot">–</div>); continue; }
-                      if (usedDef.type === 'damage') {
-                        const d = state.darts[dartIdx];
-                        const r = state.resolvedDarts[dartIdx];
-                        const isDefeated = r?.kind === 'defeated';
-                        slots.push(
-                          <div key={i} className="pc-slot filled" style={{
-                            borderColor: isDefeated ? '#ef4444' : undefined,
-                            background: isDefeated ? 'color-mix(in srgb,#ef4444 18%,var(--bg-3))' : undefined,
-                            flexDirection: 'row', gap: 6, justifyContent: 'space-between', padding: '4px 8px',
-                          }}>
-                            <span style={{ fontWeight: 800, fontSize: 15 }}>{d ? d.label : usedDef.name}</span>
-                            {r && (
-                              <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.9 }}>
-                                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 18, height: 18, borderRadius: 6, padding: '0 4px', background: 'color-mix(in srgb,var(--accent) 22%,var(--bg))', color: 'var(--accent)', fontSize: 10, fontWeight: 900 }}>{enemyIcon(state.enemies.find(e => e.id === r.enemyId)?.defId ?? r.enemyId)}</span>
-                                {r.damage > 0 ? `-${r.damage}` : r.kind === 'shield_break' ? '🛡' : ''}
-                                {isDefeated ? ' ☠' : ''}
-                              </span>
-                            )}
-                          </div>
-                        );
-                        dartIdx++;
-                      } else {
-                        slots.push(
-                          <div key={i} className="pc-slot filled" style={{
-                            flexDirection: 'row', gap: 6, justifyContent: 'space-between', padding: '4px 8px',
-                            borderColor: cardTypeColor(usedDef.type),
-                            background: `color-mix(in srgb, ${cardTypeColor(usedDef.type)} 12%, var(--bg-3))`,
-                          }}>
-                            <span style={{ fontWeight: 800, fontSize: 13 }}>{usedDef.icon} {usedDef.name}</span>
-                            <span style={{ fontSize: 9, fontWeight: 700, opacity: 0.8, textTransform: 'capitalize' }}>{usedDef.type}</span>
-                          </div>
-                        );
-                      }
-                    }
-                    return slots;
-                  })() : [0, 1, 2].map(i => {
-                    const d = state.darts[i];
-                    if (!d) return <div key={i} className="pc-slot">–</div>;
-                    const r = state.resolvedDarts[i];
-                    const isDefeated = r?.kind === 'defeated';
-                    return (
-                      <div key={i} className="pc-slot filled" style={{
-                        borderColor: isDefeated ? '#ef4444' : undefined,
-                        background: isDefeated ? 'color-mix(in srgb,#ef4444 18%,var(--bg-3))' : undefined,
-                        flexDirection: 'row', gap: 6, justifyContent: 'space-between', padding: '4px 8px',
-                      }}>
-                        <span style={{ fontWeight: 800, fontSize: 15 }}>{d.label}</span>
-                        {r && (
-                          <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.9 }}>
-                            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 18, height: 18, borderRadius: 6, padding: '0 4px', background: 'color-mix(in srgb,var(--accent) 22%,var(--bg))', color: 'var(--accent)', fontSize: 10, fontWeight: 900 }}>{enemyIcon(state.enemies.find(e => e.id === r.enemyId)?.defId ?? r.enemyId)}</span>
-                            {r.damage > 0 ? `-${r.damage}` : r.kind === 'shield_break' ? '🛡' : ''}
-                            {isDefeated ? ' ☠' : ''}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="muted small">
-                  <b style={{ color: 'var(--text)' }}>{thrower.name}</b> · <b style={{ color: 'var(--text)' }}>{state.resolvedDarts.reduce((a, d) => a + d.damage, 0)} dmg</b>
-                  <span style={{ marginLeft: 8, color: '#fbbf24' }}>⚡ Power: <b>{effectivePower(thrower)}</b></span>
-                </div>
-              </>
-            )}
-
-            {state.phase === 'enemy' && !state.pendingEnemyAttacks.length && !state.frozenEnemiesThisRound.length && (
-              <div className="muted small" style={{ marginTop: 6, fontStyle: 'italic' }}>Enemies are preparing to attack…</div>
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="muted small">Multiplier</span>
+                {[1, 2, 3].map(m => (
+                  <button key={m} onClick={() => setMult(m)}
+                    style={{
+                      width: 36, height: 36, borderRadius: 8, cursor: 'pointer',
+                      border: `2px solid ${mult === m ? 'var(--accent)' : 'var(--border)'}`,
+                      background: mult === m ? 'color-mix(in srgb,var(--accent) 22%,var(--bg-3))' : 'var(--bg-3)',
+                      color: 'var(--text)', fontWeight: 800, fontSize: 14, padding: 0,
+                    }}>{m}×</button>
+                ))}
+              </div>
             )}
           </div>
 
-          <div className="play-others">
-            {state.enemies.map((e, i) => {
-              const hpPct = Math.max(0, Math.min(100, (e.hp / e.maxHp) * 100));
-              const isTarget = i === state.targetIdx && !e.defeated;
-              const canTarget = state.phase === 'player' && !e.defeated && (cardMode ? totalCardsPlayed < maxDartsPerVisit : state.darts.length < 3) && state.outcome === 'ongoing';
-              return (
-                <div key={e.id} className="play-other" onClick={() => canTarget && setState(prev => prev ? setTarget(prev, e.id) : prev)}
-                  style={{ cursor: canTarget ? 'pointer' : 'default', opacity: e.defeated ? 0.4 : 1, borderColor: isTarget ? 'var(--accent)' : 'var(--border)', boxShadow: isTarget ? '0 0 0 2px var(--accent)' : 'none', background: e.defeated ? 'var(--bg-3)' : 'var(--bg-2)' }}>
-                  <div className="row between">
-                    <div className="row" style={{ gap: 6 }}>
-                      <span className="po-name">{e.name}</span>
-                      {e.defeated && <span className="pill" style={{ fontSize: 9, background: '#ef4444', color: '#fff' }}>DEFEATED</span>}
-                      {e.frozenTurns > 0 && <span className="pill" style={{ fontSize: 9, background: '#60a5fa', color: '#0b0e13' }}>❄ FROZEN {e.frozenTurns}</span>}
+          {state.phase === 'player' && thrower && (
+            <div className="play-targets" style={{ marginTop: 8 }}>
+              {state.enemies.map(e => {
+                const def = getEnemyDef(e.defId);
+                const icon = enemyIcon(e.defId);
+                const hpPct = Math.max(0, Math.min(100, (e.hp / e.maxHp) * 100));
+                const isTarget = state.targetEnemyId === e.id;
+                const isBoss = def?.difficulty === 'Boss';
+                return (
+                  <div key={e.id} onClick={() => canThrow && setState(prev => prev ? setTarget(prev, e.id) : prev)}
+                    style={{
+                      cursor: canThrow ? 'pointer' : 'default',
+                      border: `2px solid ${isTarget ? 'var(--accent)' : 'var(--border)'}`,
+                      borderRadius: 12, padding: '10px 12px', background: isTarget ? 'color-mix(in srgb,var(--accent) 12%,var(--bg-3))' : 'var(--bg-3)',
+                      opacity: e.defeated ? 0.4 : 1, transition: 'all .2s',
+                    }}>
+                    <div className="row between" style={{ alignItems: 'center' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          minWidth: 24, height: 24, borderRadius: 6, padding: '0 5px',
+                          background: 'color-mix(in srgb,var(--accent) 22%,var(--bg))',
+                          color: 'var(--accent)', fontSize: 12, fontWeight: 900, flex: '0 0 auto',
+                        }}>{icon}</span>
+                        <span style={{ fontWeight: 800, fontSize: 14 }}>{e.name}</span>
+                        {isBoss && <span style={{ fontSize: 10, fontWeight: 800, color: '#ef4444', textTransform: 'uppercase', letterSpacing: '.08em' }}>Boss</span>}
+                      </span>
+                      <span className="muted small">{e.defeated ? 'DEFEATED' : `${e.hp}/${e.maxHp} HP`}</span>
                     </div>
-                    <span className="pill" style={{ fontSize: 10 }}>{e.hp} HP</span>
+                    {!e.defeated && (
+                      <div style={{ marginTop: 6, height: 6, borderRadius: 3, background: 'var(--bg)', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${hpPct}%`, background: '#ef4444', transition: 'width .4s' }} />
+                      </div>
+                    )}
                   </div>
-                  <div style={{ marginTop: 4, height: 6, borderRadius: 3, background: 'var(--bg-3)', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${hpPct}%`, background: e.defeated ? 'var(--muted)' : '#ef4444', transition: 'width .4s' }} />
-                  </div>
-                  <div className="po-sub">🛡 {e.armor}% · 🎯 {Math.round(e.accuracy * 100)}% acc · 🎯 {Math.round(e.precision * 100)}% prec{e.shields.length ? ` · 🛡 ${e.shields.length} shield${e.shields.length === 1 ? '' : 's'}` : ''}</div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
 
-          {state.phase === 'player' && state.outcome === 'ongoing' && (cardMode ? totalCardsPlayed < maxDartsPerVisit : state.darts.length < 3) && canThrow && (
-            cardMode && thrower && cardStates[thrower.id] ? (
-              <CardHand
-                cardState={cardStates[thrower.id]}
-                playerName={thrower.name}
-                isMyTurn={true}
-                isBattle={true}
-                canPlayMore={totalCardsPlayed < maxDartsPerVisit}
-                canEndVisit={totalCardsPlayed > 0}
-                canUndo={totalCardsPlayed > 0 || state.darts.length > 0}
-                onPlayCard={(handIdx) => playCard(handIdx)}
-                onUndo={onUndo}
-                onEndVisit={onEnter}
-              />
-            ) : (
-            <div className="play-input">
-              <div className="pad-card">
-                <div className="mult">
-                  <button className={mult === 1 ? 'on' : ''} onClick={() => setMult(1)}>Single</button>
-                  <button className={mult === 2 ? 'on' : ''} onClick={() => setMult(2)}>Double</button>
-                  <button className={mult === 3 ? 'on' : ''} onClick={() => setMult(3)}>Triple</button>
-                </div>
-                <div className="keypad">
-                  {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20].map(n => (
-                    <button key={n} className="key" onClick={() => onAdd(n, mult)}>{n}</button>
-                  ))}
-                  <button className="key" style={{ background: 'color-mix(in srgb,var(--accent) 20%,var(--bg-3))' }} onClick={() => onAdd(25, mult === 2 ? 2 : 1)}>25</button>
-                  <button className="key" style={{ gridColumn: 'span 2', background: 'color-mix(in srgb,var(--accent) 30%,var(--bg-3))' }} onClick={() => onAdd(50, 1, 'Bull', true)}>Bull<br /><small>50</small></button>
-                  <button className="key" style={{ gridColumn: 'span 2', color: 'var(--muted)' }} onClick={() => onAdd(0, 1, '0')}>Miss</button>
-                </div>
-                <div className="row" style={{ gap: 8, marginTop: 8 }}>
-                  <button className="btn block ghost" onClick={onUndo} disabled={!state.darts.length}>↶ Undo</button>
-                  <button className="btn block primary" onClick={onEnter} disabled={!state.darts.length}>End visit</button>
-                </div>
+          {state.phase === 'player' && cardMode && thrower && (
+            <CardHand
+              cardState={cardStates[thrower.id]}
+              canPlay={canThrow}
+              onPlay={playCard}
+              onUndo={onUndo}
+              onEnter={onEnter}
+              mult={mult}
+              setMult={setMult}
+              maxPlays={maxDartsPerVisit}
+              usedCount={totalCardsPlayed}
+            />
+          )}
+
+          {state.phase === 'player' && !cardMode && thrower && (
+            <div className="play-input" style={{ marginTop: 8 }}>
+              <div className="row" style={{ gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(n => (
+                  <button key={n} disabled={!canThrow} onClick={() => onAdd(n, mult)}
+                    style={{
+                      width: 44, height: 44, borderRadius: 8, cursor: canThrow ? 'pointer' : 'default',
+                      border: '1px solid var(--border)', background: 'var(--bg-3)', color: 'var(--text)',
+                      fontWeight: 800, fontSize: 16, padding: 0,
+                    }}>{n}</button>
+                ))}
+              </div>
+              <div className="row" style={{ gap: 6, marginTop: 8, justifyContent: 'center' }}>
+                <button disabled={!canThrow} onClick={() => onAdd(25, 2, 'Bull', false)}
+                  style={{
+                    width: 64, height: 44, borderRadius: 8, cursor: canThrow ? 'pointer' : 'default',
+                    border: '1px solid var(--border)', background: 'color-mix(in srgb,#ef4444 18%,var(--bg-3))',
+                    color: '#fca5a5', fontWeight: 800, fontSize: 14, padding: 0,
+                  }}>25</button>
+                <button disabled={!canThrow} onClick={() => onAdd(50, 2, 'Bullseye', true)}
+                  style={{
+                    width: 64, height: 44, borderRadius: 8, cursor: canThrow ? 'pointer' : 'default',
+                    border: '1px solid var(--border)', background: 'color-mix(in srgb,#ef4444 28%,var(--bg-3))',
+                    color: '#fca5a5', fontWeight: 800, fontSize: 14, padding: 0,
+                  }}>50</button>
+                <button disabled={!canThrow} onClick={() => onAdd(0, 1, 'Miss', false)}
+                  style={{
+                    width: 64, height: 44, borderRadius: 8, cursor: canThrow ? 'pointer' : 'default',
+                    border: '1px solid var(--border)', background: 'var(--bg-3)',
+                    color: 'var(--muted)', fontWeight: 800, fontSize: 14, padding: 0,
+                  }}>Miss</button>
+              </div>
+              <div className="row" style={{ gap: 8, marginTop: 10, justifyContent: 'center', alignItems: 'center' }}>
+                {state.darts.map((d, i) => (
+                  <span key={i} className="pill" style={{ fontSize: 12, padding: '4px 10px', background: 'var(--bg-3)', borderColor: 'var(--border)' }}>
+                    {d.label} {d.value > 0 ? `(${d.value})` : ''}
+                  </span>
+                ))}
+                <button className="btn sm" disabled={!canThrow || !state.darts.length} onClick={onUndo} style={{ marginLeft: 4 }}>Undo</button>
+                <button className="btn primary" disabled={!canThrow} onClick={onEnter} style={{ marginLeft: 4 }}>Enter</button>
               </div>
             </div>
-            )
           )}
 
           {showingFrozen && <FrozenOverlay state={state} onContinue={onContinue} />}
@@ -581,53 +555,55 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
 
           {showTrinketUnlock && run.lastUnlockedTrinket && (() => {
             const t = getTrinket(run.lastUnlockedTrinket);
-            return t ? (
+            if (!t) return null;
+            return (
               <Modal onClose={() => setShowTrinketUnlock(false)}>
-                <div style={{ textAlign: 'center', padding: 12 }}>
-                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#c4b5fd', textTransform: 'uppercase' }}>New Trinket Unlocked!</div>
-                  <div style={{ fontSize: 40, margin: '12px 0' }}>{t.icon}</div>
-                  <div style={{ fontSize: 20, fontWeight: 900 }}>{t.name}</div>
-                  <div className='muted' style={{ fontSize: 13, marginTop: 6, maxWidth: 280, margin: '6px auto 12px' }}>{t.desc}</div>
-                  <div className='muted small' style={{ marginBottom: 12 }}>This trinket is now available in the pool for future runs.</div>
-                  <button className='btn primary block' onClick={() => setShowTrinketUnlock(false)}>Awesome!</button>
+                <div style={{ textAlign: 'center', padding: 24 }}>
+                  <div style={{ fontSize: 48, marginBottom: 8 }}>{t.icon}</div>
+                  <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: '.14em', color: '#c4b5fd', textTransform: 'uppercase' }}>Trinket Unlocked</div>
+                  <div style={{ fontSize: 24, fontWeight: 900, marginTop: 4 }}>{t.name}</div>
+                  <div className="muted" style={{ marginTop: 8, fontSize: 14 }}>{t.desc}</div>
+                  <button className="btn block primary" style={{ marginTop: 20 }} onClick={() => setShowTrinketUnlock(false)}>Continue</button>
                 </div>
               </Modal>
-            ) : null;
+            );
           })()}
 
           {showInfo && (
             <Modal onClose={() => setShowInfo(false)}>
-              <div style={{ textAlign: 'center', padding: 8 }}>
-                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#c4b5fd', textTransform: 'uppercase' }}>Dartlite Run</div>
-                <div style={{ fontSize: 20, fontWeight: 900, marginBottom: 4 }}>{roundLabel}</div>
-                <div className="muted small" style={{ marginBottom: 10 }}>Round {run.round} of an endless run. Mini-boss every 5, boss every 10.</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-                  <div><div style={{ fontWeight: 800 }}>{run.stats.roundsCleared}</div><div className="muted small">Rounds cleared</div></div>
-                  <div><div style={{ fontWeight: 800 }}>{run.stats.enemiesDefeated}</div><div className="muted small">Enemies defeated</div></div>
-                  <div><div style={{ fontWeight: 800 }}>{run.stats.miniBossesDefeated}</div><div className="muted small">Mini-bosses</div></div>
-                  <div><div style={{ fontWeight: 800 }}>{run.stats.bossesDefeated}</div><div className="muted small">Bosses</div></div>
-                </div>
-                <button className="btn primary block" onClick={() => setShowInfo(false)}>Close</button>
+              <div style={{ padding: 20 }}>
+                <h3 style={{ margin: '0 0 12px 0' }}>Run Info</h3>
+                <div className="muted small" style={{ marginBottom: 8 }}>Round {run.round} · {run.phase}</div>
+                <div className="row between" style={{ marginBottom: 4 }}><span className="muted small">Rounds cleared</span><span className="small" style={{ fontWeight: 700 }}>{run.stats.roundsCleared}</span></div>
+                <div className="row between" style={{ marginBottom: 4 }}><span className="muted small">Enemies defeated</span><span className="small" style={{ fontWeight: 700 }}>{run.stats.enemiesDefeated}</span></div>
+                <div className="row between" style={{ marginBottom: 4 }}><span className="muted small">Damage dealt</span><span className="small" style={{ fontWeight: 700 }}>{run.stats.damageDealt}</span></div>
+                <div className="row between" style={{ marginBottom: 4 }}><span className="muted small">XP gained</span><span className="small" style={{ fontWeight: 700 }}>{run.stats.xpGained}</span></div>
+                <div className="row between" style={{ marginBottom: 12 }}><span className="muted small">Trinkets</span><span className="small" style={{ fontWeight: 700 }}>{run.trinkets.length}</span></div>
+                <button className="btn block ghost" onClick={() => setShowInfo(false)}>Close</button>
               </div>
             </Modal>
           )}
 
-          {detailPlayerId && (
-            <PlayerDetailModal
-              playerId={detailPlayerId}
-              run={run}
-              players={players}
-              onClose={() => setDetailPlayerId(null)}
-            />
-          )}
+          {detailPlayerId && (() => {
+            const rp = run.runPlayers.find(p => p.id === detailPlayerId);
+            const playerData = players.find(p => p.id === detailPlayerId);
+            if (!rp) return null;
+            return (
+              <PlayerDetailModal
+                rp={rp}
+                playerData={playerData}
+                runPlayerStats={run.playerStats.find(ps => ps.playerId === detailPlayerId)}
+                onClose={() => setDetailPlayerId(null)}
+              />
+            );
+          })()}
         </>
-      ))}
+      )}
 
       {showDeckUpgrade && deckUpgradeOption && (
         <DeckUpgradeScreen
           run={run}
           players={players}
-          onCancel={() => { setShowDeckUpgrade(false); setDeckUpgradeOption(null); }}
           onComplete={(updatedCards, actionLabel) => {
             const idx = run.choicePlayerIdx;
             const updatedRun: DartliteRun = {
@@ -642,14 +618,26 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
               desc: actionLabel,
             };
             const next = applyPlayerChoice(updatedRun, resolvedOption);
-            setShowDeckUpgrade(false);
             setDeckUpgradeOption(null);
+            setShowDeckUpgrade(false);
             if (next.phase === 'reward') {
               setChosenRun(next);
               setShowRewardReveal(true);
             } else {
               onChoice(next);
             }
+          }}
+          onCancel={() => { setShowDeckUpgrade(false); setDeckUpgradeOption(null); }}
+        />
+      )}
+
+      {showRewardReveal && chosenRun && (
+        <RewardRevealOverlay
+          run={chosenRun}
+          players={players}
+          onContinue={() => {
+            setShowRewardReveal(false);
+            setShowProgress(true);
           }}
         />
       )}
@@ -658,15 +646,10 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
         <ProgressScreen
           run={chosenRun}
           players={players}
-          onContinue={() => { setShowProgress(false); onChoice(chosenRun); }}
-        />
-      )}
-
-      {showRewardReveal && chosenRun && (
-        <RewardRevealOverlay
-          run={chosenRun}
-          players={players}
-          onContinue={() => { setShowRewardReveal(false); setShowProgress(true); }}
+          onContinue={() => {
+            setShowProgress(false);
+            onChoice(chosenRun);
+          }}
         />
       )}
     </div>

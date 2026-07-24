@@ -10,7 +10,6 @@
 import type { Player } from '../types';
 import type { DartliteRun } from './engine';
 import type { TrinketId } from './trinkets';
-import type { ChoiceOption } from './engineTypes';
 
 const GLOBAL_KEY = 'dc_dartlite_stats';
 
@@ -75,7 +74,6 @@ export interface PlayerDartliteStats {
   totalXp: number;
   runs: number;
   seenTrinkets: TrinketId[];
-  rewards: ChoiceOption[];
 }
 
 export function defaultDartliteStats(): PlayerDartliteStats {
@@ -88,7 +86,6 @@ export function defaultDartliteStats(): PlayerDartliteStats {
     totalXp: 0,
     runs: 0,
     seenTrinkets: [],
-    rewards: [],
   };
 }
 
@@ -103,7 +100,6 @@ export function recordDartliteRun(
   setPlayers((prev: Player[]) => prev.map(p => {
     if (!run.playerIds.includes(p.id)) return p;
     const cur = p.dartliteStats || defaultDartliteStats();
-    const runPlayerStats = run.playerStats.find(ps => ps.playerId === p.id);
     const updated: PlayerDartliteStats = {
       kills: cur.kills + run.stats.enemiesDefeated,
       battles: cur.battles + run.stats.roundsCleared,
@@ -113,7 +109,6 @@ export function recordDartliteRun(
       totalXp: cur.totalXp + run.stats.xpGained,
       runs: cur.runs + 1,
       seenTrinkets: [...new Set([...cur.seenTrinkets, ...seenTrinkets])],
-      rewards: [...cur.rewards, ...(runPlayerStats?.rewards ?? [])],
     };
     return { ...p, dartliteStats: updated };
   }));
