@@ -9,6 +9,8 @@ const EFFECT_META: Record<string, EffectMeta> = {
   heal:           { icon: '✨', label: 'Heal',           shortDesc: 'Restores HP to the party',           color: '#22c55e' },
   heal_over_time: { icon: '💚', label: 'Regen',          shortDesc: 'Party regenerates HP over 3 turns',    color: '#22c55e' },
   crit_buff:      { icon: '🔮', label: 'Critical Vision',shortDesc: '20% chance to score critical hits (double damage) for 3 turns', color: '#a78bfa' },
+  crit_guarantee: { icon: '🎯', label: 'Guaranteed Crit', shortDesc: 'Next damage cards are guaranteed to critically hit', color: '#a78bfa' },
+  crit_multiplier: { icon: '💥', label: 'Brutal Crit',    shortDesc: 'Critical hits deal 3x damage instead of 2x',   color: '#ef4444' },
   party_shield_flat: { icon: '🛡️', label: 'Shield',     shortDesc: 'Absorbs flat damage for the party',   color: '#3b82f6' },
   party_shield:   { icon: '🛡️', label: 'Damage Reduction',shortDesc: 'Party takes reduced damage',         color: '#3b82f6' },
   enemy_curse:    { icon: '🔮', label: 'Curse',          shortDesc: 'Enemies are cursed, dealing less damage', color: '#a78bfa' },

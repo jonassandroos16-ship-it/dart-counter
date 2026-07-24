@@ -21,11 +21,14 @@ export function defaultSettings(): Settings {
       attributeStartHealth: 300,
       attributeStartArmor: 0,
       attributeStartPower: 0,
+      attributeStartCrit: 5,
       healthPerPoint: 25,
       armorPerPoint: 1,
       powerPerPoint: 1,
+      critPerPoint: 2,
       armorMax: 25,
       powerMax: 30,
+      critMax: 75,
       healthMax: 1000,
       battleMinDamage: 1,
       // Per-class starting stats. Warrior starts with more HP, Priest with
@@ -35,10 +38,12 @@ export function defaultSettings(): Settings {
       classStartHealth: { warrior: 400, priest: 300, rogue: 300 },
       classStartArmor: { warrior: 0, priest: 5, rogue: 0 },
       classStartPower: { warrior: 0, priest: 0, rogue: 5 },
+      classStartCrit: { warrior: 5, priest: 5, rogue: 15 },
       // Per-class stat caps. Each class can push their primary stat higher.
       classHealthMax: { warrior: 1200, priest: 1000, rogue: 1000 },
       classArmorMax: { warrior: 25, priest: 35, rogue: 25 },
       classPowerMax: { warrior: 30, priest: 30, rogue: 40 },
+      classCritMax: { warrior: 50, priest: 50, rogue: 75 },
       // Surge is an early-game power-up, so it starts partially charged.
       // Other power-ups start at 0 by default.
       startingCharge: { pu_surge: 40 },

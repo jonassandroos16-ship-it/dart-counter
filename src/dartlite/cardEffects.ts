@@ -62,6 +62,12 @@ export function applyCardEffect(params: CardEffectParams): CardPlayState {
   } else if (effect === 'crit_buff') {
     const buffId = `crit_${Date.now()}`;
     setBattleState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'crit' as const, amount: mag, turnsLeft: 3, source: throwerId }] })) } : prev);
+  } else if (effect === 'crit_guarantee') {
+    const buffId = `critguar_${Date.now()}`;
+    setBattleState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'crit_guarantee' as const, amount: mag, turnsLeft: 3, source: throwerId }] })) } : prev);
+  } else if (effect === 'crit_multiplier') {
+    const buffId = `critmult_${Date.now()}`;
+    setBattleState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'crit_multiplier' as const, amount: mag, turnsLeft: 3, source: throwerId }] })) } : prev);
   } else if (effect === 'bleed') {
     const buffId = `bleed_${Date.now()}`;
     setBattleState(prev => prev ? { ...prev, enemies: prev.enemies.map(e => e.defeated ? e : { ...e, buffs: [...(e as any).buffs, { id: buffId, kind: 'bleed', amount: mag, turnsLeft: 3 }] }) } : prev);

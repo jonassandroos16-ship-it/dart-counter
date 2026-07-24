@@ -58,6 +58,7 @@ export interface DartliteRunPlayer {
   maxHp: number;
   power: number;
   armor: number;
+  crit: number;
   trinkets: TrinketId[];
   bonusHealth: number;
   bonusArmor: number;
