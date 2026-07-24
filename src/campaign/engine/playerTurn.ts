@@ -17,7 +17,7 @@ import { dartMatchesShield, describeShield } from './shields';
 import { finishEnemyTurn } from './enemyAi';
 import { effectiveAttributes } from '../../logic';
 
-// ── Battle initialization ─────────────────────────────────────────────
+// ── Battle initialization ─────────────────────────────────────────────────────
 
 export function startBattle(
   level: CampaignLevel,
@@ -40,18 +40,8 @@ export function startBattle(
   const powerMax = Number.isFinite(cfg?.powerMax) ? (cfg?.powerMax as number) : Number.MAX_SAFE_INTEGER;
   const startHealth = Number.isFinite(cfg?.attributeStartHealth) ? (cfg?.attributeStartHealth as number) : 0;
   const baseAvg = party.length
-    ? Math.max(1, Math.min(healthMax, Math.round(players.reduce((acc, p) => {
-        const attrs = effectiveAttributes(p, settings);
-        const h = attrs.health;
-        return acc + (typeof h === 'number' && Number.isFinite(h) ? Math.max(1, Math.min(healthMax, h)) : startHealth);
-      }, 0) / players.length)))
-    : 1;
-  for (const cp of party) {
-    cp.maxHp = Math.min(healthMax, cp.maxHp + passiveBonus.health);
-    cp.hp = cp.maxHp;
-    cp.power = Math.min(powerMax, cp.power + passiveBonus.power);
-    cp.armor = Math.min(armorMax, cp.armor + passiveBonus.armor);
-  }
+    ? Math.max(1, Math.min(healthMax, Math.round(players.reduce((s, p) => s + effectiveAttributes(p, settings).health + passiveBonus.health, startHealth) / players.length)))
+    : 100;
   const partyMaxHp = Math.max(1, baseAvg + passiveBonus.health);
   const powerUpCharge = party.length ? party[0].powerUpCharge : 0;
   const enemies: ActiveEnemy[] = level.enemies.map((defId) => {
@@ -72,6 +62,8 @@ export function startBattle(
       vulnerableTurns: 0,
       distractedTurns: 0,
       distractAmount: 0,
+      weakenedTurns: 0,
+      weakenAmount: 0,
     };
   });
   return {
@@ -82,14 +74,7 @@ export function startBattle(
     partyMaxHp,
     players: party,
     chapterId,
-    stats: {
-      visitsUsed: 0,
-      dartsThrown: 0,
-      damageDealt: 0,
-      enemiesDefeated: 0,
-      powerUpsUsed: 0,
-      partyHpLost: 0,
-    },
+    stats: { visitsUsed: 0, dartsThrown: 0, damageDealt: 0, enemiesDefeated: 0, powerUpsUsed: 0, partyHpLost: 0 },
     playerTurnIdx: 0,
     darts: [],
     enemies,
@@ -104,11 +89,12 @@ export function startBattle(
     pendingEnemyAttacks: [],
     appliedEnemyAttacks: [],
     awaitContinue: false,
-    phantomDarts: 0,
     frozenEnemiesThisRound: [],
     passiveBonus,
   };
 }
+
+// ── Adding / undoing a dart ─────────────────────────────────────────────────────
 
 export function addDart(
   state: CampaignBattleState,
@@ -117,202 +103,203 @@ export function addDart(
   labelOverride?: string,
   isBull?: boolean,
   settings?: Settings,
-  maxDarts?: number,
+  maxDarts: number = 3,
 ): CampaignBattleState {
   if (state.phase !== 'player') return state;
-  if (state.darts.length >= (maxDarts ?? 3)) return state;
-  let value: number, label: string;
-  if (isBull) { value = 50; label = 'Bull'; }
-  else if (base === 25) { value = mult === 2 ? 50 : 25; label = mult === 2 ? 'Bull' : '25'; }
-  else if (base === 0) { value = 0; label = 'Miss'; }
-  else { value = base * mult; label = (mult === 2 ? 'D' : mult === 3 ? 'T' : '') + base; }
-  let dart: CampaignDart = {
-    value,
-    label: labelOverride || label,
+  if (state.darts.length >= maxDarts) return state;
+  const dart: CampaignDart = {
+    value: base * mult,
+    label: labelOverride || ((mult === 2 ? 'D' : mult === 3 ? 'T' : '') + base),
     base,
-    mult: isBull ? 2 : (base === 25 && value === 50 ? 2 : mult),
-    isDouble: !!(isBull || (base === 25 && value === 50) || mult === 2),
-    isBull: !!isBull || base === 25,
+    mult,
+    isDouble: mult === 2,
+    isBull: !!isBull,
   };
-  let phantomDarts = state.phantomDarts;
-  if (phantomDarts > 0 && base !== 0) {
-    dart = { value: 50, label: '👻 Bull', base: 50, mult: 2, isDouble: true, isBull: true };
-    phantomDarts = phantomDarts - 1;
+  const newDarts = [...state.darts, dart];
+  // Resolve this dart immediately against the targeted enemy.
+  const { resolvedDart, newEnemies, newPlayers, chargeGained } = resolveDart(dart, state, settings);
+  const newResolved = [...state.resolvedDarts, resolvedDart];
+  const chargePerPlayer = chargeGained / Math.max(1, state.players.length);
+  const cfg = settings?.powerUpScaling;
+  const chargeCap = Number.isFinite(cfg?.chargeMax) ? (cfg?.chargeMax as number) : 100;
+  const updatedPlayers = newPlayers.map(p => ({
+    ...p,
+    powerUpCharge: Math.min(chargeCap, p.powerUpCharge + chargePerPlayer),
+    damageDealt: (p.damageDealt ?? 0) + (resolvedDart.damage > 0 && p.id === state.players[state.playerTurnIdx]?.id ? resolvedDart.damage : 0),
+    kills: (p.kills ?? 0) + (resolvedDart.kind === 'defeated' && p.id === state.players[state.playerTurnIdx]?.id ? 1 : 0),
+  }));
+  const newStats = {
+    ...state.stats,
+    dartsThrown: state.stats.dartsThrown + 1,
+    damageDealt: state.stats.damageDealt + resolvedDart.damage,
+    enemiesDefeated: state.stats.enemiesDefeated + (resolvedDart.kind === 'defeated' ? 1 : 0),
+  };
+  // Check if all enemies are defeated
+  const allDefeated = newEnemies.every(e => e.defeated);
+  if (allDefeated) {
+    return {
+      ...state,
+      darts: newDarts,
+      enemies: newEnemies,
+      players: updatedPlayers,
+      resolvedDarts: newResolved,
+      outcome: 'victory',
+      stats: newStats,
+    };
   }
-  const chargeCap = settings?.powerUpScaling?.chargeMax ?? 100;
-  const gained = settings ? chargeFromDart(dart, settings) : 0;
-  const throwerIdx = state.playerTurnIdx;
-  const players = state.players.map((p, i) => i === throwerIdx
-    ? { ...p, powerUpCharge: Math.min(chargeCap, p.powerUpCharge + gained) }
-    : p);
-  const powerUpCharge = players[throwerIdx].powerUpCharge;
-  const visitEnemiesSnapshot = state.darts.length === 0
-    ? state.enemies.map(e => ({ ...e, shields: e.shields.map(s => ({ ...s })) }))
-    : state.visitEnemiesSnapshot;
-  const thrower = players[throwerIdx];
-  if (!thrower) {
-    return { ...state, players, darts: [...state.darts, dart], phantomDarts, visitEnemiesSnapshot, powerUpCharge };
-  }
-  const power = effectivePower(thrower);
-  // Crit: chance to double flat damage (before armor mitigation).
-  // Sources: player's base crit attribute + crit buffs (percentage bonus).
-  // crit_guarantee buffs force the next N damage cards to crit.
-  // crit_multiplier buffs increase the crit multiplier (e.g. 3x instead of 2x).
-  const critBuff = thrower.buffs.find(b => b.kind === 'crit');
-  const critBonus = critBuff ? critBuff.amount : 0;
-  const baseCritChance = thrower.crit + critBonus;
-  const guaranteeBuff = thrower.buffs.find(b => b.kind === 'crit_guarantee');
-  const isGuaranteed = !!guaranteeBuff && guaranteeBuff.amount > 0;
-  const critMultBuff = thrower.buffs.find(b => b.kind === 'crit_multiplier');
-  const critMult = critMultBuff ? critMultBuff.amount : 2;
-  const surgeBuff = thrower.buffs.find(b => b.kind === 'surge');
-  const surgeMult = surgeBuff ? surgeBuff.amount : 1;
-  const hotStreakBuff = thrower.buffs.find(b => b.kind === 'hot_streak');
-  const hotStreakBonus = hotStreakBuff ? hotStreakBuff.amount * (state.darts.length + 1) : 0;
-  const adjustedPower = power + hotStreakBonus;
-  let targetIdx = state.targetIdx;
-  let target = state.enemies[targetIdx];
-  if (!target || target.defeated) {
-    const firstAlive = state.enemies.findIndex(e => !e.defeated);
-    if (firstAlive < 0) {
-      return { ...state, players, darts: [...state.darts, dart], phantomDarts, visitEnemiesSnapshot, powerUpCharge };
-    }
-    targetIdx = firstAlive;
-    target = state.enemies[targetIdx];
-  }
-  const enemies = state.enemies.map(e => ({ ...e, shields: [...e.shields] }));
-  const t = enemies[targetIdx];
-  let step: ResolvedDart;
-  let playersAfterHit = players;
-  if (t.shields.length > 0) {
-    const shieldIdx = 0;
-    const shield = t.shields[shieldIdx];
-    if (dartMatchesShield(dart, shield)) {
-      t.shields = t.shields.filter((_, i) => i !== shieldIdx);
-      step = { dart, damage: 0, kind: 'shield_break', shieldTarget: describeShield(shield), enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0 };
-    } else {
-      step = { dart, damage: 0, kind: 'miss', enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0 };
-    }
-  } else {
-    const isCrit = isGuaranteed || (Math.random() * 100) < baseCritChance;
-    const flatDmg = isCrit ? dart.value * critMult : dart.value;
-    const dmg = computePlayerDartDamage({ ...dart, value: flatDmg }, adjustedPower, t.armor);
-    const vulnerable = t.vulnerableTurns > 0;
-    const surgeDmg = Math.round(dmg * surgeMult);
-    const finalDmg = vulnerable ? Math.round(surgeDmg * 1.5) : surgeDmg;
-    t.hp = Math.max(0, t.hp - finalDmg);
-    const defeated = t.hp <= 0;
-    if (defeated) t.defeated = true;
-    // Consume one guaranteed-crit charge on a damage hit.
-    if (isGuaranteed) {
-      playersAfterHit = players.map((p, i) => i === throwerIdx
-        ? { ...p, buffs: p.buffs.map(b => b.id === guaranteeBuff!.id ? { ...b, amount: b.amount - 1 } : b).filter(b => !(b.kind === 'crit_guarantee' && b.amount <= 0)) }
-        : p);
-    }
-    step = { dart, damage: finalDmg, kind: defeated ? 'defeated' : 'damage', enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable, crit: isCrit, critMult: isCrit ? critMult : undefined };
-  }
-  const anyAlive = enemies.some(e => !e.defeated);
-  const outcome: CampaignBattleState['outcome'] = !anyAlive ? 'victory' : state.outcome;
-  const dartDamage = step.kind === 'damage' || step.kind === 'defeated' ? step.damage : 0;
-  const dartKill = step.kind === 'defeated' ? 1 : 0;
-  const playersWithStats = playersAfterHit.map((p, i) => i === throwerIdx
-    ? { ...p, kills: (p.kills ?? 0) + dartKill, damageDealt: (p.damageDealt ?? 0) + dartDamage }
-    : p);
   return {
     ...state,
-    players: playersWithStats,
-    enemies,
-    darts: [...state.darts, dart],
-    resolvedDarts: [...state.resolvedDarts, step],
-    targetIdx,
-    phantomDarts,
-    visitEnemiesSnapshot,
-    outcome,
-    powerUpCharge,
-    stats: { ...state.stats, dartsThrown: state.stats.dartsThrown + 1, damageDealt: state.stats.damageDealt + dartDamage, enemiesDefeated: state.stats.enemiesDefeated + dartKill },
+    darts: newDarts,
+    enemies: newEnemies,
+    players: updatedPlayers,
+    resolvedDarts: newResolved,
+    stats: newStats,
   };
 }
 
 export function undoDart(state: CampaignBattleState, settings?: Settings): CampaignBattleState {
   if (!state.darts.length) return state;
-  const enemies = state.visitEnemiesSnapshot.length
-    ? state.visitEnemiesSnapshot.map(e => ({ ...e, shields: e.shields.map(s => ({ ...s })) }))
-    : state.enemies;
-  const resolvedDarts = state.resolvedDarts.slice(0, -1);
-  const darts = state.darts.slice(0, -1);
-  const visitEnemiesSnapshot = darts.length === 0 ? [] : state.visitEnemiesSnapshot;
-  const anyAlive = enemies.some(e => !e.defeated);
-  const outcome: CampaignBattleState['outcome'] = !anyAlive ? 'victory' : 'ongoing';
-  const undoneDart = state.darts[state.darts.length - 1];
-  const revert = settings ? chargeFromDart(undoneDart, settings) : 0;
-  const throwerIdx = state.playerTurnIdx;
-  const players = state.players.map((p, i) => i === throwerIdx
-    ? { ...p, powerUpCharge: Math.max(0, p.powerUpCharge - revert) }
-    : p);
-  const powerUpCharge = Math.max(0, state.powerUpCharge - revert);
-  return { ...state, players, enemies, darts, resolvedDarts, visitEnemiesSnapshot, outcome, powerUpCharge };
-}
-
-export function setTarget(state: CampaignBattleState, enemyId: string): CampaignBattleState {
-  const idx = state.enemies.findIndex(e => e.id === enemyId);
-  if (idx < 0) return state;
-  return { ...state, targetIdx: idx };
-}
-
-export function effectivePower(player: CoopPlayer): number {
-  const buff = player.buffs.filter(b => b.kind === 'power').reduce((a, b) => a + b.amount, 0);
-  return Math.max(0, player.power + buff);
-}
-
-export function computePlayerDartDamage(dart: CampaignDart, attackerPower: number, targetArmor: number): number {
-  if (dart.value <= 0) return 0;
-  const base = Math.max(0, dart.value + attackerPower);
-  const armorPct = Math.max(0, targetArmor);
-  const mitigated = base * (1 - armorPct / 100);
-  return Math.max(1, Math.round(mitigated));
-}
-
-export function resolvePlayerVisit(state: CampaignBattleState, hasPlayedCards = false): CampaignBattleState {
-  if (state.phase !== 'player') return state;
-  if (!state.darts.length && !hasPlayedCards) return state;
-  // Consume one-time visit buffs (surge, hot_streak) after the visit.
-  const thrower = state.players[state.playerTurnIdx];
-  const players = thrower
-    ? state.players.map(p => p.id === thrower.id
-        ? { ...p, buffs: p.buffs.filter(b => b.kind !== 'surge' && b.kind !== 'hot_streak') }
-        : p)
-    : state.players;
-  return advanceAfterPlayerVisit({
+  // Restore from the snapshot taken at the start of this visit
+  const snapshot = state.visitEnemiesSnapshot;
+  if (!snapshot.length) return state;
+  const prev = state.darts.slice(0, -1);
+  // Re-resolve all remaining darts from the snapshot
+  let enemies = snapshot.map(e => ({ ...e }));
+  let players = state.players.map(p => ({ ...p }));
+  let resolvedDarts: ResolvedDart[] = [];
+  let totalCharge = 0;
+  const tempState = { ...state, enemies, players, darts: [], resolvedDarts: [] };
+  for (const d of prev) {
+    const { resolvedDart, newEnemies, newPlayers, chargeGained } = resolveDart(d, { ...tempState, enemies, players }, settings);
+    enemies = newEnemies;
+    players = newPlayers;
+    resolvedDarts = [...resolvedDarts, resolvedDart];
+    totalCharge += chargeGained;
+  }
+  const chargePerPlayer = totalCharge / Math.max(1, state.players.length);
+  const cfg = settings?.powerUpScaling;
+  const chargeCap = Number.isFinite(cfg?.chargeMax) ? (cfg?.chargeMax as number) : 100;
+  players = players.map(p => ({
+    ...p,
+    powerUpCharge: Math.min(chargeCap, p.powerUpCharge + chargePerPlayer),
+  }));
+  const stats = {
+    ...state.stats,
+    dartsThrown: Math.max(0, state.stats.dartsThrown - 1),
+    damageDealt: Math.max(0, state.stats.damageDealt - (state.resolvedDarts[state.resolvedDarts.length - 1]?.damage ?? 0)),
+    enemiesDefeated: Math.max(0, state.stats.enemiesDefeated - (state.resolvedDarts[state.resolvedDarts.length - 1]?.kind === 'defeated' ? 1 : 0)),
+  };
+  return {
     ...state,
+    darts: prev,
+    enemies,
     players,
+    resolvedDarts,
+    stats,
+  };
+}
+
+// ── Dart resolution ───────────────────────────────────────────────────────────
+
+function resolveDart(
+  dart: CampaignDart,
+  state: CampaignBattleState,
+  settings?: Settings,
+): { resolvedDart: ResolvedDart; newEnemies: ActiveEnemy[]; newPlayers: CoopPlayer[]; chargeGained: number } {
+  const t = state.enemies[state.targetIdx];
+  const thrower = state.players[state.playerTurnIdx];
+  if (!t || t.defeated) {
+    const step: ResolvedDart = { dart, damage: 0, kind: 'miss', enemyId: t?.id ?? '', enemyName: t?.name ?? '', hpAfter: t?.hp ?? 0 };
+    return { resolvedDart: step, newEnemies: state.enemies, newPlayers: state.players, chargeGained: 0 };
+  }
+
+  // Compute attacker power (thrower's power + active power buffs)
+  const cfg = settings?.powerUpScaling;
+  const powerMax = Number.isFinite(cfg?.powerMax) ? (cfg?.powerMax as number) : Number.MAX_SAFE_INTEGER;
+  const basePower = thrower ? Math.min(powerMax, thrower.power + thrower.buffs.filter(b => b.kind === 'power').reduce((s, b) => s + b.amount, 0)) : 0;
+  const power = basePower;
+
+  // Shield check: if the dart doesn't break the next shield, record a shield-break or miss.
+  if (t.shields.length > 0) {
+    const shield = t.shields[0];
+    if (!dartMatchesShield(dart, shield)) {
+      const step: ResolvedDart = { dart, damage: 0, kind: 'shield_break', shieldTarget: describeShield(shield), enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0 };
+      return { resolvedDart: step, newEnemies: state.enemies, newPlayers: state.players, chargeGained: 0 };
+    }
+    // Dart matches shield — break it, deal 0 damage.
+    const step: ResolvedDart = { dart, damage: 0, kind: 'miss', enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0 };
+    const newEnemies = state.enemies.map((e, i) => i === state.targetIdx ? { ...e, shields: e.shields.slice(1) } : e);
+    return { resolvedDart: step, newEnemies, newPlayers: state.players, chargeGained: 0 };
+  }
+
+  if (dart.value <= 0) {
+    const step: ResolvedDart = { dart, damage: 0, kind: 'miss', enemyId: t.id, enemyName: t.name, hpAfter: t.hp };
+    return { resolvedDart: step, newEnemies: state.enemies, newPlayers: state.players, chargeGained: 0 };
+  }
+
+  // Compute crit
+  const critBuff = thrower?.buffs.find(b => b.kind === 'crit');
+  const critGuarantee = thrower?.buffs.find(b => b.kind === 'crit_guarantee');
+  const critMultBuff = thrower?.buffs.find(b => b.kind === 'crit_multiplier');
+  const critChance = (thrower ? thrower.crit : 0) + (critBuff ? critBuff.amount : 0);
+  const isCrit = critGuarantee ? true : Math.random() * 100 < critChance;
+  const critMult = critMultBuff ? 1 + critMultBuff.amount / 100 : 2;
+
+  // Raw damage: dart value + attacker power
+  const rawDmg = dart.value + power;
+  const armorMax2 = Number.isFinite(cfg?.armorMax) ? (cfg?.armorMax as number) : Number.MAX_SAFE_INTEGER;
+  const armor = Math.min(armorMax2, t.armor);
+  const postArmor = Math.max(0, rawDmg - armor);
+  const surgeDmg = isCrit ? Math.round(postArmor * critMult) : postArmor;
+  const vulnerable = t.vulnerableTurns > 0;
+  const finalDmg = vulnerable ? Math.round(surgeDmg * 1.5) : surgeDmg;
+
+  const newHp = Math.max(0, t.hp - finalDmg);
+  const defeated = newHp <= 0;
+  const newEnemies = state.enemies.map((e, i) =>
+    i === state.targetIdx ? { ...e, hp: newHp, defeated } : e
+  );
+
+  let chargeGained = 0;
+  if (dart.isDouble) chargeGained += 10;
+  if (dart.isBull) chargeGained += 20;
+  if (dart.mult === 3) chargeGained += 5;
+
+  const step: ResolvedDart = { dart, damage: finalDmg, kind: defeated ? 'defeated' : 'damage', enemyId: t.id, enemyName: t.name, hpAfter: newHp, attackerPower: power, targetArmor: armor, vulnerable, crit: isCrit, critMult: isCrit ? critMult : undefined };
+  return { resolvedDart: step, newEnemies, newPlayers: state.players, chargeGained };
+}
+
+// ── Resolve the current player's visit ────────────────────────────────────────────
+
+export function resolvePlayerVisit(state: CampaignBattleState, isLastPlayer: boolean): CampaignBattleState {
+  if (state.outcome !== 'ongoing') return state;
+  if (state.outcome === 'victory' as any) return state;
+  if (!isLastPlayer) {
+    // More players to throw — advance playerTurnIdx, snapshot, reset darts.
+    const next = (state.playerTurnIdx + 1) % state.players.length;
+    return {
+      ...state,
+      playerTurnIdx: next,
+      darts: [],
+      resolvedDarts: [],
+      visitEnemiesSnapshot: state.enemies.map(e => ({ ...e })),
+    };
+  }
+  // All players have thrown — move to the enemy phase.
+  return {
+    ...state,
+    phase: 'enemy',
+    playerTurnIdx: 0,
     darts: [],
     resolvedDarts: [],
     visitEnemiesSnapshot: [],
-    stats: { ...state.stats, visitsUsed: state.stats.visitsUsed + 1 },
-  });
+  };
 }
 
-function advanceAfterPlayerVisit(state: CampaignBattleState): CampaignBattleState {
-  if (state.outcome === 'victory') {
-    return { ...state, phase: 'player', darts: [], resolvedDarts: [], visitEnemiesSnapshot: [], awaitContinue: false };
-  }
-  const nextIdx = state.playerTurnIdx + 1;
-  if (nextIdx < state.players.length) {
-    return { ...state, playerTurnIdx: nextIdx, darts: [], resolvedDarts: [], visitEnemiesSnapshot: [], awaitContinue: false };
-  }
-  return { ...state, phase: 'enemy', darts: [], resolvedDarts: [], visitEnemiesSnapshot: [], awaitContinue: false };
-}
+// ── Target selection ───────────────────────────────────────────────────────────
 
-export function chargeFromDart(dart: CampaignDart, settings: Settings): number {
-  const cfg = settings.powerUpScaling;
-  let c = 0;
-  const isBull = dart.value === 50 || dart.value === 25;
-  if (isBull) c += cfg.chargePerBull;
-  else if (dart.mult === 3) c += cfg.chargePerTriple;
-  else if (dart.mult === 2 || dart.isDouble) c += cfg.chargePerDouble;
-  c += dart.value * cfg.chargePerScorePoint;
-  return c;
+export function setTarget(state: CampaignBattleState, targetIdx: number): CampaignBattleState {
+  if (targetIdx < 0 || targetIdx >= state.enemies.length) return state;
+  if (state.enemies[targetIdx].defeated) return state;
+  return { ...state, targetIdx };
 }
-
-export { finishEnemyTurn };
-export type { PlayerBuff, PartyPassiveBonus };

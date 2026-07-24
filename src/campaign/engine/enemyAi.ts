@@ -9,8 +9,7 @@ import { neighborsOf } from './shields';
 
 const DARTBOARD_ORDER = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
 
-// Effective accuracy/precision for an enemy, applying the Focus Buff
-// distract debuff (clamped to >= 0).
+// Effective accuracy/precision for an enemy, applying the distract debuff (clamped to >= 0).
 export function effectiveAccuracy(enemy: ActiveEnemy): number {
   return enemy.distractedTurns > 0
     ? Math.max(0, enemy.accuracy - enemy.distractAmount)
@@ -20,6 +19,11 @@ export function effectivePrecision(enemy: ActiveEnemy): number {
   return enemy.distractedTurns > 0
     ? Math.max(0, enemy.precision - enemy.distractAmount)
     : enemy.precision;
+}
+
+// Damage multiplier from weaken debuff (0..1 range, 0 = no weaken, 0.3 = 30% less damage).
+export function effectiveWeakenMultiplier(enemy: ActiveEnemy): number {
+  return enemy.weakenedTurns > 0 ? Math.max(0, 1 - enemy.weakenAmount) : 1;
 }
 
 export function simulateEnemyDart(enemy: ActiveEnemy, rng: () => number): CampaignDart {
@@ -75,9 +79,13 @@ export function prepareEnemyTurn(state: CampaignBattleState, rng: () => number =
       enemy.frozenTurns -= 1;
       continue;
     }
+    const weakenMult = effectiveWeakenMultiplier(enemy);
+    const weakenAmount = enemy.weakenedTurns > 0 ? enemy.weakenAmount : 0;
+    const distractAmount = enemy.distractedTurns > 0 ? enemy.distractAmount : 0;
     for (let i = 0; i < 3; i++) {
       const dart = simulateEnemyDart(enemy, rng);
-      const dmg = Math.max(0, dart.value); // enemy damage = dart value, no armor reduction for simplicity
+      const baseDmg = Math.max(0, dart.value);
+      const dmg = baseDmg > 0 ? Math.max(0, Math.round(baseDmg * weakenMult)) : 0;
       partyHp = Math.max(0, partyHp - dmg);
       steps.push({
         enemyId: enemy.id,
@@ -85,6 +93,8 @@ export function prepareEnemyTurn(state: CampaignBattleState, rng: () => number =
         dart,
         damage: dmg,
         partyHpAfter: partyHp,
+        weakenAmount: weakenAmount > 0 ? weakenAmount : undefined,
+        distractAmount: distractAmount > 0 ? distractAmount : undefined,
       });
     }
   }
@@ -140,13 +150,14 @@ export function finishEnemyTurn(state: CampaignBattleState): CampaignBattleState
       .map(b => ({ ...b, turnsLeft: b.turnsLeft - 1 }))
       .filter(b => b.turnsLeft > 0),
   }));
-  // Decrement enemy vulnerability timers (Time Warp) and Focus Buff
-  // distract timers.
+  // Decrement enemy debuff timers: vulnerability (Time Warp), distract, and weaken.
   const enemies = state.enemies.map(e => ({
     ...e,
     vulnerableTurns: Math.max(0, e.vulnerableTurns - 1),
     distractedTurns: Math.max(0, e.distractedTurns - 1),
     distractAmount: e.distractedTurns - 1 > 0 ? e.distractAmount : 0,
+    weakenedTurns: Math.max(0, e.weakenedTurns - 1),
+    weakenAmount: e.weakenedTurns - 1 > 0 ? e.weakenAmount : 0,
   }));
   return {
     ...state,
