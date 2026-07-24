@@ -222,10 +222,14 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
         state={state}
         enemyIcon={enemyIcon}
         canTarget={state.phase === 'player' && state.outcome === 'ongoing'}
-        onSelectTarget={(enemyId) => setState(prev => setTarget(prev, enemyId))}
+        onSelectTarget={(enemyId) => setState(prev => {
+          if (!prev) return prev;
+          const idx = prev.enemies.findIndex(e => e.id === enemyId);
+          return idx >= 0 ? setTarget(prev, idx) : prev;
+        })}
       />
 
-      {state.phantomDarts > 0 && state.phase === 'player' && (
+      {state.phantomDarts != null && state.phantomDarts > 0 && state.phase === 'player' && (
         <div className="pill" style={{ marginTop: 6, background: 'color-mix(in srgb,#22d3ee 22%,var(--bg-3))', color: '#cffafe', borderColor: 'transparent' }}>
           👻 Phantom Darts active — next {state.phantomDarts} dart{state.phantomDarts === 1 ? '' : 's'} auto-bullseye
         </div>

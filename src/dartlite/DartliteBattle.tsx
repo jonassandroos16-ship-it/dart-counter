@@ -343,11 +343,15 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
               state={state}
               enemyIcon={enemyIcon}
               canTarget={canThrow && state.outcome === 'ongoing'}
-              onSelectTarget={(enemyId) => setState(prev => prev ? setTarget(prev, enemyId) : prev)}
+              onSelectTarget={(enemyId) => setState(prev => {
+                if (!prev) return prev;
+                const idx = prev.enemies.findIndex(e => e.id === enemyId);
+                return idx >= 0 ? setTarget(prev, idx) : prev;
+              })}
             />
           )}
 
-          {state.phantomDarts > 0 && state.phase === 'player' && (
+          {state.phantomDarts != null && state.phantomDarts > 0 && state.phase === 'player' && (
             <div className="pill" style={{ marginTop: 6, background: 'color-mix(in srgb,#22d3ee 22%,var(--bg-3))', color: '#cffafe', borderColor: 'transparent' }}>
               👻 Phantom Darts active — next {state.phantomDarts} dart{state.phantomDarts === 1 ? '' : 's'} auto-bullseye
             </div>

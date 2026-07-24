@@ -83,7 +83,7 @@ describe('campaign engine', () => {
   it('addDart applies damage to the targeted enemy and can defeat it', () => {
     const lvl = getLevel(1)!;
     let state = startBattle(lvl, makePlayers(1), settings);
-    state = setTarget(state, state.enemies[0].id);
+    state = setTarget(state, 0);
     const enemyHp = state.enemies[0].hp;
     state = addDart(state, 20, 3, undefined, false, settings);
     expect(state.enemies[0].hp).toBe(Math.max(0, enemyHp - 60));
@@ -94,10 +94,10 @@ describe('campaign engine', () => {
   it('addDart can defeat an enemy and set outcome to victory when all are dead', () => {
     const lvl = getLevel(1)!;
     let state = startBattle(lvl, makePlayers(1), settings);
-    state = setTarget(state, state.enemies[0].id);
+    state = setTarget(state, 0);
     state = addDart(state, 50, 1, 'Bull', true, settings);
     state = { ...state, enemies: state.enemies.map(e => ({ ...e, hp: 1 })) };
-    state = setTarget(state, state.enemies[0].id);
+    state = setTarget(state, 0);
     state = addDart(state, 20, 3, undefined, false, settings);
     expect(state.enemies.every(e => e.defeated)).toBe(true);
     expect(state.outcome).toBe('victory');
@@ -106,7 +106,7 @@ describe('campaign engine', () => {
   it('addDart with base 0 (miss) deals no damage and does not charge the orb', () => {
     const lvl = getLevel(1)!;
     let state = startBattle(lvl, makePlayers(1), settings);
-    state = setTarget(state, state.enemies[0].id);
+    state = setTarget(state, 0);
     const enemyHp = state.enemies[0].hp;
     state = addDart(state, 0, 1, '0', false, settings);
     expect(state.enemies[0].hp).toBe(enemyHp);
@@ -117,7 +117,7 @@ describe('campaign engine', () => {
   it('undoDart reverts the last dart (damage, charge, dart list)', () => {
     const lvl = getLevel(1)!;
     let state = startBattle(lvl, makePlayers(1), settings);
-    state = setTarget(state, state.enemies[0].id);
+    state = setTarget(state, 0);
     const enemyHp = state.enemies[0].hp;
     state = addDart(state, 20, 3, undefined, false, settings);
     expect(state.enemies[0].hp).toBe(Math.max(0, enemyHp - 60));
@@ -137,7 +137,7 @@ describe('campaign engine', () => {
   it('resolvePlayerVisit advances to the enemy phase', () => {
     const lvl = getLevel(1)!;
     let state = startBattle(lvl, makePlayers(1), settings);
-    state = setTarget(state, state.enemies[0].id);
+    state = setTarget(state, 0);
     state = addDart(state, 20, 3, undefined, false, settings);
     state = resolvePlayerVisit(state);
     expect(state.phase).toBe('enemy');
@@ -154,7 +154,7 @@ describe('campaign engine', () => {
   it('resolvePlayerVisit with hasPlayedCards=true advances even with no darts (utility/spell-only visit)', () => {
     const lvl = getLevel(1)!;
     let state = startBattle(lvl, makePlayers(1), settings);
-    state = setTarget(state, state.enemies[0].id);
+    state = setTarget(state, 0);
     state = resolvePlayerVisit(state, true);
     expect(state.phase).toBe('enemy');
   });
@@ -162,7 +162,7 @@ describe('campaign engine', () => {
   it('resolvePlayerVisit rotates to the next player in a 2-player party', () => {
     const lvl = getLevel(1)!;
     let state = startBattle(lvl, makePlayers(2), settings);
-    state = setTarget(state, state.enemies[0].id);
+    state = setTarget(state, 0);
     state = addDart(state, 20, 3, undefined, false, settings);
     state = resolvePlayerVisit(state);
     expect(state.phase).toBe('player');
@@ -182,7 +182,7 @@ describe('campaign engine', () => {
   it('crit_guarantee buff forces a critical hit (double flat damage before armor)', () => {
     const lvl = getLevel(1)!;
     let state = startBattle(lvl, makePlayers(1), settings);
-    state = setTarget(state, state.enemies[0].id);
+    state = setTarget(state, 0);
     const enemyHp = state.enemies[0].hp;
     const power = state.players[0].power;
     const enemyArmor = state.enemies[0].armor;
@@ -208,7 +208,7 @@ describe('campaign engine', () => {
   it('crit_multiplier buff makes crits deal 3x damage instead of 2x', () => {
     const lvl = getLevel(1)!;
     let state = startBattle(lvl, makePlayers(1), settings);
-    state = setTarget(state, state.enemies[0].id);
+    state = setTarget(state, 0);
     const enemyHp = state.enemies[0].hp;
     const power = state.players[0].power;
     const enemyArmor = state.enemies[0].armor;
@@ -272,7 +272,7 @@ describe('campaign engine', () => {
   it('prepareEnemyTurn produces attack steps for each alive enemy', () => {
     const lvl = getLevel(1)!;
     let state = startBattle(lvl, makePlayers(1), settings);
-    state = setTarget(state, state.enemies[0].id);
+    state = setTarget(state, 0);
     state = addDart(state, 20, 3, undefined, false, settings);
     state = resolvePlayerVisit(state);
     const prepared = prepareEnemyTurn(state, () => 0.99);
@@ -283,7 +283,7 @@ describe('campaign engine', () => {
   it('applyNextEnemyAttack applies damage and can defeat the party', () => {
     const lvl = getLevel(1)!;
     let state = startBattle(lvl, makePlayers(1), settings);
-    state = setTarget(state, state.enemies[0].id);
+    state = setTarget(state, 0);
     state = addDart(state, 20, 3, undefined, false, settings);
     state = resolvePlayerVisit(state);
     const prepared = prepareEnemyTurn(state, () => 0.99);
@@ -297,7 +297,7 @@ describe('campaign engine', () => {
     const lvl = getLevel(1)!;
     let state = startBattle(lvl, makePlayers(1), settings);
     state = { ...state, partyHp: 1 };
-    state = setTarget(state, state.enemies[0].id);
+    state = setTarget(state, 0);
     state = addDart(state, 20, 3, undefined, false, settings);
     state = resolvePlayerVisit(state);
     const prepared = prepareEnemyTurn(state, () => 0.99);
