@@ -66,22 +66,20 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         prevLastCardPlay.current.playerId === lcp.playerId &&
         prevLastCardPlay.current.timestamp === lcp.timestamp) return;
     prevLastCardPlay.current = { playerId: lcp.playerId, cardId: lcp.cardId, timestamp: lcp.timestamp };
-    if (!isMyTurn) {
-      const player = game.players.find(pl => pl.id === lcp.playerId);
-      setCardPlayAnim({
-        cardId: lcp.cardId,
-        upgradeLevel: lcp.upgradeLevel,
-        playerName: player?.name || 'Player',
-        playerColor: player?.color || '#888',
-      });
-      const def = resolveCardDef({ cardId: lcp.cardId, upgradeLevel: lcp.upgradeLevel, upgraded: lcp.upgradeLevel > 0 });
-      if (def) {
-        const soundType = def.type === 'damage' ? 'card_damage' : def.type === 'spell' ? 'card_spell' : 'card_utility';
-        Sound.play(soundType, {}, settings);
-      }
-      const t = setTimeout(() => setCardPlayAnim(null), 1800);
-      return () => clearTimeout(t);
+    const player = game.players.find(pl => pl.id === lcp.playerId);
+    setCardPlayAnim({
+      cardId: lcp.cardId,
+      upgradeLevel: lcp.upgradeLevel,
+      playerName: player?.name || 'Player',
+      playerColor: player?.color || '#888',
+    });
+    const def = resolveCardDef({ cardId: lcp.cardId, upgradeLevel: lcp.upgradeLevel, upgraded: lcp.upgradeLevel > 0 });
+    if (def) {
+      const soundType = def.type === 'damage' ? 'card_damage' : def.type === 'spell' ? 'card_spell' : 'card_utility';
+      Sound.play(soundType, {}, settings);
     }
+    const t = setTimeout(() => setCardPlayAnim(null), 3000);
+    return () => clearTimeout(t);
   }, [game.lastCardPlay]);
 
   useEffect(() => {
