@@ -50,10 +50,12 @@ export function startRun(players: Player[], settings: Settings, cardMode: boolea
     const startHealth = Number.isFinite(cfg.attributeStartHealth) ? cfg.attributeStartHealth : 400;
     const startArmor = Number.isFinite(cfg.attributeStartArmor) ? cfg.attributeStartArmor : 0;
     const startPower = Number.isFinite(cfg.attributeStartPower) ? cfg.attributeStartPower : 0;
+    const startCrit = Number.isFinite(cfg.attributeStartCrit) ? cfg.attributeStartCrit : 5;
     const attrs = effectiveAttributes(p, settings);
     const h = Number.isFinite(attrs.health) ? attrs.health : startHealth;
     const a = Number.isFinite(attrs.armor) ? attrs.armor : startArmor;
     const pw = Number.isFinite(attrs.power) ? attrs.power : startPower;
+    const cr = Number.isFinite(attrs.crit) ? attrs.crit : startCrit;
     return {
       id: p.id,
       name: p.name,
@@ -62,6 +64,7 @@ export function startRun(players: Player[], settings: Settings, cardMode: boolea
       maxHp: Math.max(1, h),
       power: Math.max(0, pw),
       armor: Math.max(0, a),
+      crit: Math.max(0, cr),
       trinkets: [],
       bonusHealth: 0,
       bonusArmor: 0,
@@ -115,7 +118,7 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
       id: rp.id,
       name: rp.name,
       color: rp.color,
-      attributes: { health: rp.hp, armor: rp.armor, power: rp.power, pointsAvailable: 0 },
+      attributes: { health: rp.hp, armor: rp.armor, power: rp.power, crit: rp.crit, pointsAvailable: 0 },
     } as Player;
   });
   const battle = startBattle(level, pseudoPlayers, settings, scaledEnemyDb(round), 'dartlite');

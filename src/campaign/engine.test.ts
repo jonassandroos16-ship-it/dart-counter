@@ -51,7 +51,7 @@ const makePlayers = (n: number): Player[] => Array.from({ length: n }, (_, i) =>
   id: `p${i + 1}`,
   name: `Player ${i + 1}`,
   color: '#22c55e',
-  attributes: { health: 300, armor: 10, power: 10, pointsAvailable: 0 },
+  attributes: { health: 300, armor: 10, power: 10, crit: 5, pointsAvailable: 0 },
 }));
 
 describe('campaign engine', () => {
@@ -177,6 +177,80 @@ describe('campaign engine', () => {
     const t20 = dart(20, 3);
     const expected = Math.max(1, Math.round((60 + power) * (1 - enemyArmor / 100)));
     expect(computePlayerDartDamage(t20, power, enemyArmor)).toBe(expected);
+  });
+
+  it('crit_guarantee buff forces a critical hit (double flat damage before armor)', () => {
+    const lvl = getLevel(1)!;
+    let state = startBattle(lvl, makePlayers(1), settings);
+    state = setTarget(state, state.enemies[0].id);
+    const enemyHp = state.enemies[0].hp;
+    const power = state.players[0].power;
+    const enemyArmor = state.enemies[0].armor;
+    // Add a crit_guarantee buff with 2 charges
+    state = {
+      ...state,
+      players: state.players.map(p => ({
+        ...p,
+        buffs: [...p.buffs, { id: 'test-crit-g', kind: 'crit_guarantee' as const, amount: 2, turnsLeft: 3, source: p.id }],
+      })),
+    };
+    state = addDart(state, 20, 3, undefined, false, settings);
+    const flatDmg = 60 * 2; // crit doubles flat damage
+    const expectedDmg = Math.max(1, Math.round((flatDmg + power) * (1 - enemyArmor / 100)));
+    expect(state.enemies[0].hp).toBe(Math.max(0, enemyHp - expectedDmg));
+    expect(state.resolvedDarts[0].crit).toBe(true);
+    expect(state.resolvedDarts[0].critMult).toBe(2);
+    // One charge consumed
+    const remainingGuarantee = state.players[0].buffs.find(b => b.kind === 'crit_guarantee');
+    expect(remainingGuarantee?.amount).toBe(1);
+  });
+
+  it('crit_multiplier buff makes crits deal 3x damage instead of 2x', () => {
+    const lvl = getLevel(1)!;
+    let state = startBattle(lvl, makePlayers(1), settings);
+    state = setTarget(state, state.enemies[0].id);
+    const enemyHp = state.enemies[0].hp;
+    const power = state.players[0].power;
+    const enemyArmor = state.enemies[0].armor;
+    // Add both crit_guarantee (to force crit) and crit_multiplier (3x)
+    state = {
+      ...state,
+      players: state.players.map(p => ({
+        ...p,
+        buffs: [
+          ...p.buffs,
+          { id: 'test-crit-g', kind: 'crit_guarantee' as const, amount: 1, turnsLeft: 3, source: p.id },
+          { id: 'test-crit-m', kind: 'crit_multiplier' as const, amount: 3, turnsLeft: 3, source: p.id },
+        ],
+      })),
+    };
+    state = addDart(state, 20, 3, undefined, false, settings);
+    const flatDmg = 60 * 3; // 3x crit multiplier
+    const expectedDmg = Math.max(1, Math.round((flatDmg + power) * (1 - enemyArmor / 100)));
+    expect(state.enemies[0].hp).toBe(Math.max(0, enemyHp - expectedDmg));
+    expect(state.resolvedDarts[0].crit).toBe(true);
+    expect(state.resolvedDarts[0].critMult).toBe(3);
+  });
+
+  it('players have a crit attribute from class defaults (rogue > warrior = priest)', () => {
+    const lvl = getLevel(1)!;
+    const roguePlayers = makePlayers(1).map(p => ({
+      ...p,
+      coopProgress: { classId: 'rogue' as CoopClassId, xp: 0, unlockedPassives: [], equippedPassives: [] },
+    }));
+    const warriorPlayers = makePlayers(1).map(p => ({
+      ...p,
+      coopProgress: { classId: 'warrior' as CoopClassId, xp: 0, unlockedPassives: [], equippedPassives: [] },
+    }));
+    const priestPlayers = makePlayers(1).map(p => ({
+      ...p,
+      coopProgress: { classId: 'priest' as CoopClassId, xp: 0, unlockedPassives: [], equippedPassives: [] },
+    }));
+    const rogueState = startBattle(lvl, roguePlayers, settings);
+    const warriorState = startBattle(lvl, warriorPlayers, settings);
+    const priestState = startBattle(lvl, priestPlayers, settings);
+    expect(rogueState.players[0].crit).toBeGreaterThan(warriorState.players[0].crit);
+    expect(warriorState.players[0].crit).toBeGreaterThanOrEqual(priestState.players[0].crit);
   });
 
   it('dartMatchesShield returns true when the dart matches a shield segment', () => {
@@ -401,7 +475,7 @@ describe('campaign engine', () => {
     const lvl = getLevel(1)!;
     const players = makePlayers(1).map(p => ({
       ...p,
-      attributes: { health: 100, armor: 0, power: 0, pointsAvailable: 0 },
+      attributes: { health: 100, armor: 0, power: 0, crit: 5, pointsAvailable: 0 },
       coopProgress: { classId: 'priest' as CoopClassId, xp: 200, unlockedPassives: ['pri_hp_1', 'pri_hp_2', 'pri_hp_3'] as CoopPassiveId[], equippedPassives: ['pri_hp_3'] as CoopPassiveId[] },
     }));
     const state = startBattle(lvl, players, settings);
@@ -413,7 +487,7 @@ describe('campaign engine', () => {
     const lvl = getLevel(1)!;
     const players = makePlayers(3).map(p => ({
       ...p,
-      attributes: { health: 100, armor: 0, power: 0, pointsAvailable: 0 },
+      attributes: { health: 100, armor: 0, power: 0, crit: 5, pointsAvailable: 0 },
       coopProgress: { classId: 'priest' as CoopClassId, xp: 0, unlockedPassives: ['pri_hp_1'] as CoopPassiveId[], equippedPassives: ['pri_hp_1'] as CoopPassiveId[] },
     }));
     const state = startBattle(lvl, players, settings);
@@ -429,7 +503,7 @@ describe('campaign engine', () => {
     const tiers: CoopPassiveId[] = ['pri_hp_1', 'pri_hp_2', 'pri_hp_3'];
     const players = makePlayers(3).map((p, i) => ({
       ...p,
-      attributes: { health: 100, armor: 0, power: 0, pointsAvailable: 0 },
+      attributes: { health: 100, armor: 0, power: 0, crit: 5, pointsAvailable: 0 },
       coopProgress: { classId: 'priest' as CoopClassId, xp: 200, unlockedPassives: tiers, equippedPassives: [tiers[i]] as CoopPassiveId[] },
     }));
     const state = startBattle(lvl, players, settings);
@@ -441,7 +515,7 @@ describe('campaign engine', () => {
     const lvl = getLevel(1)!;
     const players = makePlayers(3).map((p, i) => ({
       ...p,
-      attributes: { health: 100, armor: 0, power: 0, pointsAvailable: 0 },
+      attributes: { health: 100, armor: 0, power: 0, crit: 5, pointsAvailable: 0 },
       coopProgress: i < 2
         ? { classId: 'priest' as CoopClassId, xp: 0, unlockedPassives: ['pri_hp_1'] as CoopPassiveId[], equippedPassives: ['pri_hp_1'] as CoopPassiveId[] }
         : { classId: 'rogue' as CoopClassId, xp: 0, unlockedPassives: ['rog_armor_1'] as CoopPassiveId[], equippedPassives: ['rog_armor_1'] as CoopPassiveId[] },
@@ -456,7 +530,7 @@ describe('campaign engine', () => {
     const lvl = getLevel(1)!;
     const players = makePlayers(2).map(p => ({
       ...p,
-      attributes: { health: 400, armor: 0, power: 0, pointsAvailable: 0 },
+      attributes: { health: 400, armor: 0, power: 0, crit: 5, pointsAvailable: 0 },
       coopProgress: { classId: 'priest' as CoopClassId, xp: 0, unlockedPassives: ['pri_hp_1'] as CoopPassiveId[], equippedPassives: ['pri_hp_1'] as CoopPassiveId[] },
     }));
     const state = startBattle(lvl, players, settings);
@@ -469,7 +543,7 @@ describe('campaign engine', () => {
     const lvl = getLevel(1)!;
     const players = makePlayers(2).map(p => ({
       ...p,
-      attributes: { health: 1000, armor: 0, power: 0, pointsAvailable: 0 },
+      attributes: { health: 1000, armor: 0, power: 0, crit: 5, pointsAvailable: 0 },
       coopProgress: { classId: 'priest' as CoopClassId, xp: 200, unlockedPassives: ['pri_hp_3'] as CoopPassiveId[], equippedPassives: ['pri_hp_3'] as CoopPassiveId[] },
     }));
     const state = startBattle(lvl, players, settings);
@@ -481,7 +555,7 @@ describe('campaign engine', () => {
     const lvl = getLevel(1)!;
     const players = makePlayers(1).map(p => ({
       ...p,
-      attributes: { health: 100, armor: 0, power: 0, pointsAvailable: 0 },
+      attributes: { health: 100, armor: 0, power: 0, crit: 5, pointsAvailable: 0 },
       coopProgress: { classId: 'priest' as CoopClassId, xp: 200, unlockedPassives: ['pri_hp_3'] as CoopPassiveId[], equippedPassives: ['pri_hp_3'] as CoopPassiveId[] },
     }));
     const state = startBattle(lvl, players, settings);
