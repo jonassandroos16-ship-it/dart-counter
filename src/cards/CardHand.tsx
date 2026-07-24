@@ -10,7 +10,6 @@ export interface CardHandProps {
   playerName: string;
   isMyTurn: boolean;
   isBattle: boolean;
-  canEndVisit?: boolean;
   canUndo: boolean;
   canPlayMore: boolean;
   onPlayCard: (handIdx: number) => void;
@@ -35,7 +34,6 @@ export function CardHand({
   showPlayedButton = false,
   playedCount = 0,
   onShowPlayed,
-  canEndVisit = true,
   visitNumber,
 }: CardHandProps) {
   const handDefs = cs.hand.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
