@@ -9,9 +9,11 @@ export interface PlayerTurnInfoProps {
   enemyIcon: (defId: string) => string;
   cardMode?: boolean;
   cardPlayState?: CardPlayState | null;
+  maxPlays?: number;
+  cardsPlayed?: number;
 }
 
-export function PlayerTurnInfo({ state, enemyIcon, cardMode, cardPlayState }: PlayerTurnInfoProps) {
+export function PlayerTurnInfo({ state, enemyIcon, cardMode, cardPlayState, maxPlays, cardsPlayed }: PlayerTurnInfoProps) {
   const thrower = state.players[state.playerTurnIdx];
   if (!thrower) return null;
 
@@ -81,6 +83,11 @@ export function PlayerTurnInfo({ state, enemyIcon, cardMode, cardPlayState }: Pl
         </div>
         <div className="muted small">
           <b style={{ color: 'var(--text)' }}>{thrower.name}</b> is playing · this visit: <b style={{ color: 'var(--text)' }}>{state.resolvedDarts.reduce((a, d) => a + d.damage, 0)} dmg</b>
+          {typeof maxPlays === 'number' && typeof cardsPlayed === 'number' && (
+            <span style={{ marginLeft: 8, color: '#c4b5fd', fontWeight: 700 }}>
+              🃏 {cardsPlayed}/{maxPlays} cards · {Math.max(0, maxPlays - cardsPlayed)} left
+            </span>
+          )}
           <span style={{ marginLeft: 8, color: '#fbbf24' }}>
             ⚡ Effective power: <b>{effectivePower(thrower)}</b>
             {state.passiveBonus && state.passiveBonus.power > 0 && (
@@ -131,6 +138,9 @@ export function PlayerTurnInfo({ state, enemyIcon, cardMode, cardPlayState }: Pl
       </div>
       <div className="muted small">
         <b style={{ color: 'var(--text)' }}>{thrower.name}</b> is throwing · this visit: <b style={{ color: 'var(--text)' }}>{state.resolvedDarts.reduce((a, d) => a + d.damage, 0)} dmg</b>
+        <span style={{ marginLeft: 8, color: '#c4b5fd', fontWeight: 700 }}>
+          🎯 {state.darts.length}/3 darts · {Math.max(0, 3 - state.darts.length)} left
+        </span>
         <span style={{ marginLeft: 8, color: '#fbbf24' }}>
           ⚡ Effective power: <b>{effectivePower(thrower)}</b>
           {state.passiveBonus && state.passiveBonus.power > 0 && (

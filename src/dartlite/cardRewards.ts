@@ -28,6 +28,8 @@ export interface CardRewardChoice {
 export function generateCardRewardOptions(
   _ownedCards: PlayerCard[],
   _mode: 'competitive' | 'coop',
+  healAmt?: number,
+  healDesc?: string,
 ): CardRewardChoice[] {
   return [
     {
@@ -38,8 +40,8 @@ export function generateCardRewardOptions(
     },
     {
       kind: 'heal',
-      label: 'Heal 20%',
-      desc: 'Restore 20% of max HP.',
+      label: healAmt != null ? `Heal ${healAmt} HP` : 'Heal 20%',
+      desc: healDesc ?? 'Restore 20% of max HP.',
       icon: '❤️‍🩹',
     },
     {

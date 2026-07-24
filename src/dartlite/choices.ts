@@ -9,13 +9,19 @@ export function generateChoices(run: DartliteRun): ChoiceOption[] {
     return generateCardChoices(run);
   }
   const pool = run.pool.length ? run.pool : STARTER_POOL;
+  const idx = run.choicePlayerIdx;
+  const rp = run.runPlayers[idx];
+  const healAmt = rp ? Math.round(rp.maxHp * 0.2) : 0;
+  const healDesc = rp
+    ? `Heal ${healAmt} HP (${rp.hp}/${rp.maxHp} → ${Math.min(rp.maxHp, rp.hp + healAmt)})`
+    : `Restore 20% of max HP.`;
   const options: ChoiceOption[] = [
-    { kind: 'heal', label: 'Heal 20%', desc: 'Restore 20% of the party\'s max HP.', icon: '❤️‍🩹' },
+    { kind: 'heal', label: `Heal ${healAmt} HP`, desc: healDesc, icon: '❤️‍🩹', amount: healAmt },
     { kind: 'stat', label: 'Gain a Stat', desc: '+20 HP, +3% armor, or +4 power (random).', icon: '📊' },
     { kind: 'trinket', label: 'Random Trinket', desc: 'Draw a random trinket from the available pool.', icon: '🔮' },
   ];
   if (!pool.length) {
-    options[2] = { kind: 'heal', label: 'Heal 20%', desc: 'Restore 20% of max HP.', icon: '❤️‍🩹' };
+    options[2] = { kind: 'heal', label: `Heal ${healAmt} HP`, desc: healDesc, icon: '❤️‍🩹', amount: healAmt };
   }
   return options;
 }
@@ -24,18 +30,23 @@ function generateCardChoices(run: DartliteRun): ChoiceOption[] {
   const idx = run.choicePlayerIdx;
   const rp = run.runPlayers[idx];
   const ownedCards = rp?.cards ?? [];
-  const cardOpts = generateCardRewardOptions(ownedCards, 'coop');
+  const healAmt = rp ? Math.round(rp.maxHp * 0.2) : 0;
+  const healDesc = rp
+    ? `Heal ${healAmt} HP (${rp.hp}/${rp.maxHp} → ${Math.min(rp.maxHp, rp.hp + healAmt)})`
+    : `Restore 20% of max HP.`;
+  const cardOpts = generateCardRewardOptions(ownedCards, 'coop', healAmt, healDesc);
   const options: ChoiceOption[] = cardOpts.map(o => ({
     kind: o.kind === 'deck_upgrade' ? 'deck_upgrade' : o.kind === 'heal' ? 'heal' : o.kind === 'stat' ? 'stat' : 'card_new',
     label: o.label,
     desc: o.desc,
     icon: o.icon,
+    amount: o.kind === 'heal' ? healAmt : undefined,
   }));
   const pool = run.pool.length ? run.pool : STARTER_POOL;
   if (pool.length) {
     options.push({ kind: 'trinket', label: 'Random Trinket', desc: 'Draw a random trinket from the available pool.', icon: '🔮' });
   } else {
-    options.push({ kind: 'heal', label: 'Heal 20%', desc: 'Restore 20% of max HP.', icon: '❤️‍🩹' });
+    options.push({ kind: 'heal', label: `Heal ${healAmt} HP`, desc: healDesc, icon: '❤️‍🩹', amount: healAmt });
   }
   return options;
 }
