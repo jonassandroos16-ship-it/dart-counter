@@ -327,7 +327,6 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
               playerName={thrower.name}
               isMyTurn={canThrow}
               isBattle={true}
-              canEndVisit={totalCardsPlayed > 0}
               canUndo={state.darts.length > 0}
               canPlayMore={totalCardsPlayed < maxDartsPerVisit}
               onPlayCard={playCard}

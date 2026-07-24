@@ -133,7 +133,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
   };
 
   const onEnter = () => {
-    if (!p || !cs || cs.used.length === 0) return;
+    if (!p || !cs) return;
     const endedState = endTurn(cs);
     enterVisit({
       game,
@@ -274,7 +274,6 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         playerName={p.name}
         isMyTurn={isMyTurn}
         isBattle={true}
-        canEndVisit={cs.used.length > 0}
         canUndo={cs.used.length > 0}
         canPlayMore={totalCardsPlayed < maxPlays}
         onPlayCard={handlePlayCard}

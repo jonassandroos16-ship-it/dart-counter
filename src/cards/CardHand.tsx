@@ -10,7 +10,7 @@ export interface CardHandProps {
   playerName: string;
   isMyTurn: boolean;
   isBattle: boolean;
-  canEndVisit: boolean;
+  canEndVisit?: boolean;
   canUndo: boolean;
   canPlayMore: boolean;
   onPlayCard: (handIdx: number) => void;
@@ -27,7 +27,6 @@ export function CardHand({
   playerName,
   isMyTurn,
   isBattle,
-  canEndVisit,
   canUndo,
   canPlayMore,
   onPlayCard,
@@ -36,6 +35,7 @@ export function CardHand({
   showPlayedButton = false,
   playedCount = 0,
   onShowPlayed,
+  canEndVisit = true,
   visitNumber,
 }: CardHandProps) {
   const handDefs = cs.hand.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
@@ -172,7 +172,7 @@ export function CardHand({
         {isMyTurn && (
           <div className="row" style={{ gap: 8, marginTop: 8 }}>
             <button className="btn block ghost" onClick={onUndo} disabled={!canUndo}>↶ Undo card</button>
-            <button className="btn block primary" onClick={onEndVisit} disabled={!canEndVisit}>{isBattle ? 'Attack!' : 'Enter visit'}</button>
+            <button className="btn block primary" onClick={onEndVisit}>{isBattle ? 'Attack!' : 'Enter visit'}</button>
           </div>
         )}
       </div>

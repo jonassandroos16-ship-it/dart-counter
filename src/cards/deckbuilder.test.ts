@@ -13,24 +13,24 @@ const collection = [
 ];
 
 describe('Deck-builder logic', () => {
-  it('initCardPlayState shuffles the collection into the deck and leaves piles empty', () => {
+  it('initCardPlayState shuffles the collection into the deck and draws an initial hand', () => {
     const s = initCardPlayState(collection);
-    expect(s.deck).toHaveLength(collection.length);
-    expect(s.hand).toHaveLength(0);
+    expect(s.hand).toHaveLength(HAND_SIZE);
+    expect(s.deck).toHaveLength(collection.length - HAND_SIZE);
     expect(s.used).toHaveLength(0);
     expect(s.graveyard).toHaveLength(0);
   });
 
   it('drawCards moves up to HAND_SIZE cards from deck to hand', () => {
     const s = initCardPlayState(collection);
-    const drawn = drawCards(s, HAND_SIZE);
-    expect(drawn.hand).toHaveLength(HAND_SIZE);
-    expect(drawn.deck).toHaveLength(collection.length - HAND_SIZE);
+    const drawn = drawCards(s, 2);
+    expect(drawn.hand).toHaveLength(HAND_SIZE + 2);
+    expect(drawn.deck).toHaveLength(collection.length - HAND_SIZE - 2);
   });
 
   it('drawCards reshuffles the graveyard into the deck when it runs out', () => {
     const s = initCardPlayState(collection);
-    // Draw all cards into hand
+    // Draw all remaining cards into hand
     const drawn = drawCards(s, collection.length);
     expect(drawn.deck).toHaveLength(0);
     expect(drawn.hand).toHaveLength(collection.length);
@@ -46,8 +46,7 @@ describe('Deck-builder logic', () => {
 
   it('startTurn clears the hand and used pile into the graveyard, then draws a fresh hand', () => {
     const s = initCardPlayState(collection);
-    const drawn = drawCards(s, HAND_SIZE);
-    const played = playCardFromHand(drawn, 0)!;
+    const played = playCardFromHand(s, 0)!;
     const next = startTurn(played);
     expect(next.hand).toHaveLength(HAND_SIZE);
     expect(next.used).toHaveLength(0);
@@ -56,8 +55,7 @@ describe('Deck-builder logic', () => {
 
   it('playCardFromHand moves the chosen card to the used pile and removes it from hand', () => {
     const s = initCardPlayState(collection);
-    const drawn = drawCards(s, HAND_SIZE);
-    const played = playCardFromHand(drawn, 0)!;
+    const played = playCardFromHand(s, 0)!;
     expect(played.used).toHaveLength(1);
     expect(played.hand).toHaveLength(HAND_SIZE - 1);
   });
@@ -69,8 +67,7 @@ describe('Deck-builder logic', () => {
 
   it('endTurn moves used pile and remaining hand into the graveyard and clears both', () => {
     const s = initCardPlayState(collection);
-    const drawn = drawCards(s, HAND_SIZE);
-    const played = playCardFromHand(drawn, 0)!;
+    const played = playCardFromHand(s, 0)!;
     const played2 = playCardFromHand(played, 0)!;
     expect(played2.used).toHaveLength(2);
     const ended = endTurn(played2);
@@ -82,8 +79,7 @@ describe('Deck-builder logic', () => {
 
   it('a card in the used pile cannot be replayed the same turn', () => {
     const s = initCardPlayState(collection);
-    const drawn = drawCards(s, HAND_SIZE);
-    const played = playCardFromHand(drawn, 0)!;
+    const played = playCardFromHand(s, 0)!;
     const usedCard = played.used[0];
     const stillInHand = played.hand.includes(usedCard);
     expect(stillInHand).toBe(false);

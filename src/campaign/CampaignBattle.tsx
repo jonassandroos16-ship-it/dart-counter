@@ -303,7 +303,6 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
             isMyTurn={true}
             isBattle={true}
             canPlayMore={totalCardsPlayed < maxDartsPerVisit}
-            canEndVisit={totalCardsPlayed > 0}
             canUndo={totalCardsPlayed > 0 || state.darts.length > 0}
             onPlayCard={(handIdx) => playCard(handIdx)}
             onUndo={onUndo}

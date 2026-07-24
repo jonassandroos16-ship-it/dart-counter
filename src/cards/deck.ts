@@ -222,7 +222,7 @@ export const MAX_PLAYS_PER_TURN = 3;
 
 export function initCardPlayState(collection: PlayerCard[]): CardPlayState {
   const deck = shuffle([...collection]);
-  return { deck, hand: [], used: [], graveyard: [] };
+  return drawCards({ deck, hand: [], used: [], graveyard: [] }, HAND_SIZE);
 }
 
 export function shuffle<T>(arr: T[]): T[] {
