@@ -1,4 +1,4 @@
-import type { CampaignBattleState, ActiveEnemy } from '../types';
+import type { CampaignBattleState } from '../types';
 import { getEnemyDef } from '../engine/enemies';
 import { describeShield } from '../engine/shields';
 import { EnemyDebuffBadges } from '../../cards/DebuffBadges';

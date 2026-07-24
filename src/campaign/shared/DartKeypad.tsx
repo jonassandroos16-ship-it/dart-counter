@@ -6,10 +6,9 @@ interface DartKeypadProps {
   onEnter: () => void;
   canThrow: boolean;
   darts: { label: string; value: number }[];
-  dartCount: number;
 }
 
-export function DartKeypad({ mult, onSetMult, onAdd, onUndo, onEnter, canThrow, darts, dartCount }: DartKeypadProps) {
+export function DartKeypad({ mult, onSetMult, onAdd, onUndo, onEnter, canThrow, darts }: DartKeypadProps) {
   return (
     <div className="play-input">
       <div className="pad-card">
