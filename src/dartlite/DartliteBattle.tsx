@@ -164,7 +164,9 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
 
   const handleEnter = () => {
     if (pendingVictory) {
-      onBattleEnd(true);
+      // Pass the live battle state so resolveBattle picks up the latest
+      // per-player kills and damageDealt from addDart.
+      onBattleEnd(true, state ?? undefined);
       return;
     }
     if (pendingDefeat) {
