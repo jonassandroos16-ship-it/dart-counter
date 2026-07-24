@@ -208,7 +208,12 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
         )}
 
         {state.phase === 'player' && thrower && (
-          <PlayerTurnInfo state={state} enemyIcon={enemyIcon} />
+          <PlayerTurnInfo
+            state={state}
+            enemyIcon={enemyIcon}
+            cardMode={cardMode}
+            cardPlayState={cardMode ? (cardBattle.cardStates[thrower.id] ?? null) : null}
+          />
         )}
 
         {state.phase === 'enemy' && !state.pendingEnemyAttacks.length && !state.frozenEnemiesThisRound.length && (
