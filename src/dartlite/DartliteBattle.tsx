@@ -75,9 +75,18 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   const throwerId = state?.players?.[state.playerTurnIdx]?.id;
   const canThrow = !isMultiplayer || (throwerId != null && ownsPlayer(lobbyPlayers!, throwerId));
 
-  const [cardStates, setCardStates] = useState<Record<string, CardPlayState>>({});
-  const [bonusSlots, setBonusSlots] = useState(0);
   const cardMode = run.cardMode;
+  const [cardStates, setCardStates] = useState<Record<string, CardPlayState>>(() => {
+    if (!cardMode || !battle) return {};
+    const cs: Record<string, CardPlayState> = {};
+    for (const rp of run.runPlayers) {
+      const playerData = players.find(p => p.id === rp.id);
+      const collection: PlayerCard[] = rp.cards?.length ? rp.cards : (playerData ? getPlayerCards(playerData) : []);
+      cs[rp.id] = initCardPlayState(collection);
+    }
+    return cs;
+  });
+  const [bonusSlots, setBonusSlots] = useState(0);
 
   const [nextTurnDraws, setNextTurnDraws] = useState<Record<string, number>>({});
   const [nextTurnSlots, setNextTurnSlots] = useState<Record<string, number>>({});
@@ -489,9 +498,9 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             </div>
           )}
 
-          {state.phase === 'player' && cardMode && thrower && (
+          {state.phase === 'player' && cardMode && thrower && cardStates[thrower.id] && (
             <CardHand
-              cardState={cardStates[thrower.id]}
+              cardState={cardStates[thrower.id]!}
               playerName={thrower.name}
               isMyTurn={canThrow}
               isBattle={true}
