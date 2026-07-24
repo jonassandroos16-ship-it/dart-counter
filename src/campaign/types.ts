@@ -190,11 +190,14 @@ export interface ActiveEnemy {
   defeated: boolean;
   frozenTurns: number;  // when > 0 the enemy skips its next attack(s)
   vulnerableTurns: number; // when > 0, enemy takes +50% damage from all sources (Time Warp)
-  // Focus Buff: when > 0, the enemy's accuracy and precision are reduced
+  // Distract debuff: when > 0, the enemy's accuracy and precision are reduced
   // by `distractAmount` (clamped to >= 0) during its attacks. Decremented
   // at the end of each enemy round alongside other timers.
   distractedTurns: number;
   distractAmount: number;
+  // Weaken debuff: when > 0, this enemy deals reduced damage (by weakenAmount ratio).
+  weakenedTurns: number;
+  weakenAmount: number;
 }
 
 export interface CoopPlayer {
@@ -254,6 +257,8 @@ export interface EnemyAttackStep {
   damage: number;
   partyHpAfter: number;
   targetPlayerId?: string; // which player the dart hit (for display)
+  weakenAmount?: number;  // weaken debuff factor active during this attack (0..1)
+  distractAmount?: number; // distract debuff factor active during this attack (0..1)
 }
 
 export type VisitLogEntry =
@@ -318,18 +323,12 @@ export interface CampaignBattleState {
   pendingEnemyAttacks: EnemyAttackStep[];
   // Enemy attack steps already applied during the current enemy phase —
   // kept so the overlay can show all darts thrown so far (dart 1, 2, 3…)
-  // cumulatively rather than only the current one.
+  // rather than only the latest one.
   appliedEnemyAttacks: EnemyAttackStep[];
-  // When true, the UI is expected to wait for the player to tap "Continue"
-  // before advancing. Used by the dart-by-dart overlays.
+  // Set to true when waiting for the player to click Continue in the
+  // enemy-attack overlay. Reset to false once the phase ends.
   awaitContinue: boolean;
-  // Phantom Darts power-up: when > 0, the next darts thrown by the current
-  // player are auto-converted to bullseyes (50 each).
-  phantomDarts: number;
-  // Enemies that were frozen (skipped) during the current enemy phase. The
-  // UI shows a "frozen" popup listing these enemies and their remaining
-  // frozen turns, then advances to the player phase on Continue. Cleared
-  // at the start of each enemy phase by `prepareEnemyTurn`.
+  // Enemies that were frozen this round and skipped their attack.
   frozenEnemiesThisRound: { id: string; name: string; frozenTurns: number }[];
   // Snapshot of the team-wide passive bonus applied at battle start (from
   // each player's equipped class passives). Kept so the UI can show which
@@ -338,108 +337,30 @@ export interface CampaignBattleState {
     power: number;
     health: number;
     armor: number;
-    sources: { playerId: string; playerName: string; passiveName: string; icon: string; bonus: { power?: number; health?: number; armor?: number } }[];
+    crit: number;
   };
+  // Card mode: true when playing with cards (campaign card mode / dartlite).
+  cardMode?: boolean;
 }
 
-// ── Coop classes & passives ───────────────────────────────────────────
-//
-// Each player can pick one of three classes for Coop mode: Warrior, Priest,
-// or Rogue. Each class has five tiers of passives (starter through tier 5),
-// with three distinct passives per tier to choose from — fifteen passives
-// per class total. Passives grant team-wide stat bonuses while the player is
-// in the party. A player equips one passive at a time per class.
+// ── Classes ───────────────────────────────────────────────────────────
 
-export type CoopClassId = 'warrior' | 'priest' | 'rogue';
+export type CoopClassId =
+  | 'warrior'
+  | 'priest'
+  | 'rogue'
+  | 'any';
 
 export interface CoopClassDef {
   id: CoopClassId;
   name: string;
   icon: string;
   desc: string;
-  // The starter passive id (always active for this class).
-  starterPassive: CoopPassiveId;
-}
-
-export type CoopPassiveId =
-  // Warrior — party power bonuses (3 per tier: power, crit, lifesteal-style)
-  | 'war_power_1' | 'war_crit_1' | 'war_fury_1'
-  | 'war_power_2' | 'war_crit_2' | 'war_fury_2'
-  | 'war_power_3' | 'war_crit_3' | 'war_fury_3'
-  | 'war_power_4' | 'war_crit_4' | 'war_fury_4'
-  | 'war_power_5' | 'war_crit_5' | 'war_fury_5'
-  // Priest — party sustain/HP bonuses (3 per tier: hp, regen, shield)
-  | 'pri_hp_1' | 'pri_regen_1' | 'pri_shield_1'
-  | 'pri_hp_2' | 'pri_regen_2' | 'pri_shield_2'
-  | 'pri_hp_3' | 'pri_regen_3' | 'pri_shield_3'
-  | 'pri_hp_4' | 'pri_regen_4' | 'pri_shield_4'
-  | 'pri_hp_5' | 'pri_regen_5' | 'pri_shield_5'
-  // Rogue — party defense bonuses (3 per tier: armor, dodge, thorns)
-  | 'rog_armor_1' | 'rog_dodge_1' | 'rog_thorns_1'
-  | 'rog_armor_2' | 'rog_dodge_2' | 'rog_thorns_2'
-  | 'rog_armor_3' | 'rog_dodge_3' | 'rog_thorns_3'
-  | 'rog_armor_4' | 'rog_dodge_4' | 'rog_thorns_4'
-  | 'rog_armor_5' | 'rog_dodge_5' | 'rog_thorns_5';
-
-export interface CoopPassiveDef {
-  id: CoopPassiveId;
-  classId: CoopClassId;
-  tier: 1 | 2 | 3 | 4 | 5; // 1 = starter, 2-5 = progression. 3 passives per tier per class.
-  name: string;
-  icon: string;
-  desc: string;
-  // Stat bonus applied to the whole party while this passive is active.
-  // Each successive tier is strictly stronger.
-  bonus: {
-    power?: number;  // flat power added to every party member
-    health?: number; // flat max HP added to every party member
-    armor?: number;  // flat armor added to every party member
+  // Passive bonus applied at battle start (permanent for the entire battle).
+  passive: {
+    power?: number;
+    health?: number;
+    armor?: number;
+    crit?: number;
   };
-  // Player level required to unlock this passive. Tier 1 is always 1 (starter).
-  levelRequired: number;
-}
-
-// Persisted per-player Coop progression. Stored on the Player object.
-// XP is now unified — see `Player.xp` / `Player.level`. This struct keeps
-// class selection and passive equip state only.
-export interface PlayerCoopProgress {
-  classId: CoopClassId | null;          // currently selected class
-  xp?: number;                          // DEPRECATED — kept for migration; use classXp
-  unlockedPassives: CoopPassiveId[];   // passives unlocked (incl. starter)
-  equippedPassives: CoopPassiveId[];   // passives currently equipped (active)
-  // Per-class XP tracking. Each class maintains its own XP and level.
-  // Migrated from the unified Player.xp system so switching classes
-  // preserves each class's progression independently.
-  classXp?: Record<string, number>;     // { warrior: 150, priest: 80, rogue: 0 }
-}
-
-// Per-player Co-op Campaign progress. Stored on the Player object as
-// `campaignProgress`. Mirrors the shared `CampaignProgress` shape but is
-// tracked per player so a level is only "beaten for everyone" when every
-// party member has cleared it. `chapters` maps chapter id → highest cleared
-// level index (0-based) within that chapter. `unlockedPowerUps` lists the
-// reward power-up ids this player has personally unlocked.
-export interface PlayerCampaignProgress {
-  highest_level_beaten: number;
-  unlockedPowerUps?: string[];
-  chapters?: Record<string, number>;
-}
-
-
-//
-// `highest_level_beaten` is kept for backwards compatibility with badges
-// and titles that read it (it counts the cumulative number of levels
-// cleared across all chapters). Per-chapter progress is tracked in
-// `chapters`: a map of chapter id → highest level index cleared (0 = none,
-// N = boss cleared). A chapter is "completed" when its boss index matches
-// the number of levels in that chapter.
-export interface CampaignProgress {
-  highest_level_beaten: number;
-  // Advanced coop power-up ids unlocked by clearing levels. Starter
-  // power-ups are always available and not tracked here.
-  unlockedPowerUps?: string[];
-  // Per-chapter progress. Key is chapter id; value is the highest level
-  // index (0-based, into the chapter's `levels` array) that has been
-  // cleared. A value equal to `levels.length` means the chapter is done.
-  chapters?: Record<string, number>;
 }
