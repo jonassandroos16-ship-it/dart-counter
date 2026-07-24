@@ -59,85 +59,58 @@ export function DartOverlay({ state, onContinue, onEndVisit, settings, enemyIcon
               <span className="bo-name">{thrower?.name || 'Player'}</span>
             </span>
             <span className="bo-vs">·</span>
-            <span className="bo-target">
-              <span className="bo-name">Visit summary</span>
+            <span className="bo-targets">
+              {enemiesHit.map(e => (
+                <span key={e.id} className="bo-target">
+                  <span className="bo-name" style={{ color: e.defeated ? '#ef4444' : undefined }}>
+                    {e.name}{e.defeated ? ' ☠' : ''}
+                  </span>
+                </span>
+              ))}
             </span>
           </div>
-
-          <div className="bo-steps" style={{ marginTop: 4 }}>
-            {(playedCards || []).map((card, i) => {
-              if (card.type === 'damage') {
-                const s = steps.find(st => st.dart.label === card.name);
-                if (!s) return null;
-                const eDef = state.enemies.find(e => e.id === s.enemyId);
-                const icon = enemyIcon && eDef ? enemyIcon(eDef.defId) : '';
+          <div className="bo-steps">
+            {steps.map((s, i) => {
+              const card = i < (playedCards?.length ?? 0) && playedCards ? playedCards[i] : undefined;
+              if (card && card.type !== 'damage') {
                 return (
-                  <div key={i} className={`bo-step current${s.damage <= 0 ? ' miss' : ''}`}>
-                    <span className="bo-step-dart">{s.dart.label}</span>
-                    <span className="bo-step-formula" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          minWidth: 20, height: 20, borderRadius: 6, padding: '0 4px',
-                          background: 'color-mix(in srgb,var(--accent) 22%,var(--bg))',
-                          color: 'var(--accent)', fontSize: 11, fontWeight: 900, marginRight: 4, flex: '0 0 auto',
-                        }} title={s.enemyName}>{icon}</span>
-                        {s.kind === 'shield_break' ? `Broke ${s.shieldTarget} — 0 dmg`
-                          : s.kind === 'miss' ? 'Absorbed by shield — 0 dmg'
-                          : s.dart.value <= 0 ? 'Miss · 0 dmg'
-                          : `${s.dart.value} dmg`}
-                        {s.kind === 'defeated' ? ' · ☠' : ''}
-                      </span>
-                      {s.damage > 0 && s.attackerPower != null && s.targetArmor != null && (
-                        <span className="muted" style={{ fontSize: 9, fontWeight: 600, lineHeight: 1.3 }}>
-                          ({s.dart.value} + {s.attackerPower} power)
-                          {s.targetArmor > 0 ? ` × (1 − ${s.targetArmor}% armor)` : ''}
-                          {s.vulnerable ? ' × 1.5 (vulnerable)' : ''}
-                          {' = '}{s.damage}
-                        </span>
-                      )}
+                  <div key={i} className="bo-step past">
+                    <span className="bo-step-dart" style={{ color: cardTypeColor(card.type) }}>{card.icon}</span>
+                    <span className="bo-step-formula" style={{ color: cardTypeColor(card.type) }}>
+                      {card.name}
                     </span>
-                    <span className="bo-step-dmg">{s.damage > 0 ? `-${s.damage}` : '0'}</span>
+                    <span className="bo-step-dmg" style={{ fontSize: 10 }}>{card.desc}</span>
                   </div>
                 );
               }
-              return (
-                <div key={i} className="bo-step current" style={{
-                  borderColor: cardTypeColor(card.type),
-                  background: `color-mix(in srgb, ${cardTypeColor(card.type)} 12%, var(--bg-3))`,
-                }}>
-                  <span className="bo-step-dart" style={{ fontSize: 13 }}>{card.icon} {card.name}</span>
-                  <span className="bo-step-formula" style={{ textTransform: 'capitalize' }}>{card.type}</span>
-                  <span className="bo-step-dmg" style={{ fontSize: 10 }}>{card.desc}</span>
-                </div>
-              );
-            })}
-          </div>
-
-          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {enemiesHit.map(e => {
-              const eDef = state.enemies.find(en => en.id === e.id);
+              const eDef = state.enemies.find(e => e.id === s.enemyId);
               const icon = enemyIcon && eDef ? enemyIcon(eDef.defId) : '';
-              const hpPct = Math.max(0, Math.min(100, (e.finalHp / e.maxHp) * 100));
               return (
-                <div key={e.id} style={{ padding: '6px 8px', borderRadius: 8, background: 'var(--bg-3)', border: '1px solid var(--border)' }}>
-                  <div className="row between" style={{ marginBottom: 4, alignItems: 'center' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        minWidth: 22, height: 22, borderRadius: 6, padding: '0 5px',
-                        background: 'color-mix(in srgb,var(--accent) 22%,var(--bg))',
-                        color: 'var(--accent)', fontSize: 12, fontWeight: 900, flex: '0 0 auto',
-                      }} title={e.name}>{icon}</span>
-                      <span className="bo-name" style={{ fontSize: 13 }}>{e.name}</span>
+                <div key={i} className={`bo-step current${s.damage <= 0 ? ' miss' : ''}`}>
+                  <span className="bo-step-dart">{s.dart.label}</span>
+                  <span className="bo-step-formula">
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      minWidth: 20, height: 20, borderRadius: 6, padding: '0 4px',
+                      background: 'color-mix(in srgb,var(--accent) 22%,var(--bg))',
+                      color: 'var(--accent)', fontSize: 11, fontWeight: 900, marginRight: 4, flex: '0 0 auto',
+                    }} title={s.enemyName}>{icon}</span>
+                    {s.kind === 'shield_break' ? `Broke ${s.shieldTarget} — 0 dmg`
+                      : s.kind === 'miss' ? 'Absorbed by shield — 0 dmg'
+                      : s.dart.value <= 0 ? 'Miss · 0 dmg'
+                      : `${s.dart.value} dmg`}
+                  </span>
+                  {s.damage > 0 && s.attackerPower != null && s.targetArmor != null && (
+                    <span className="bo-step-calc muted" style={{ fontSize: 9, whiteSpace: 'nowrap' }}>
+                      {s.dart.value}
+                      {s.attackerPower > 0 && <> +{s.attackerPower}</>}
+                      {s.crit && <> ×{s.critMult ?? 2} crit</>}
+                      {s.targetArmor > 0 && <> -{s.targetArmor}</>}
+                      {s.vulnerable && <> ×1.5</>}
+                      {' = '}{s.damage}
                     </span>
-                    <span className="muted small">
-                      {e.defeated ? <span style={{ color: '#ef4444', fontWeight: 900, fontSize: 16 }}>☠</span> : `${e.finalHp} / ${e.maxHp} HP`}
-                    </span>
-                  </div>
-                  <div className="bo-hp-tracks">
-                    <div className="bo-hp-fill" style={{ width: `${hpPct}%`, background: e.defeated ? 'var(--muted)' : '#ef4444' }} />
-                  </div>
+                  )}
+                  <span className="bo-step-dmg">{s.damage > 0 ? `-${s.damage}` : '0'}</span>
                 </div>
               );
             })}
@@ -162,6 +135,22 @@ export function DartOverlay({ state, onContinue, onEndVisit, settings, enemyIcon
   const hpPct = a ? Math.max(0, Math.min(100, (a.partyHpAfter / maxHp) * 100)) : 0;
   const intensity = !a || a.damage <= 0 ? 0 : a.damage < 20 ? 1 : a.damage < 50 ? 2 : 3;
   const shakeClass = intensity === 0 ? '' : intensity === 1 ? 'battle-shake-light' : intensity === 2 ? 'battle-shake-medium' : 'battle-shake-heavy';
+
+  // Collect active debuffs on the currently attacking enemy for display
+  const attackingEnemy = a ? state.enemies.find(e => e.id === a.enemyId) : null;
+  const activeDebuffs: { icon: string; label: string; color: string }[] = [];
+  if (attackingEnemy) {
+    if (attackingEnemy.weakenedTurns > 0) {
+      activeDebuffs.push({ icon: '💀', label: `Weakened -${Math.round(attackingEnemy.weakenAmount * 100)}% dmg`, color: '#ef4444' });
+    }
+    if (attackingEnemy.distractedTurns > 0) {
+      activeDebuffs.push({ icon: '🌀', label: `Distracted -${Math.round(attackingEnemy.distractAmount * 100)}% acc`, color: '#f59e0b' });
+    }
+    if (attackingEnemy.frozenTurns > 0) {
+      activeDebuffs.push({ icon: '❄️', label: 'Frozen', color: '#60a5fa' });
+    }
+  }
+
   return (
     <div className="battle-overlay-bg">
       <div className="battle-overlay" onClick={(e) => e.stopPropagation()}>
@@ -175,6 +164,23 @@ export function DartOverlay({ state, onContinue, onEndVisit, settings, enemyIcon
             <span className="bo-name">Party</span>
           </span>
         </div>
+
+        {activeDebuffs.length > 0 && (
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6, paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
+            {activeDebuffs.map((d, i) => (
+              <span key={i} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+                padding: '2px 7px', borderRadius: 999, fontSize: 10, fontWeight: 700,
+                background: `color-mix(in srgb, ${d.color} 18%, transparent)`,
+                border: `1px solid ${d.color}`, color: d.color,
+              }}>
+                <span>{d.icon}</span>
+                <span>{d.label}</span>
+              </span>
+            ))}
+          </div>
+        )}
+
         <div className={`bo-target-card ${shakeClass}`} key={shakeKey}>
           <div className="bo-hp-row">
             <span className="bo-hp-label">Party HP</span>
@@ -190,6 +196,8 @@ export function DartOverlay({ state, onContinue, onEndVisit, settings, enemyIcon
             const isCurrent = i === allSteps.length - 1 && !!currentEnemyStep;
             const eDef = state.enemies.find(e => e.id === s.enemyId);
             const icon = enemyIcon && eDef ? enemyIcon(eDef.defId) : '';
+            const rawDartValue = s.dart.value;
+            const weakenAmt = s.weakenAmount ?? 0;
             return (
               <div key={i} className={`bo-step ${isCurrent ? 'current' : 'past'}${s.damage <= 0 ? ' miss' : ''}`}>
                 <span className="bo-step-dart">{s.dart.label}</span>
@@ -202,6 +210,12 @@ export function DartOverlay({ state, onContinue, onEndVisit, settings, enemyIcon
                   }} title={s.enemyName}>{icon}</span>
                   {s.dart.value <= 0 ? 'Miss · 0 dmg' : `${s.dart.value} dmg`}
                 </span>
+                {rawDartValue > 0 && weakenAmt > 0 && (
+                  <span className="bo-step-calc muted" style={{ fontSize: 9, whiteSpace: 'nowrap' }}>
+                    {rawDartValue} ×{(1 - weakenAmt).toFixed(2)} <span style={{ color: '#ef4444' }}>weaken</span>
+                    {' = '}{s.damage}
+                  </span>
+                )}
                 <span className="bo-step-dmg">{s.damage > 0 ? `-${s.damage}` : '0'}</span>
               </div>
             );

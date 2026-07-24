@@ -57,7 +57,19 @@ export function applyCardEffect(params: CardEffectParams): CardPlayState {
   } else if (effect === 'party_shield_flat' || effect === 'party_shield') {
     const buffId = `shield_${Date.now()}`;
     setBattleState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'shield' as const, amount: mag, turnsLeft: 2, source: throwerId }] })) } : prev);
-  } else if (effect === 'enemy_curse' || effect === 'enemy_debuff' || effect === 'enemy_miss') {
+  } else if (effect === 'enemy_debuff') {
+    // Weaken: reduces enemy outgoing damage by mag% for 2 turns.
+    const weakenFrac = mag / 100;
+    setBattleState(prev => prev ? {
+      ...prev,
+      enemies: prev.enemies.map(e => e.defeated ? e : {
+        ...e,
+        weakenedTurns: Math.max(e.weakenedTurns, 2),
+        weakenAmount: Math.max(e.weakenAmount, weakenFrac),
+      }),
+    } : prev);
+  } else if (effect === 'enemy_curse' || effect === 'enemy_miss') {
+    // Distract: reduces enemy accuracy/precision so they miss more.
     setBattleState(prev => prev ? { ...prev, enemies: prev.enemies.map(e => e.defeated ? e : { ...e, distractedTurns: Math.max(e.distractedTurns, 3), distractAmount: Math.max(e.distractAmount, mag / 100) }) } : prev);
   } else if (effect === 'crit_buff') {
     const buffId = `crit_${Date.now()}`;

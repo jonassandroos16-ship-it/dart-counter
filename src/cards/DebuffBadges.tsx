@@ -16,6 +16,8 @@ export interface EnemyDebuffBadgesProps {
     distractedTurns: number;
     distractAmount: number;
     vulnerableTurns: number;
+    weakenedTurns: number;
+    weakenAmount: number;
     buffs?: DebuffInfo[];
   };
 }
@@ -34,8 +36,11 @@ function collectDebuffs(enemy: EnemyDebuffBadgesProps['enemy']): DebadgeEntry[] 
   if (enemy.frozenTurns > 0) {
     entries.push({ icon: '❄️', label: 'Frozen', desc: 'Enemy is frozen and cannot attack', color: '#60a5fa', turnsLeft: enemy.frozenTurns, amount: 0 });
   }
+  if (enemy.weakenedTurns > 0) {
+    entries.push({ icon: '💀', label: 'Weakened', desc: `Enemy deals ${Math.round(enemy.weakenAmount * 100)}% less damage`, color: '#ef4444', turnsLeft: enemy.weakenedTurns, amount: enemy.weakenAmount });
+  }
   if (enemy.distractedTurns > 0) {
-    entries.push({ icon: '🎯', label: 'Distracted', desc: `Enemy accuracy reduced by ${Math.round(enemy.distractAmount * 100)}%`, color: '#a78bfa', turnsLeft: enemy.distractedTurns, amount: enemy.distractAmount });
+    entries.push({ icon: '🌀', label: 'Distracted', desc: `Enemy accuracy reduced by ${Math.round(enemy.distractAmount * 100)}%`, color: '#f59e0b', turnsLeft: enemy.distractedTurns, amount: enemy.distractAmount });
   }
   if (enemy.vulnerableTurns > 0) {
     entries.push({ icon: '⏳', label: 'Vulnerable', desc: 'Enemy takes 50% more damage', color: '#fbbf24', turnsLeft: enemy.vulnerableTurns, amount: 0 });
@@ -92,7 +97,7 @@ export function EnemyDebuffBadges({ enemy }: EnemyDebuffBadgesProps) {
             </div>
             <div className="muted" style={{ fontSize: 14, lineHeight: 1.5, marginBottom: 8 }}>{selected.desc}</div>
             <div className="muted small" style={{ marginBottom: 12 }}>
-              {selected.amount > 0 && <span>Amount: {selected.amount}<br /></span>}
+              {selected.amount > 0 && <span>Amount: {Math.round(selected.amount * 100)}%<br /></span>}
               Duration: {selected.turnsLeft} turn{selected.turnsLeft !== 1 ? 's' : ''} remaining
             </div>
             <button className="btn block ghost" onClick={() => setSelected(null)}>Close</button>
