@@ -11,7 +11,7 @@ export interface CardEffectParams {
   battleState: CampaignBattleState;
   throwerId: string;
   bonusSlots: number;
-  setBonusSlots: (fn: (b: number) => number) => number;
+  setBonusSlots: (fn: (b: number) => number) => void;
   setNextTurnSlots: (fn: (prev: Record<string, number>) => Record<string, number>) => void;
   setNextTurnDraws: (fn: (prev: Record<string, number>) => Record<string, number>) => void;
   setBattleState: (fn: (prev: CampaignBattleState | null) => CampaignBattleState | null) => void;

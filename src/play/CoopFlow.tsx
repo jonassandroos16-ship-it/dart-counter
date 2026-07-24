@@ -115,7 +115,6 @@ export function CoopFlow({ players, settings, music, setPlayers, toast, onExitTo
           if (!ids.includes(p.id)) return p;
           const classId = p.coopProgress?.classId || null;
           const cur = p.coopProgress || defaultCoopProgress();
-          const oldLevel = classLevelFromXp(cur, classId, settings).level;
           const updatedProg = addClassXp(cur, classId, xpGained);
           const li = classLevelFromXp(updatedProg, classId, settings);
           const { progress: nextProg } = reconcileCoopPassivesForPlayer(updatedProg, li.level);
