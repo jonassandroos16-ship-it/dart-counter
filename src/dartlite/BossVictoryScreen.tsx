@@ -13,10 +13,35 @@ interface Props {
   canChoose?: boolean;
 }
 
+// Per-boss victory stories shown in the trinket-drop popup.
+const BOSS_VICTORY_STORIES: Record<string, string> = {
+  warlord_malakar:
+    "Malakar's war-banner falls in the dust. His iron grip on the vale is broken at last — the screams of his warhost fade as they scatter into the hills. A crimson crown rolls to your feet, still warm from the tyrant's brow. The vale will remember this day.",
+  ice_queen:
+    'The Ice Queen shatters into a thousand glittering shards, her frozen throne cracking beneath her. A biting wind rises and then dies, as if the mountain itself exhales. From the rubble, a crystal shard pulses with cold magic — a keepsake of the queen who would not yield.',
+  the_verdant_maw:
+    "The Verdant Maw collapses inward, vines retracting as its terrible hunger fades. The jungle goes still for the first time in years. In the creature's maw you find a seed — already sprouting, almost eager — thrumming with the life it once devoured.",
+};
+
+const DEFAULT_BOSS_VICTORY_STORY =
+  "The beast falls with a ground-shaking crash. Silence descends over the battlefield — a hard-earned silence. From the wreckage, something glints: a relic of the creature's dark power, now yours to wield.";
+
 export function BossVictoryScreen({ run, players, onPick, canChoose = true }: Props) {
   const [picked, setPicked] = useState<TrinketId | null>(null);
   if (!run.bossVictory) return null;
   const { bossName, trinketOptions } = run.bossVictory;
+
+  // Identify the boss defId from the display name to look up the right story.
+  const bossDefId = (() => {
+    const nameMap: Record<string, string> = {
+      'Warlord Malakar': 'warlord_malakar',
+      'Ice Queen': 'ice_queen',
+      'The Verdant Maw': 'the_verdant_maw',
+    };
+    return nameMap[bossName] ?? null;
+  })();
+  const victoryStory =
+    (bossDefId && BOSS_VICTORY_STORIES[bossDefId]) ?? DEFAULT_BOSS_VICTORY_STORY;
 
   return (
     <div className="view-scroll" style={{
@@ -25,10 +50,27 @@ export function BossVictoryScreen({ run, players, onPick, canChoose = true }: Pr
     }}>
       <div className="card" style={{ maxWidth: 520, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 18 }}>
-          <div style={{ fontSize: 40, marginBottom: 6 }}>🏆</div>
+          <div style={{ fontSize: 48, marginBottom: 6 }}>🏆</div>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#fbbf24', textTransform: 'uppercase' }}>Boss Defeated</div>
           <div style={{ fontSize: 26, fontWeight: 900, marginTop: 6 }}>{bossName}</div>
-          <div className="muted small" style={{ marginTop: 6 }}>
+
+          {/* Boss-specific victory story */}
+          <div style={{
+            marginTop: 14,
+            padding: '12px 16px',
+            borderRadius: 10,
+            background: 'color-mix(in srgb,#f59e0b 10%,var(--bg-3))',
+            border: '1px solid color-mix(in srgb,#f59e0b 30%,var(--border))',
+            fontSize: 14,
+            lineHeight: 1.65,
+            color: 'var(--text)',
+            fontStyle: 'italic',
+            textAlign: 'left',
+          }}>
+            {victoryStory}
+          </div>
+
+          <div className="muted small" style={{ marginTop: 12 }}>
             {canChoose
               ? 'The party has been healed to 100%. Choose a boss trinket to empower your run.'
               : 'Waiting for the host to claim a boss trinket…'}
