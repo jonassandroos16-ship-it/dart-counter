@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { CampaignBattleState } from '../types';
-import type { CardDef, CardPlayState, PlayerCard } from '../../cards/types';
+import type { CardPlayState, PlayerCard } from '../../cards/types';
 import {
-  initCardPlayState, endTurn, MAX_PLAYS_PER_TURN, resolveCardDef, playCardFromHand,
+  initCardPlayState, endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
   getPlayerCards,
 } from '../../cards/deck';
 import { startTurnWithExtraDraws } from '../../cards/turnLogic';
 import { applyCardEffect } from '../../cards/cardEffects';
 import { addDart, undoDart, resolvePlayerVisit } from '../engine/playerTurn';
-import type { Settings } from '../../types';
+import type { Player, Settings } from '../../types';
 import { Sound } from '../../sound';
 
 export interface RunPlayerLike {
@@ -29,7 +29,7 @@ export interface UseCardBattleParams {
 
 export interface CardBattleApi {
   cardStates: Record<string, CardPlayState>;
-  bonusSlots: (CardDef | null)[];
+  bonusSlots: number;
   maxDartsPerVisit: number;
   totalCardsPlayed: number;
   playCard: (handIdx: number) => void;
@@ -42,55 +42,71 @@ export function useCardBattle(params: UseCardBattleParams): CardBattleApi {
   const { battle, cardMode, runPlayers, players, settings, onStateChange } = params;
 
   const [cardStates, setCardStates] = useState<Record<string, CardPlayState>>({});
-  const [bonusSlots, setBonusSlots] = useState<(CardDef | null)[]>([]);
+  const [bonusSlots, setBonusSlots] = useState(0);
+  const [nextTurnSlots, setNextTurnSlots] = useState<Record<string, number>>({});
+  const [nextTurnDraws, setNextTurnDraws] = useState<Record<string, number>>({});
 
   const thrower = battle?.players?.[battle.playerTurnIdx];
   const throwerId = thrower?.id;
 
   const maxDartsPerVisit = cardMode ? MAX_PLAYS_PER_TURN : 3;
 
-  // Initialize card play state for each player at battle start / round transitions
+  // Initialize card play state for each player at battle start / visit transitions
   useEffect(() => {
     if (!cardMode || !battle) return;
     const next: Record<string, CardPlayState> = {};
     for (const rp of runPlayers) {
-      const deck = getPlayerCards(rp.id, players);
+      const player = players.find(p => p.id === rp.id) as Player | undefined;
+      const deck = player ? getPlayerCards(player) : (rp.cards ?? []);
       next[rp.id] = initCardPlayState(deck);
     }
     setCardStates(next);
-    setBonusSlots([]);
+    setBonusSlots(0);
+    setNextTurnSlots({});
+    setNextTurnDraws({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardMode, battle?.visitNumber, battle?.round]);
+  }, [cardMode, battle?.visitNumber]);
 
-  // Start of each player's turn: draw cards
+  // Start of each player's turn: draw cards if none drawn yet this turn
   useEffect(() => {
     if (!cardMode || !battle || !throwerId) return;
     const cs = cardStates[throwerId];
     if (!cs) return;
-    if (cs.turnStarted) return;
-    const defIds = cs.deck.map(c => c.defId);
-    const updated = startTurnWithExtraDraws(cs, defIds, 0);
+    if (cs.hand.length > 0 || cs.used.length > 0) return;
+    const extraDraw = nextTurnDraws[throwerId] ?? 0;
+    const extraSlot = nextTurnSlots[throwerId] ?? 0;
+    const updated = startTurnWithExtraDraws(cs, extraDraw, extraSlot, (n) => {
+      setBonusSlots(b => b + n);
+    });
     setCardStates(prev => ({ ...prev, [throwerId]: updated }));
+    if (extraDraw > 0) setNextTurnDraws(prev => { const n = { ...prev }; delete n[throwerId]; return n; });
+    if (extraSlot > 0) setNextTurnSlots(prev => { const n = { ...prev }; delete n[throwerId]; return n; });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cardMode, throwerId, battle?.playerTurnIdx]);
 
   const totalCardsPlayed = throwerId ? (cardStates[throwerId]?.used.length ?? 0) : 0;
 
   const playCard = useCallback((handIdx: number) => {
-    if (!throwerId) return;
+    if (!throwerId || !battle) return;
     const cs = cardStates[throwerId];
     if (!cs) return;
-    const result = playCardFromHand(cs, handIdx);
-    if (!result) return;
-    const { state: newCs, card: playedCard } = result;
-    setCardStates(prev => ({ ...prev, [throwerId]: newCs }));
-    const def = resolveCardDef(playedCard);
-    if (def) {
-      setBonusSlots(prev => [...prev, def]);
-      onStateChange(prev => prev ? applyCardEffect(prev, def, throwerId, settings) : prev);
-      Sound.play('card', {}, settings);
-    }
-  }, [throwerId, cardStates, onStateChange, settings]);
+    const def = resolveCardDef(cs.hand[handIdx]);
+    if (!def) return;
+    const updated = applyCardEffect({
+      card: def,
+      handIdx,
+      state: cs,
+      battleState: battle,
+      throwerId,
+      bonusSlots,
+      setBonusSlots,
+      setNextTurnSlots,
+      setNextTurnDraws,
+      setBattleState: onStateChange,
+    });
+    setCardStates(prev => ({ ...prev, [throwerId]: updated }));
+    Sound.play('card', {}, settings);
+  }, [throwerId, battle, cardStates, bonusSlots, onStateChange, settings]);
 
   const onAdd = useCallback((base: number, m: number, labelOverride?: string, isBull?: boolean) => {
     onStateChange(prev => prev ? addDart(prev, base, m, labelOverride, isBull, settings, maxDartsPerVisit) : prev);
@@ -103,12 +119,12 @@ export function useCardBattle(params: UseCardBattleParams): CardBattleApi {
       if (cs && cs.used.length > 0 && battle.darts.length === 0) {
         const newCs = { ...cs, used: cs.used.slice(0, -1), hand: [...cs.hand, cs.used[cs.used.length - 1]] };
         setCardStates(prev => ({ ...prev, [throwerId]: newCs }));
-        setBonusSlots(prev => prev.slice(0, -1));
+        setBonusSlots(b => Math.max(0, b - 1));
         return;
       }
     }
     onStateChange(prev => prev ? undoDart(prev, settings) : prev);
-  }, [battle, cardMode, cardStates, onStateChange, settings]);
+  }, [battle, cardMode, cardStates, throwerId, onStateChange, settings]);
 
   const onEnter = useCallback(() => {
     if (cardMode && battle && throwerId) {
