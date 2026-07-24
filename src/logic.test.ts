@@ -449,7 +449,7 @@ describe('reconcilePlayerPoints — health recalculation from base stats', () =>
   it('clamps NaN health to the configured starting value', () => {
     const player: Player = {
       id: 'p1', name: 'P1', color: '#000', level: 1,
-      attributes: { health: NaN, armor: 0, power: 0, pointsAvailable: 0 },
+      attributes: { health: NaN, armor: 0, power: 0, crit: 0, pointsAvailable: 0 },
     };
     const out = reconcilePlayerPoints(player, settings);
     expect(out.attributes?.health).toBe(settings.powerUpScaling.classStartHealth.warrior);
@@ -462,7 +462,7 @@ describe('reconcilePlayerPoints — health recalculation from base stats', () =>
     // The reconciler should clamp the stored health to the starting value.
     const player: Player = {
       id: 'p1', name: 'P1', color: '#000', level: 1,
-      attributes: { health: 400, armor: 0, power: 0, pointsAvailable: 0 },
+      attributes: { health: 400, armor: 0, power: 0, crit: 0, pointsAvailable: 0 },
     };
     const out = reconcilePlayerPoints(player, settings);
     expect(out.attributes?.health).toBe(settings.powerUpScaling.classStartHealth.warrior);
@@ -474,7 +474,7 @@ describe('reconcilePlayerPoints — health recalculation from base stats', () =>
     // XP 250 → level 3 (baseLevelXp=100, levelMult=1.5 → 100 + 150 = 250).
     const player: Player = {
       id: 'p1', name: 'P1', color: '#000', level: 3, xp: 250,
-      attributes: { health: 450, armor: 0, power: 0, pointsAvailable: 8 },
+      attributes: { health: 450, armor: 0, power: 0, crit: 0, pointsAvailable: 8 },
     };
     const out = reconcilePlayerPoints(player, settings);
     expect(out.attributes?.health).toBe(450);
@@ -484,7 +484,7 @@ describe('reconcilePlayerPoints — health recalculation from base stats', () =>
   it('never produces NaN in battle-mode game creation from corrupted attributes', () => {
     const player: Player = {
       id: 'p1', name: 'P1', color: '#22c55e',
-      attributes: { health: NaN, armor: NaN, power: NaN, pointsAvailable: 0 },
+      attributes: { health: NaN, armor: NaN, power: NaN, crit: 0, pointsAvailable: 0 },
     };
     const game = createGame('battle', ['p1'], [player], false, 1, false, [], false, settings);
     const gp = game.players[0];
@@ -502,7 +502,7 @@ describe('reconcilePlayerPoints — health recalculation from base stats', () =>
     // (500-300)/25, but the player only has 5. Reconcile should clamp.
     const player: Player = {
       id: 'p1', name: 'P1', color: '#000', level: 2, xp: 100,
-      attributes: { health: 525, armor: 0, power: 0, pointsAvailable: 0 },
+      attributes: { health: 525, armor: 0, power: 0, crit: 0, pointsAvailable: 0 },
     };
     const out = reconcilePlayerPoints(player, settings);
     const cfg = settings.powerUpScaling;
@@ -530,7 +530,7 @@ describe('battle mode — missing powerUpScaling fields (NaN regression)', () =>
     const s = makePartialSettings();
     const player: Player = {
       id: 'p1', name: 'P1', color: '#22c55e',
-      attributes: { health: 400, armor: 5, power: 5, pointsAvailable: 10 },
+      attributes: { health: 400, armor: 5, power: 5, crit: 0, pointsAvailable: 10 },
     };
     const game = createGame('battle', ['p1'], [player], false, 1, false, [], false, s);
     const gp = game.players[0];

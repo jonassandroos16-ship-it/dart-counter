@@ -234,18 +234,14 @@ describe('campaign engine', () => {
 
   it('players have a crit attribute from class defaults (rogue > warrior = priest)', () => {
     const lvl = getLevel(1)!;
-    const roguePlayers = makePlayers(1).map(p => ({
+    const withClass = (classId: CoopClassId) => makePlayers(1).map(p => ({
       ...p,
-      coopProgress: { classId: 'rogue' as CoopClassId, xp: 0, unlockedPassives: [], equippedPassives: [] },
+      attributes: { health: p.attributes!.health, armor: p.attributes!.armor, power: p.attributes!.power, crit: NaN, pointsAvailable: p.attributes!.pointsAvailable },
+      coopProgress: { classId, xp: 0, unlockedPassives: [], equippedPassives: [] },
     }));
-    const warriorPlayers = makePlayers(1).map(p => ({
-      ...p,
-      coopProgress: { classId: 'warrior' as CoopClassId, xp: 0, unlockedPassives: [], equippedPassives: [] },
-    }));
-    const priestPlayers = makePlayers(1).map(p => ({
-      ...p,
-      coopProgress: { classId: 'priest' as CoopClassId, xp: 0, unlockedPassives: [], equippedPassives: [] },
-    }));
+    const roguePlayers = withClass('rogue');
+    const warriorPlayers = withClass('warrior');
+    const priestPlayers = withClass('priest');
     const rogueState = startBattle(lvl, roguePlayers, settings);
     const warriorState = startBattle(lvl, warriorPlayers, settings);
     const priestState = startBattle(lvl, priestPlayers, settings);
