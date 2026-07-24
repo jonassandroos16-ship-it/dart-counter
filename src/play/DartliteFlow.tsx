@@ -18,18 +18,11 @@ interface Props {
   music: MusicEngine;
   setPlayers: (updater: any) => void;
   onExitToMenu: () => void;
-  /** When true, skip the party-selection setup screen — players are already
-   *  chosen by the lobby. The first battle begins immediately. */
   skipSetup?: boolean;
-  /** When skipSetup is true, this determines card vs trinket mode. */
   cardMode?: boolean;
-  /** Multiplayer: lobby ID for state sync. */
   lobbyId?: string;
-  /** Multiplayer: lobby players for device-ownership checks. */
   lobbyPlayers?: LobbyPlayer[];
-  /** Multiplayer: true if this device is the host (writes state to DB). */
   isHost?: boolean;
-  /** Multiplayer: remote run state received from the host via realtime. */
   remoteRun?: DartliteRun | null;
 }
 
@@ -38,12 +31,9 @@ export function DartliteFlow({ players, settings, music, setPlayers, onExitToMen
   const [run, setRun] = useState<DartliteRun | null>(null);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // When skipping setup (multiplayer), the host immediately starts the run
-  // with all provided players. Remote devices wait for the host's synced
-  // state instead of creating their own.
   useEffect(() => {
     if (!skipSetup || stage !== 'battle' || run) return;
-    if (!isHost) return; // remote devices get the run via remoteRun
+    if (!isHost) return;
     const party = players;
     const started = startRun(party, settings, cardMode ?? false);
     const begun = beginRound(started, party, settings);
@@ -52,14 +42,12 @@ export function DartliteFlow({ players, settings, music, setPlayers, onExitToMen
     if (lobbyId) void updateCoopState(lobbyId, { ...begun, _coopRun: true });
   }, [skipSetup, stage, run, players, settings, cardMode, music, isHost, lobbyId]);
 
-  // Remote devices: adopt the host's synced run state.
   useEffect(() => {
     if (!skipSetup || isHost || !remoteRun) return;
     setRun(remoteRun);
     if (stage !== 'battle' && stage !== 'gameover') setStage('battle');
   }, [skipSetup, isHost, remoteRun, stage]);
 
-  // Host: sync run state to DB (debounced to avoid flooding).
   const syncRun = (next: DartliteRun) => {
     setRun(next);
     if (isHost && lobbyId) {
@@ -94,7 +82,7 @@ export function DartliteFlow({ players, settings, music, setPlayers, onExitToMen
       music={music}
       lobbyPlayers={lobbyPlayers}
       onBattleEnd={(won, finalBattle) => {
-        if (!isHost && skipSetup) return; // only host resolves battles
+        if (!isHost && skipSetup) return;
         const runWithBattle = finalBattle ? { ...run, battle: finalBattle } : run;
         if (won) {
           const resolved = resolveBattle(runWithBattle, true);
@@ -109,7 +97,7 @@ export function DartliteFlow({ players, settings, music, setPlayers, onExitToMen
         }
       }}
       onChoice={(nextRun) => {
-        if (!isHost && skipSetup) return; // only host advances rounds
+        if (!isHost && skipSetup) return;
         if (nextRun.phase === 'reward') {
           const begun = beginRound(nextRun, players.filter(p => nextRun.playerIds.includes(p.id)), settings);
           syncRun(begun);
@@ -124,6 +112,7 @@ export function DartliteFlow({ players, settings, music, setPlayers, onExitToMen
   if (stage === 'gameover' && run) {
     return <DartliteGameOver
       run={run}
+      players={players}
       setPlayers={setPlayers}
       onContinue={() => { setStage('none'); setRun(null); onExitToMenu(); music.startContext('setup', settings); }}
     />;
