@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import type { Game, GameRecord, Player, Settings, PlayedCard } from '../../types';
 import type { MusicEngine } from '../../music';
 import type { PopupControls } from '../../Popups';
-import { BadgeAvatar } from '../common';
+import { BadgeAvatar, ChargedPlayerIcon } from '../common';
 import {
   initCardPlayState, endTurn, MAX_PLAYS_PER_TURN, resolveCardDef,
   getPlayerCards, defaultPlayerCards,
@@ -14,6 +14,9 @@ import { playCard } from './cardBoardPlay';
 import { enterVisit } from './cardBoardVisit';
 import { PlayedPopup, CardDetailPopup } from './CardBoardPopups';
 import { GameOver } from '../GameOver';
+import { activatePowerUp } from '../powerups';
+import { RerollOverlay } from '../RerollOverlay';
+import type { RerollPlan } from '../../powerups';
 
 export function CardBoard({ game, setGame, settings, players, games, setGames, setPlayers, toast, music, onQuit, onGameOver, popups, isMyTurn = true }: {
   game: Game; setGame: (g: Game | null) => void; settings: Settings; players: Player[]; games: GameRecord[];
@@ -24,6 +27,8 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
   const [targetId, setTargetId] = useState<string | null>(null);
   const [showPlayed, setShowPlayed] = useState(false);
   const [selectedPlayedCard, setSelectedPlayedCard] = useState<PlayedCard | null>(null);
+  const [reroll, setReroll] = useState<RerollPlan | null>(null);
+  const [rerollResolve, setRerollResolve] = useState<((v: boolean) => void) | null>(null);
   const prevHandRef = useRef<number | null>(null);
 
   const p = game.players[game.turn];
@@ -95,31 +100,40 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
   };
 
   const onUndo = () => {
-    if (!p || !cs || game.darts.length === 0) return;
-    const lastDart = game.darts[game.darts.length - 1];
-    const usedIdx = [...cs.used].reverse().findIndex(pc => {
-      const def = resolveCardDef(pc);
-      return def?.name === lastDart.label;
-    });
-    if (usedIdx === -1) return;
-    const realIdx = cs.used.length - 1 - usedIdx;
-    const card = cs.used[realIdx];
-    setGame({
-      ...game,
-      darts: game.darts.slice(0, -1),
-      cardState: {
-        ...(game.cardState || {}),
-        [p.id]: {
-          ...cs,
-          hand: [...cs.hand, card],
-          used: cs.used.filter((_, i) => i !== realIdx),
+    if (!p || !cs) return;
+    if (cs.used.length === 0) return;
+    const lastUsed = cs.used[cs.used.length - 1];
+    const lastDef = resolveCardDef(lastUsed);
+    if (lastDef?.type === 'damage' && game.darts.length > 0) {
+      setGame({
+        ...game,
+        darts: game.darts.slice(0, -1),
+        cardState: {
+          ...(game.cardState || {}),
+          [p.id]: {
+            ...cs,
+            hand: [...cs.hand, lastUsed],
+            used: cs.used.slice(0, -1),
+          },
         },
-      },
-    });
+      });
+    } else {
+      setGame({
+        ...game,
+        cardState: {
+          ...(game.cardState || {}),
+          [p.id]: {
+            ...cs,
+            hand: [...cs.hand, lastUsed],
+            used: cs.used.slice(0, -1),
+          },
+        },
+      });
+    }
   };
 
   const onEnter = () => {
-    if (!p || !cs || game.darts.length === 0) return;
+    if (!p || !cs || cs.used.length === 0) return;
     const endedState = endTurn(cs);
     enterVisit({
       game,
@@ -146,13 +160,31 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
   const hpPct = (pl: any) => Math.max(0, Math.min(100, ((pl.hp || 0) / (pl.maxHp || 1)) * 100));
   const playedCount = game.playedCards?.length ?? 0;
 
+  const slotEntries: { label: string; isDamage: boolean }[] = cs.used.map(pc => {
+    const def = resolveCardDef(pc);
+    if (!def) return { label: '?', isDamage: false };
+    return { label: def.name, isDamage: def.type === 'damage' };
+  });
+
   return (
     <div className="view-noscroll coop-battle">
       <button className="btn danger sm quit-float" onClick={() => { if (confirm('Quit this game?')) onQuit(); }}>Quit</button>
       <div className="play-current">
         <div className="pc-header">
           <div className="row" style={{ gap: 8 }}>
-            <BadgeAvatar playerId={p.id} players={players} games={games} size={32} fontSize={13} color={p.color} />
+            {game.powerUpsEnabled ? (
+              <ChargedPlayerIcon game={game} curIdx={game.turn} settings={settings} players={players} games={games} toast={toast} onActivate={() => {
+                activatePowerUp(game, game.turn, settings, toast, {
+                  popups,
+                  onReroll: (plan) => new Promise<boolean>((resolve) => {
+                    setReroll(plan);
+                    setRerollResolve(() => resolve);
+                  }),
+                }).then((next) => { if (next) setGame(next); });
+              }} />
+            ) : (
+              <BadgeAvatar playerId={p.id} players={players} games={games} size={32} fontSize={13} color={p.color} />
+            )}
             <span className="pc-name">{p.name}</span>
           </div>
           <span className="muted small">BATTLE · {alive.length} ALIVE</span>
@@ -162,8 +194,41 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         <div style={{ width: '100%', height: 8, borderRadius: 4, background: 'var(--bg-3)', overflow: 'hidden', margin: '4px 0' }}>
           <div style={{ height: '100%', width: `${hpPct(p)}%`, background: p.color, transition: 'width .3s' }} />
         </div>
+        {game.powerUpsEnabled && (p as any)._oneDartNext && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#f59e0b 18%,var(--bg-3))', border: '1px solid #f59e0b', color: '#f59e0b' }}>
+            🛡️ Blocked! You only get ONE card this visit.
+          </div>
+        )}
+        {game.powerUpsEnabled && (p as any)._crippledNext && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#ef4444 18%,var(--bg-3))', border: '1px solid #ef4444', color: '#ef4444' }}>
+            🦾 Crippled! You deal 50% damage this visit.
+          </div>
+        )}
+        {game.powerUpsEnabled && (p as any)._surgeNext && !(p as any)._surgeArmed && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,var(--accent) 18%,var(--bg-3))', border: '1px solid var(--accent)', color: 'var(--accent)' }}>
+            ⚡ Surge active! This visit scores double.
+          </div>
+        )}
+        {game.powerUpsEnabled && (p as any)._bullseyeFrenzy && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#a855f7 18%,var(--bg-3))', border: '1px solid #a855f7', color: '#c084fc' }}>
+            🐂 Bullseye Frenzy! Bulls deal double damage this visit.
+          </div>
+        )}
+        {game.powerUpsEnabled && (p as any)._hotStreak && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#f97316 18%,var(--bg-3))', border: '1px solid #f97316', color: '#fb9234' }}>
+            🔥 Hot Streak! Each card this visit earns +5 bonus per card before it.
+          </div>
+        )}
+        {game.powerUpsEnabled && (p as any)._shieldTurns > 0 && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#38bdf8 18%,var(--bg-3))', border: '1px solid #38bdf8', color: '#7dd3fc' }}>
+            🏰 Shield active! Protected from power-up attacks for {(p as any)._shieldTurns} more turn{(p as any)._shieldTurns === 1 ? '' : 's'}.
+          </div>
+        )}
         <div className="pc-slots">
-          {Array.from({ length: maxPlays }).map((_, i) => { const d = game.darts[i]; return <div key={i} className={`pc-slot${d ? ' filled' : ''}`}>{d ? d.label : '–'}</div>; })}
+          {Array.from({ length: maxPlays }).map((_, i) => {
+            const entry = slotEntries[i];
+            return <div key={i} className={`pc-slot${entry ? ' filled' : ''}`}>{entry ? entry.label : '–'}</div>;
+          })}
         </div>
         <div className="muted small">This visit: <b style={{ color: 'var(--text)' }}>{game.darts.reduce((a, d) => a + d.value, 0)}</b></div>
         {aliveOthers.length > 1 && (
@@ -191,6 +256,8 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
                   <BadgeAvatar playerId={pl.id} players={players} games={games} size={22} fontSize={10} color={pl.color} />
                   <span className="po-name">{pl.name}</span>
                   {defeated && <span style={{ fontSize: 14, color: '#ef4444', fontWeight: 900 }}>☠</span>}
+                  {!defeated && game.powerUpsEnabled && (pl as any)._shieldTurns > 0 && <span title="Shielded" style={{ fontSize: 11 }}>🏰</span>}
+                  {!defeated && game.powerUpsEnabled && (pl as any)._frozenNext && <span title="Frozen" style={{ fontSize: 11 }}>❄️</span>}
                 </div>
                 <span className="pill" style={{ fontSize: 10 }}>{pl.hp} HP</span>
               </div>
@@ -207,8 +274,8 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         playerName={p.name}
         isMyTurn={isMyTurn}
         isBattle={true}
-        canEndVisit={game.darts.length > 0}
-        canUndo={game.darts.length > 0}
+        canEndVisit={cs.used.length > 0}
+        canUndo={cs.used.length > 0}
         canPlayMore={totalCardsPlayed < maxPlays}
         onPlayCard={handlePlayCard}
         onUndo={onUndo}
@@ -216,6 +283,7 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
         showPlayedButton={playedCount > 0}
         playedCount={playedCount}
         onShowPlayed={() => setShowPlayed(true)}
+        visitNumber={game.turn + game.leg * 100}
       />
 
       {showPlayed && (
@@ -230,6 +298,17 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
           playedCard={selectedPlayedCard}
           closing={false}
           onClose={() => setSelectedPlayedCard(null)}
+        />
+      )}
+      {reroll && (
+        <RerollOverlay
+          plan={reroll}
+          settings={settings}
+          onDone={() => {
+            setReroll(null);
+            if (rerollResolve) rerollResolve(true);
+            setRerollResolve(null);
+          }}
         />
       )}
     </div>

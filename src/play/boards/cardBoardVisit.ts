@@ -35,17 +35,28 @@ export function enterVisit(params: EnterVisitParams): void {
   if (!game.darts.length) { toast('Play at least one damage card'); return; }
   const cur0 = game.players[game.turn] as any;
   const surgeActive = !!cur0._surgeNext && !cur0._surgeArmed;
+  const crippleActive = !!cur0._crippledNext;
+  const bullseyeFrenzyActive = !!cur0._bullseyeFrenzy;
   const hotStreakActive = !!cur0._hotStreak;
-  const rawScored = game.darts.reduce((a, d) => a + d.value, 0);
+  const rawScored = game.darts.reduce((a, d) => {
+    const isBull = d.value === 50 || d.value === 25;
+    const v = bullseyeFrenzyActive && isBull ? d.value * 2 : d.value;
+    return a + v;
+  }, 0);
   const surgeScored = surgeActive ? rawScored * 2 : rawScored;
+  const crippleScored = crippleActive ? Math.round(surgeScored * 0.5) : surgeScored;
   const hotStreakBonus = hotStreakActive
     ? game.darts.reduce((a, _d, i) => a + i * 5, 0)
     : 0;
-  const scored = surgeScored + hotStreakBonus;
+  const scored = crippleScored + hotStreakBonus;
   const newPlayers = game.players.map((pl, i) => i === game.turn ? { ...pl } : pl);
   const cur = newPlayers[game.turn] as any;
   if (cur._surgeArmed) delete cur._surgeArmed;
   else if (cur._surgeNext) delete cur._surgeNext;
+  if (cur._crippledNext) delete cur._crippledNext;
+  if (cur._fourthDart) delete cur._fourthDart;
+  if (cur._oneDartNext) delete cur._oneDartNext;
+  if (cur._bullseyeFrenzy) delete cur._bullseyeFrenzy;
   if (cur._hotStreak) delete cur._hotStreak;
   const resetBonus = { ...game, bonusSlots: 0 };
   const isBattle = game.mode === 'battle';
@@ -79,7 +90,11 @@ export function enterVisit(params: EnterVisitParams): void {
     let totalDamage = 0;
     let hp = victim.hp || 0;
     for (const d of game.darts as Dart[]) {
-      const dmg = computeBattleDartDamage(d.value, power, armor, settings);
+      const isBull = d.value === 50 || d.value === 25;
+      const dartBaseValue = bullseyeFrenzyActive && isBull ? d.value * 2 : d.value;
+      const dartValue = surgeActive ? dartBaseValue * 2 : dartBaseValue;
+      const rawDmg = computeBattleDartDamage(dartValue, power, armor, settings);
+      const dmg = crippleActive ? Math.round(rawDmg * 0.5) : rawDmg;
       totalDamage += dmg;
       hp = Math.max(0, hp - dmg);
     }

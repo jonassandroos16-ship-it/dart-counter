@@ -19,6 +19,7 @@ export interface CardHandProps {
   showPlayedButton?: boolean;
   playedCount?: number;
   onShowPlayed?: () => void;
+  visitNumber?: number;
 }
 
 export function CardHand({
@@ -35,6 +36,7 @@ export function CardHand({
   showPlayedButton = false,
   playedCount = 0,
   onShowPlayed,
+  visitNumber,
 }: CardHandProps) {
   const handDefs = cs.hand.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
   const usedDefs = cs.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
@@ -45,8 +47,15 @@ export function CardHand({
   const [showGraveyard, setShowGraveyard] = useState(false);
   const [animatingOut, setAnimatingOut] = useState<number | null>(null);
   const prevHandLen = useRef<number>(handDefs.length);
+  const prevVisitRef = useRef<number | undefined>(visitNumber);
 
   useEffect(() => {
+    if (visitNumber !== prevVisitRef.current) {
+      prevVisitRef.current = visitNumber;
+      prevHandLen.current = handDefs.length;
+      setAnimatingOut(null);
+      return;
+    }
     if (handDefs.length < prevHandLen.current) {
       const removedIdx = prevHandLen.current - 1;
       setAnimatingOut(removedIdx);
@@ -55,7 +64,7 @@ export function CardHand({
       return () => clearTimeout(t);
     }
     prevHandLen.current = handDefs.length;
-  }, [handDefs.length]);
+  }, [handDefs.length, visitNumber]);
 
   const closeCardPopup = () => {
     if (popupClosing) return;
