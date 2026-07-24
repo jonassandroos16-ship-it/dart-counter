@@ -121,7 +121,7 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
       attributes: { health: rp.hp, armor: rp.armor, power: rp.power, crit: rp.crit, pointsAvailable: 0 },
     } as Player;
   });
-  const battle = startBattle(level, pseudoPlayers, settings, scaledEnemyDb(round), 'dartlite');
+  const battle = startBattle(level, pseudoPlayers, settings, scaledEnemyDb(round), 'dartlite', run.cardMode);
   for (const rp of run.runPlayers) {
     if (rp.trinkets.includes('trk_overcharge')) {
       const idx = battle.players.findIndex(p => p.id === rp.id);
@@ -198,12 +198,5 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
     });
     return { ...run, runPlayers, pool: newPool, stats, playerStats, phase: 'choice', battle: null, pendingChoice: generateChoices({ ...run, runPlayers, pool: newPool, stats, playerStats }), choicePlayerIdx: 0, playerChoices: run.playerIds.map(() => null), lastUnlockedTrinket: unlocked, bossVictory: null, log };
   }
-  // Defeat: still accumulate per-player kills/damage from the battle so the
-  // game-over screen shows correct totals.
-  const playerStats = run.playerStats.map(ps => {
-    const bp = battle.players.find(p => p.id === ps.playerId);
-    if (!bp) return ps;
-    return { ...ps, kills: ps.kills + (bp.kills ?? 0), damageDealt: ps.damageDealt + (bp.damageDealt ?? 0) };
-  });
-  return { ...run, playerStats, phase: 'gameover', battle: null, pendingChoice: null, bossVictory: null };
+  return { ...run, phase: 'gameover', battle: null, pendingChoice: null, bossVictory: null };
 }

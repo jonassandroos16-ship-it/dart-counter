@@ -60,7 +60,7 @@ export function EnemyList({ state, enemyIcon, canTarget, onSelectTarget }: Enemy
               <div style={{ marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: 3 }}>
                 {e.shields.map((s, si) => (
                   <span key={si} className="pill" style={{ fontSize: 9, padding: '1px 6px', background: 'color-mix(in srgb,#fbbf24 18%,var(--bg-3))', color: '#fbbf24', borderColor: 'transparent' }}>
-                    🛡 {describeShield(s)}
+                    🛡 {s.flatHp != null ? `${s.flatHp}HP` : describeShield(s)}
                   </span>
                 ))}
               </div>

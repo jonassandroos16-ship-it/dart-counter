@@ -43,7 +43,7 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
   const chapter = getChapter(chapterId);
   const level = (chapter?.levels.find(l => l.level_id === levelId)) || getLevel(levelId)!;
   const [state, setState] = useState<CampaignBattleState>(() =>
-    startBattle(level, players, settings, undefined, chapterId),
+    startBattle(level, players, settings, undefined, chapterId, cardMode),
   );
   const [showInfo, setShowInfo] = useState(false);
   const [mult, setMult] = useState(1);
@@ -213,8 +213,6 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
             enemyIcon={enemyIcon}
             cardMode={cardMode}
             cardPlayState={cardMode ? (cardBattle.cardStates[thrower.id] ?? null) : null}
-            maxPlays={cardMode ? maxDartsPerVisit : undefined}
-            cardsPlayed={cardMode ? totalCardsPlayed : undefined}
           />
         )}
 

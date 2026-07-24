@@ -95,7 +95,7 @@ export function DartOverlay({ state, onContinue, onEndVisit, settings, enemyIcon
                       background: 'color-mix(in srgb,var(--accent) 22%,var(--bg))',
                       color: 'var(--accent)', fontSize: 11, fontWeight: 900, marginRight: 4, flex: '0 0 auto',
                     }} title={s.enemyName}>{icon}</span>
-                    {s.kind === 'shield_break' ? `Broke ${s.shieldTarget} — 0 dmg`
+                    {s.kind === 'shield_break' ? `Broke ${s.shieldTarget ?? 'shield'} — 0 dmg`
                       : s.kind === 'miss' ? 'Absorbed by shield — 0 dmg'
                       : s.dart.value <= 0 ? 'Miss · 0 dmg'
                       : `${s.dart.value} dmg`}
