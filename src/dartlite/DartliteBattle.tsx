@@ -319,7 +319,12 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             )}
 
             {state.phase === 'player' && thrower && (
-              <PlayerTurnInfo state={state} enemyIcon={enemyIcon} />
+              <PlayerTurnInfo
+              state={state}
+              enemyIcon={enemyIcon}
+              cardMode={cardMode}
+              cardPlayState={cardMode && thrower ? (cardBattle.cardStates[thrower.id] ?? null) : null}
+            />
             )}
 
             {state.phase === 'player' && thrower && !cardMode && (
