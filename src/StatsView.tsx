@@ -8,7 +8,7 @@ import { ALL_TRINKET_IDS, getTrinket } from './dartlite/trinkets';
 import { COOP_CLASSES, getClassXp } from './campaign/engine/classes';
 import { selectClassForPlayer, getCoopClass } from './campaign/engine';
 import type { CoopClassId } from './campaign/types';
-import { classStartHealth, classStartArmor, classStartPower, defaultClassAttributes } from './logic';
+import { classStartHealth, classStartArmor, classStartPower, classStartCrit, defaultClassAttributes } from './logic';
 import type { SetPlayers, Toast } from './players/BasicTab';
 
 // For each stat: which direction is "better"? higher = bigger is better, lower = smaller is better.
@@ -150,7 +150,7 @@ export function StatsView({ players, games, settings, setPlayers, toast }: { pla
             <>
               <div className="card" style={{ marginTop: 12 }}>
                 <h3 style={{ marginBottom: 8 }}>Score trend</h3>
-                {(() => { const ba = bucketAverages(playerGames.flatMap((g: any) => (g.players.find((p: any) => p.id === pid)?.visits || []).filter((v: any) => !v.bust).map((v: any) => ({ ...v, date: v.date || g.date }))), 'Monthly'); return <LineChart labels={ba.labels} values={ba.values} />; })()}
+                {(() => { const ba = bucketAverages(playerGames.flatMap((g: any) => (g.players.find((p: any) => p.id === pid)?.visits || []).filter((v: any) => !v.bust).map((v: any) => ({ ...v, date: v.date || g.date })))), 'Monthly'); return <LineChart labels={ba.labels} values={ba.values} />; })()}
               </div>
               <div className="card" style={{ marginTop: 12 }}>
                 <h3 style={{ marginBottom: 8 }}>Checkout % by remaining score</h3>
@@ -255,9 +255,11 @@ function ClassXpSection({ player, settings, setPlayers, toast }: { player: Playe
           const sH = classStartHealth(cls.id, settings);
           const sA = classStartArmor(cls.id, settings);
           const sP = classStartPower(cls.id, settings);
+          const sC = classStartCrit(cls.id, settings);
           const spent = Math.max(0, Math.round((ca.health - sH) / (cfg.healthPerPoint || 1)))
             + Math.max(0, Math.round((ca.armor - sA) / (cfg.armorPerPoint || 1)))
-            + Math.max(0, Math.round((ca.power - sP) / (cfg.powerPerPoint || 1)));
+            + Math.max(0, Math.round((ca.power - sP) / (cfg.powerPerPoint || 1)))
+            + Math.max(0, Math.round((ca.crit - sC) / (cfg.critPerPoint || 1)));
           return (
             <button key={cls.id} onClick={() => pickClass(cls.id as CoopClassId)} disabled={isCurrent}
               style={{
@@ -283,6 +285,7 @@ function ClassXpSection({ player, settings, setPlayers, toast }: { player: Playe
                 <span className="small"><b>❤️ {ca.health}</b> HP</span>
                 <span className="small"><b>🛡️ {ca.armor}%</b> armor</span>
                 <span className="small"><b>⚡ {ca.power}</b> power</span>
+                <span className="small"><b>🎯 {ca.crit}%</b> crit</span>
                 <span className="muted small">{spent} pts spent</span>
               </div>
             </button>
