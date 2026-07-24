@@ -166,7 +166,8 @@ export interface PlayerBuff {
     | 'bust_protect'
     | 'double_up'
     | 'extra_dart'
-    | 'reflect';
+    | 'reflect'
+    | 'crit';
   amount: number;
   turnsLeft: number;
   source: string; // player id who granted it
