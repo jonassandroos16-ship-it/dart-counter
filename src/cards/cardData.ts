@@ -1,26 +1,5 @@
 import type { CardDef } from './types';
 
-// ── Card Definitions ─────────────────────────────────────────────────
-//
-// Three card types:
-//   damage  (red)    — act as dart throws, add damage
-//   spell   (blue)   — temporary buffs to party / debuffs to enemies
-//   utility (blue)   — helpful non-combat effects (draw, reroll, etc.)
-//
-// Each card has a `mode` field: 'competitive', 'coop', or 'both'.
-// Cards with mode 'both' are available in both competitive and coop modes.
-// Each card has a `levelRequired` field — the player must reach that level
-// before the card appears in their deck builder. Level 1 cards are available
-// from the start.
-//
-// Cards can be upgraded up to 5 times (upgradeLevel 0-5). Each upgrade
-// increases damage or magnitude by 30%.
-//
-// Class themes:
-//   Warrior: raw power (high damage) + party buffs (shields, tankiness)
-//   Priest:  dark curses (enemy debuffs) + healing/buffing the party
-//   Rogue:   traps & bleed (enemy weakens over time) + debuffing (miss/skip)
-
 export const CARD_DEFS: CardDef[] = [
   // ── Starter shared attack cards (Level 1, class 'any') ────────────
   { id: 'dmg_s20', name: 'Single 20', icon: '🎯', type: 'damage', mode: 'both', class: 'any', rarity: 'common', desc: 'Deal 20 damage.', base: 20, mult: 1, levelRequired: 1 },
@@ -48,6 +27,15 @@ export const CARD_DEFS: CardDef[] = [
   { id: 'spell_enemy_debuff', name: 'Weaken', icon: '💀', type: 'spell', mode: 'both', class: 'rogue', rarity: 'common', desc: 'Enemies deal -30% damage for 2 turns.', effect: 'enemy_debuff', magnitude: 30, levelRequired: 1 },
   { id: 'spell_freeze', name: 'Frost Nova', icon: '❄️', type: 'spell', mode: 'both', class: 'rogue', rarity: 'common', desc: 'Freeze all enemies for 1 turn.', effect: 'freeze', levelRequired: 1 },
   { id: 'util_rogue_shadowstep', name: 'Shadowstep', icon: '🌑', type: 'utility', mode: 'both', class: 'rogue', rarity: 'common', desc: 'Draw 1 extra card and swap a used card back.', effect: 'shadowstep', magnitude: 1, levelRequired: 1 },
+  // ── Starter shared crit cards (Level 1, class 'any') ─────────────
+  { id: 'spell_focused_aim', name: 'Focused Aim', icon: '🎯', type: 'spell', mode: 'both', class: 'any', rarity: 'common', desc: 'Guarantees the next 2 cards that deal damage to critically hit.', effect: 'crit_guarantee', magnitude: 2, levelRequired: 1 },
+  { id: 'spell_focus_time', name: 'Focus Time', icon: '⏳', type: 'spell', mode: 'both', class: 'any', rarity: 'common', desc: 'Add 25% more crit for the next 3 rounds.', effect: 'crit_buff', magnitude: 25, levelRequired: 1 },
+  { id: 'spell_sharpshooter', name: 'Sharpshooter', icon: '🏹', type: 'spell', mode: 'both', class: 'any', rarity: 'common', desc: 'Gain +15% crit for 3 rounds. Stacks with other crit buffs.', effect: 'crit_buff', magnitude: 15, levelRequired: 1 },
+  { id: 'spell_deadly_precision', name: 'Deadly Precision', icon: '💀', type: 'spell', mode: 'both', class: 'any', rarity: 'common', desc: 'Guarantees the next 1 damage card to crit, and +10% crit for 3 rounds.', effect: 'crit_guarantee', magnitude: 1, levelRequired: 1 },
+  // ── Starter class-specific crit cards (Level 1) ──────────────────
+  { id: 'spell_priest_shield_starter', name: 'Holy Shield', icon: '🛡️', type: 'spell', mode: 'both', class: 'priest', rarity: 'common', desc: 'Party gains a shield absorbing 40 flat damage for 2 turns.', effect: 'party_shield_flat', magnitude: 40, levelRequired: 1 },
+  { id: 'spell_rogue_crit_starter', name: 'Deadly Focus', icon: '🗡️', type: 'spell', mode: 'both', class: 'rogue', rarity: 'common', desc: 'Gain +20% crit for 3 rounds. Rogue specialty.', effect: 'crit_buff', magnitude: 20, levelRequired: 1 },
+  { id: 'spell_warrior_crit_mult_starter', name: 'Brutal Strikes', icon: '⚔️', type: 'spell', mode: 'both', class: 'warrior', rarity: 'common', desc: 'Critical hits deal 3x damage instead of 2x for 3 rounds.', effect: 'crit_multiplier', magnitude: 3, levelRequired: 1 },
   // ── Level 2 — Improved damage cards ───────────────────────────────
   { id: 'dmg_t20', name: 'Triple 20', icon: '🎯', type: 'damage', mode: 'both', class: 'any', rarity: 'rare', desc: 'Deal 60 damage.', base: 20, mult: 3, levelRequired: 2 },
   { id: 'dmg_t19', name: 'Triple 19', icon: '🎯', type: 'damage', mode: 'both', class: 'any', rarity: 'rare', desc: 'Deal 57 damage.', base: 19, mult: 3, levelRequired: 2 },

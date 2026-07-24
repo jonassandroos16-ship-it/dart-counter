@@ -154,7 +154,17 @@ export function addDart(
     return { ...state, players, darts: [...state.darts, dart], phantomDarts, visitEnemiesSnapshot, powerUpCharge };
   }
   const power = effectivePower(thrower);
-  // Surge: double damage on next visit. Hot streak: cumulative bonus per dart.
+  // Crit: chance to double flat damage (before armor mitigation).
+  // Sources: player's base crit attribute + crit buffs (percentage bonus).
+  // crit_guarantee buffs force the next N damage cards to crit.
+  // crit_multiplier buffs increase the crit multiplier (e.g. 3x instead of 2x).
+  const critBuff = thrower.buffs.find(b => b.kind === 'crit');
+  const critBonus = critBuff ? critBuff.amount : 0;
+  const baseCritChance = thrower.crit + critBonus;
+  const guaranteeBuff = thrower.buffs.find(b => b.kind === 'crit_guarantee');
+  const isGuaranteed = !!guaranteeBuff && guaranteeBuff.amount > 0;
+  const critMultBuff = thrower.buffs.find(b => b.kind === 'crit_multiplier');
+  const critMult = critMultBuff ? critMultBuff.amount : 2;
   const surgeBuff = thrower.buffs.find(b => b.kind === 'surge');
   const surgeMult = surgeBuff ? surgeBuff.amount : 1;
   const hotStreakBuff = thrower.buffs.find(b => b.kind === 'hot_streak');
@@ -173,6 +183,7 @@ export function addDart(
   const enemies = state.enemies.map(e => ({ ...e, shields: [...e.shields] }));
   const t = enemies[targetIdx];
   let step: ResolvedDart;
+  let playersAfterHit = players;
   if (t.shields.length > 0) {
     const shieldIdx = 0;
     const shield = t.shields[shieldIdx];
@@ -183,20 +194,28 @@ export function addDart(
       step = { dart, damage: 0, kind: 'miss', enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0 };
     }
   } else {
-    const dmg = computePlayerDartDamage(dart, adjustedPower, t.armor);
+    const isCrit = isGuaranteed || (Math.random() * 100) < baseCritChance;
+    const flatDmg = isCrit ? dart.value * critMult : dart.value;
+    const dmg = computePlayerDartDamage({ ...dart, value: flatDmg }, adjustedPower, t.armor);
     const vulnerable = t.vulnerableTurns > 0;
     const surgeDmg = Math.round(dmg * surgeMult);
     const finalDmg = vulnerable ? Math.round(surgeDmg * 1.5) : surgeDmg;
     t.hp = Math.max(0, t.hp - finalDmg);
     const defeated = t.hp <= 0;
     if (defeated) t.defeated = true;
-    step = { dart, damage: finalDmg, kind: defeated ? 'defeated' : 'damage', enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable };
+    // Consume one guaranteed-crit charge on a damage hit.
+    if (isGuaranteed) {
+      playersAfterHit = players.map((p, i) => i === throwerIdx
+        ? { ...p, buffs: p.buffs.map(b => b.id === guaranteeBuff!.id ? { ...b, amount: b.amount - 1 } : b).filter(b => !(b.kind === 'crit_guarantee' && b.amount <= 0)) }
+        : p);
+    }
+    step = { dart, damage: finalDmg, kind: defeated ? 'defeated' : 'damage', enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable, crit: isCrit, critMult: isCrit ? critMult : undefined };
   }
   const anyAlive = enemies.some(e => !e.defeated);
   const outcome: CampaignBattleState['outcome'] = !anyAlive ? 'victory' : state.outcome;
   const dartDamage = step.kind === 'damage' || step.kind === 'defeated' ? step.damage : 0;
   const dartKill = step.kind === 'defeated' ? 1 : 0;
-  const playersWithStats = players.map((p, i) => i === throwerIdx
+  const playersWithStats = playersAfterHit.map((p, i) => i === throwerIdx
     ? { ...p, kills: (p.kills ?? 0) + dartKill, damageDealt: (p.damageDealt ?? 0) + dartDamage }
     : p);
   return {

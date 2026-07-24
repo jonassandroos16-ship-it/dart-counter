@@ -9,8 +9,8 @@ import type { Player } from '../types';
 // are gained on level-up (based on class) and as dartlite rewards. Each
 // card can be upgraded once.
 
-// Starter deck: 11 cards per player.
-//   4 class-specific (damage/spell mix)
+// Starter deck: 12 cards per player.
+//   5 class-specific (damage/spell mix)
 //   3 shared attack (class 'any' damage)
 //   3 shared utility (class 'any')
 //   1 class utility
@@ -20,15 +20,15 @@ const STARTER_SHARED_UTILITY = ['util_redraw', 'util_recycle', 'util_focus'];
 
 const STARTER_CLASS_CARDS: Record<string, { specific: string[]; utility: string }> = {
   warrior: {
-    specific: ['dmg_warrior_slam', 'dmg_warrior_cleave', 'spell_surge', 'spell_hot_streak'],
+    specific: ['dmg_warrior_slam', 'dmg_warrior_cleave', 'spell_surge', 'spell_hot_streak', 'spell_warrior_crit_mult_starter'],
     utility: 'util_warrior_rage',
   },
   priest: {
-    specific: ['dmg_priest_smite', 'dmg_priest_judgment', 'spell_heal', 'spell_accuracy_buff'],
+    specific: ['dmg_priest_smite', 'dmg_priest_judgment', 'spell_heal', 'spell_accuracy_buff', 'spell_priest_shield_starter'],
     utility: 'util_priest_blessing',
   },
   rogue: {
-    specific: ['dmg_rogue_backstab', 'dmg_rogue_poison', 'spell_enemy_debuff', 'spell_freeze'],
+    specific: ['dmg_rogue_backstab', 'dmg_rogue_poison', 'spell_enemy_debuff', 'spell_freeze', 'spell_rogue_crit_starter'],
     utility: 'util_rogue_shadowstep',
   },
 };
