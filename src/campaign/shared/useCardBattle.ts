@@ -49,7 +49,7 @@ export function useCardBattle(params: UseCardBattleParams): CardBattleApi {
   const thrower = battle?.players?.[battle.playerTurnIdx];
   const throwerId = thrower?.id;
 
-  const maxDartsPerVisit = cardMode ? MAX_PLAYS_PER_TURN : 3;
+  const maxDartsPerVisit = cardMode ? MAX_PLAYS_PER_TURN + bonusSlots : 3;
 
   // Initialize card play state for each player at battle start / visit transitions
   useEffect(() => {
@@ -66,6 +66,14 @@ export function useCardBattle(params: UseCardBattleParams): CardBattleApi {
     setNextTurnDraws({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cardMode, battle?.visitNumber]);
+
+  // Reset bonus slots at the start of each player's turn so they don't leak
+  // from one player to the next within the same visit.
+  useEffect(() => {
+    if (!cardMode || !battle) return;
+    setBonusSlots(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardMode, battle?.playerTurnIdx]);
 
   // Start of each player's turn: draw cards if none drawn yet this turn
   useEffect(() => {
