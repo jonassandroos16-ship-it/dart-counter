@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { CardDef } from './types';
-import { getEffectMeta, effectIcon, effectColor } from './effectMeta';
+import { getEffectMeta } from './effectMeta';
 
 interface EffectPillProps {
   card: CardDef;
