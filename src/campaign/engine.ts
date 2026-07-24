@@ -59,6 +59,7 @@ export {
   dartMatchesShield,
   matchesExactTarget,
   describeShield,
+  flatHpForShield,
 } from './engine/shields';
 
 export {
