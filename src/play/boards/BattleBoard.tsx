@@ -245,7 +245,7 @@ export function BattleBoard({ game, setGame, settings, players, games, toast, mu
                 <div className="row" style={{ gap: 6 }}>
                   <BadgeAvatar playerId={pl.id} players={players} games={games} size={22} fontSize={10} color={pl.color} />
                   <span className="po-name">{pl.name}</span>
-                  {defeated && <span className="pill" style={{ fontSize: 9, background: '#ef4444', color: '#fff' }}>DEFEATED</span>}
+                  {defeated && <span style={{ fontSize: 14, color: '#ef4444', fontWeight: 900 }}>☠</span>}
                   {!defeated && game.powerUpsEnabled && (pl as any)._shieldTurns > 0 && <span title="Shielded" style={{ fontSize: 11 }}>🏰</span>}
                 </div>
                 <span className="pill" style={{ fontSize: 10 }}>{pl.hp} HP</span>
