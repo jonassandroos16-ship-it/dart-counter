@@ -133,14 +133,17 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const [pendingVictory, setPendingVictory] = useState(false);
+  const [pendingDefeat, setPendingDefeat] = useState(false);
+
   useEffect(() => {
     if (!state) return;
     if (state.outcome === 'victory') {
       Sound.play('win', {}, settings);
-      onBattleEnd(true);
+      setPendingVictory(true);
     } else if (state.outcome === 'defeat') {
       Sound.play('kill', {}, settings);
-      onBattleEnd(false);
+      setPendingDefeat(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state?.outcome]);
@@ -202,6 +205,14 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   };
 
   const onEnter = () => {
+    if (pendingVictory) {
+      onBattleEnd(true);
+      return;
+    }
+    if (pendingDefeat) {
+      onBattleEnd(false);
+      return;
+    }
     if (cardMode ? totalCardsPlayed === 0 : !state.darts.length) return;
     if (cardMode) {
       const thrower = state.players[state.playerTurnIdx];
@@ -249,6 +260,10 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   };
 
   const onContinue = () => {
+    if (pendingDefeat) {
+      onBattleEnd(false);
+      return;
+    }
     if (state.pendingEnemyAttacks.length) {
       setState(prev => prev ? applyNextEnemyAttack(prev) : prev);
       Sound.play('impact', {}, settings);
@@ -260,12 +275,13 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   };
 
   const partyHpPct = Math.max(0, Math.min(100, (state.partyHp / state.partyMaxHp) * 100));
-  const playerVisitDone = state.phase === 'player' && (cardMode ? totalCardsPlayed >= maxDartsPerVisit : state.darts.length >= 3) && state.outcome === 'ongoing';
+  const playerVisitDone = state.phase === 'player' && (cardMode ? totalCardsPlayed >= maxDartsPerVisit : state.darts.length >= 3) && (state.outcome === 'ongoing' || state.outcome === 'victory');
+  const playerVictoryPending = state.phase === 'player' && state.outcome === 'victory' && !playerVisitDone;
   const showingFrozen = state.phase === 'enemy'
     && state.pendingEnemyAttacks.length === 0
     && state.appliedEnemyAttacks.length === 0
     && state.frozenEnemiesThisRound.length > 0;
-  const showingOverlay = playerVisitDone || state.pendingEnemyAttacks.length > 0 || showingFrozen;
+  const showingOverlay = playerVisitDone || playerVictoryPending || state.pendingEnemyAttacks.length > 0 || showingFrozen || pendingDefeat;
 
   const enemyNumberMap: Record<string, number> = {};
   let enemyCounter = 0;
@@ -560,7 +576,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
 
           {showingFrozen && <FrozenOverlay state={state} onContinue={onContinue} />}
           {showingOverlay && !showingFrozen && (
-            <DartOverlay state={state} onContinue={onContinue} onEndVisit={onEnter} settings={settings} enemyIcon={enemyIcon} playerVisitDone={playerVisitDone} playedCards={cardMode && thrower ? (cardStates[thrower.id]?.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[] ?? []) : undefined} />
+            <DartOverlay state={state} onContinue={onContinue} onEndVisit={onEnter} settings={settings} enemyIcon={enemyIcon} playerVisitDone={playerVisitDone || playerVictoryPending} playedCards={cardMode && thrower ? (cardStates[thrower.id]?.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[] ?? []) : undefined} />
           )}
 
           {showTrinketUnlock && run.lastUnlockedTrinket && (() => {
