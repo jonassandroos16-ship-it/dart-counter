@@ -86,7 +86,7 @@ export function DartOverlay({ state, onContinue, onEndVisit, settings, enemyIcon
                           : s.kind === 'miss' ? 'Absorbed by shield — 0 dmg'
                           : s.dart.value <= 0 ? 'Miss · 0 dmg'
                           : `${s.dart.value} dmg`}
-                        {s.kind === 'defeated' ? ' · DEFEATED' : ''}
+                        {s.kind === 'defeated' ? ' · ☠' : ''}
                       </span>
                       {s.damage > 0 && s.attackerPower != null && s.targetArmor != null && (
                         <span className="muted" style={{ fontSize: 9, fontWeight: 600, lineHeight: 1.3 }}>
@@ -132,7 +132,7 @@ export function DartOverlay({ state, onContinue, onEndVisit, settings, enemyIcon
                       <span className="bo-name" style={{ fontSize: 13 }}>{e.name}</span>
                     </span>
                     <span className="muted small">
-                      {e.defeated ? <span style={{ color: '#ef4444', fontWeight: 800 }}>DEFEATED</span> : `${e.finalHp} / ${e.maxHp} HP`}
+                      {e.defeated ? <span style={{ color: '#ef4444', fontWeight: 900, fontSize: 16 }}>☠</span> : `${e.finalHp} / ${e.maxHp} HP`}
                     </span>
                   </div>
                   <div className="bo-hp-tracks">
@@ -183,7 +183,7 @@ export function DartOverlay({ state, onContinue, onEndVisit, settings, enemyIcon
           <div className="bo-hp-track">
             <div className="bo-hp-fill" style={{ width: `${hpPct}%`, background: '#ef4444', color: '#ef4444' }} />
           </div>
-          {a && a.partyHpAfter <= 0 && <div className="bo-defeated">DEFEATED</div>}
+          {a && a.partyHpAfter <= 0 && <div className="bo-defeated">☠</div>}
         </div>
         <div className="bo-steps">
           {allSteps.map((s, i) => {

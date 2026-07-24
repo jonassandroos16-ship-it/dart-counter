@@ -127,7 +127,7 @@ export function BattleVisitOverlay({ attacker, target, darts, settings, surgeAct
             <div className="bo-hp-ghost" style={{ left: `${startPct}%` }} />
           </div>
           {defeated && done ? (
-            <div className="bo-defeated">DEFEATED</div>
+            <div className="bo-defeated">☠</div>
           ) : null}
         </div>
 
