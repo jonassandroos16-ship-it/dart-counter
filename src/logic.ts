@@ -224,37 +224,45 @@ export function reconcilePlayerPoints(player: Player, settings: Settings): Playe
     const cStartH = classStartHealth(cls.id, settings);
     const cStartA = classStartArmor(cls.id, settings);
     const cStartP = classStartPower(cls.id, settings);
+    const cStartC = classStartCrit(cls.id, settings);
     const cHMax = classHealthMax(cls.id, settings);
     const cAMax = classArmorMax(cls.id, settings);
     const cPwMax = classPowerMax(cls.id, settings);
+    const cCMax = classCritMax(cls.id, settings);
     const clsLevel = cls.id === classId ? level : levelFromXP(p.coopProgress?.classXp?.[cls.id] ?? 0, settings).level;
     const clsTotal = totalAttributePointsForLevel(clsLevel, settings) + devBonus;
     const normH = Number.isFinite(ca.health) ? ca.health : cStartH;
     const normA = Number.isFinite(ca.armor) ? ca.armor : cStartA;
     const normP = Number.isFinite(ca.power) ? ca.power : cStartP;
+    const normC = Number.isFinite(ca.crit) ? ca.crit : cStartC;
     let hSpent = safeSpent(normH, cStartH, cfg.healthPerPoint);
     let aSpent = safeSpent(normA, cStartA, cfg.armorPerPoint);
     let pSpent = safeSpent(normP, cStartP, cfg.powerPerPoint);
-    let spent = hSpent + aSpent + pSpent;
-    let nH = normH, nA = normA, nP = normP;
+    let cSpent = safeSpent(normC, cStartC, cfg.critPerPoint);
+    let spent = hSpent + aSpent + pSpent + cSpent;
+    let nH = normH, nA = normA, nP = normP, nC = normC;
     if (spent > clsTotal) {
       const overflow = spent - clsTotal;
-      const cutP = Math.min(pSpent, overflow);
+      const cutC = Math.min(cSpent, overflow);
+      if (cutC > 0) { cSpent -= cutC; nC = cStartC + cSpent * cfg.critPerPoint; }
+      const remC = overflow - cutC;
+      const cutP = Math.min(pSpent, remC);
       if (cutP > 0) { pSpent -= cutP; nP = cStartP + pSpent * cfg.powerPerPoint; }
-      const remP = overflow - cutP;
+      const remP = remC - cutP;
       const cutA = Math.min(aSpent, remP);
       if (cutA > 0) { aSpent -= cutA; nA = cStartA + aSpent * cfg.armorPerPoint; }
       const remA = remP - cutA;
       const cutH = Math.min(hSpent, remA);
       if (cutH > 0) { hSpent -= cutH; nH = cStartH + hSpent * cfg.healthPerPoint; }
-      spent = hSpent + aSpent + pSpent;
+      spent = hSpent + aSpent + pSpent + cSpent;
     }
     const avail = Math.max(0, clsTotal - spent);
     nH = Math.min(cHMax, nH);
     nA = Math.min(cAMax, nA);
     nP = Math.min(cPwMax, nP);
-    if (ca.health !== nH || ca.armor !== nA || ca.power !== nP || ca.pointsAvailable !== avail) {
-      classAttrs[cls.id] = { health: nH, armor: nA, power: nP, crit: ca.crit ?? classStartCrit(cls.id, settings), pointsAvailable: avail };
+    nC = Math.min(cCMax, nC);
+    if (ca.health !== nH || ca.armor !== nA || ca.power !== nP || ca.crit !== nC || ca.pointsAvailable !== avail) {
+      classAttrs[cls.id] = { health: nH, armor: nA, power: nP, crit: nC, pointsAvailable: avail };
       classChanged = true;
     }
   }
