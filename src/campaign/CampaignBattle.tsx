@@ -1,12 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { CampaignBattleState, CampaignProgress, CoopPowerUpId } from './types';
-import type { CardPlayState, PlayerCard } from '../cards/types';
-import { initCardPlayState, endTurn, getPlayerCards, MAX_PLAYS_PER_TURN, resolveCardDef, playCardFromHand } from '../cards/deck';
-import { applyCardEffect } from '../cards/cardEffects';
-import { startTurnWithExtraDraws } from '../cards/turnLogic';
-import { CardHand } from '../cards/CardHand';
 import {
-  addDart, undoDart, resolvePlayerVisit,
   prepareEnemyTurn, applyNextEnemyAttack, setTarget, startBattle, getLevel,
   describeShield, getCoopPowerUp, canActivateCoopPowerUp, activateCoopPowerUp,
   levelRewardPowerUp, getCoopClass, effectivePower,
@@ -14,18 +8,23 @@ import {
 import { getChapter } from './campaignLevels';
 import type { Player, Settings } from '../types';
 import type { CardDef } from '../cards/types';
+import { resolveCardDef } from '../cards/deck';
+import { CardHand } from '../cards/CardHand';
+import { initCardPlayState } from '../cards/deck';
 
 import { Sound } from '../sound';
 import type { MusicEngine } from '../music';
-import { initials } from '../store';
 import { bumpCoopStat } from './coopStats';
 import { CoopChargedPlayerIcon } from './CoopChargedPlayerIcon';
 import { DartOverlay } from './DartOverlay';
 import { FrozenOverlay } from './FrozenOverlay';
 import { Modal } from '../Popups';
 import { getEnemyDef } from './engine/enemies';
-import { PartyBuffBadges } from '../cards/BuffBadges';
-import { EnemyDebuffBadges } from '../cards/DebuffBadges';
+import { EnemyList } from './shared/EnemyList';
+import { PlayerChips } from './shared/PlayerChips';
+import { PartyHpBar } from './shared/PartyHpBar';
+import { DartKeypad } from './shared/DartKeypad';
+import { useCardBattle } from './shared/useCardBattle';
 
 
 interface Props {
@@ -47,41 +46,18 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
     startBattle(level, players, settings, undefined, chapterId),
   );
   const [showInfo, setShowInfo] = useState(false);
+  const [mult, setMult] = useState(1);
 
-  // ── Card mode state ──────────────────────────────────────────────────
-  const [cardStates, setCardStates] = useState<Record<string, CardPlayState>>({});
-  const [bonusSlots, setBonusSlots] = useState(0);
-  const [nextTurnDraws, setNextTurnDraws] = useState<Record<string, number>>({});
-  const [nextTurnSlots, setNextTurnSlots] = useState<Record<string, number>>({});
   const cardMode = settings.gameMode === 'cards';
 
-  useEffect(() => {
-    if (!cardMode) return;
-    const cs: Record<string, CardPlayState> = {};
-    for (const cp of state.players) {
-      const playerData = players.find(p => p.id === cp.id);
-      const collection: PlayerCard[] = playerData ? getPlayerCards(playerData) : [];
-      cs[cp.id] = initCardPlayState(collection);
-    }
-    setCardStates(cs);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardMode]);
-
-  useEffect(() => {
-    if (!cardMode || state.phase !== 'player') return;
-    const thrower = state.players[state.playerTurnIdx];
-    if (!thrower) return;
-    const cs = cardStates[thrower.id];
-    if (!cs) return;
-    if (cs.hand.length === 0 && cs.used.length === 0) {
-      const extraDraw = nextTurnDraws[thrower.id] ?? 0;
-      const extraSlot = nextTurnSlots[thrower.id] ?? 0;
-      const next = startTurnWithExtraDraws(cs, extraDraw, extraSlot, (n) => setBonusSlots(b => b + n));
-      setCardStates(prev => ({ ...prev, [thrower.id]: next }));
-      setNextTurnDraws(prev => { const c = { ...prev }; delete c[thrower.id]; return c; });
-      setNextTurnSlots(prev => { const c = { ...prev }; delete c[thrower.id]; return c; });
-    }
-  }, [state.phase, state.playerTurnIdx, cardMode, cardStates, nextTurnDraws, nextTurnSlots]);
+  const cardBattle = useCardBattle({
+    battle: state,
+    cardMode,
+    runPlayers: state.players,
+    players,
+    settings,
+    onStateChange: setState,
+  });
 
   const enemyNumberMap: Record<string, number> = {};
   let enemyCounter = 0;
@@ -103,7 +79,6 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
     return () => { music.stop(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [mult, setMult] = useState(1);
 
   useEffect(() => {
     if (state.outcome === 'victory') {
@@ -139,99 +114,11 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
   const validTarget = target && !target.defeated ? target : aliveEnemies[0];
   const thrower = state.players[state.playerTurnIdx];
 
+  const { maxDartsPerVisit, totalCardsPlayed, playCard, onUndo, onEnter } = cardBattle;
+
   const onAdd = (base: number, m: number, labelOverride?: string, isBull?: boolean) => {
-    setState(prev => addDart(prev, base, m, labelOverride, isBull, settings, maxDartsPerVisit));
-    Sound.play('dart', { score: base * m }, settings);
-    if (base > 0) Sound.play('impact', {}, settings);
+    cardBattle.onAdd(base, m, labelOverride, isBull);
     setMult(1);
-  };
-
-  const playCampaignCard = (handIdx: number) => {
-    const thrower = state.players[state.playerTurnIdx];
-    if (!thrower) return;
-    const cs = cardStates[thrower.id];
-    if (!cs) return;
-    const handDefs = cs.hand.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
-    const card = handDefs[handIdx];
-    if (!card) return;
-    const maxPlays = MAX_PLAYS_PER_TURN + bonusSlots;
-    if (cs.used.length >= maxPlays) return;
-
-    if (card.type !== 'damage') {
-      const updated = applyCardEffect({
-        card, handIdx, state: cs, battleState: state, throwerId: thrower.id,
-        bonusSlots, setBonusSlots, setNextTurnSlots, setNextTurnDraws, setBattleState: setState as any,
-      });
-      Sound.play('powerup', {}, settings);
-      setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
-      return;
-    }
-
-    const updated = playCardFromHand(cs, handIdx);
-    if (!updated) return;
-    setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
-    const base = card.base ?? 0;
-    const cardMult = card.mult ?? 1;
-    const isBull = base === 50;
-    onAdd(base, isBull ? 2 : (base === 25 && cardMult === 2 ? 2 : cardMult), card.name, isBull);
-  };
-
-  const onUndo = () => {
-    if (cardMode) {
-      const thrower = state.players[state.playerTurnIdx];
-      if (thrower) {
-        const cs = cardStates[thrower.id];
-        if (cs && cs.used.length > 0) {
-          const lastUsed = cs.used[cs.used.length - 1];
-          const lastDef = resolveCardDef(lastUsed);
-          if (lastDef && lastDef.type !== 'damage') {
-            const updated: CardPlayState = {
-              deck: cs.deck,
-              hand: [...cs.hand, lastUsed],
-              used: cs.used.slice(0, -1),
-              graveyard: cs.graveyard,
-            };
-            setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
-            return;
-          }
-          if (state.darts.length > 0) {
-            const lastDart = state.darts[state.darts.length - 1];
-            const usedIdx = [...cs.used].reverse().findIndex(pc => {
-              const def = resolveCardDef(pc);
-              return def?.name === lastDart.label;
-            });
-            if (usedIdx !== -1) {
-              const realIdx = cs.used.length - 1 - usedIdx;
-              const card = cs.used[realIdx];
-              const updated: CardPlayState = {
-                deck: cs.deck,
-                hand: [...cs.hand, card],
-                used: cs.used.filter((_, i) => i !== realIdx),
-                graveyard: cs.graveyard,
-              };
-              setCardStates(prev => ({ ...prev, [thrower.id]: updated }));
-            }
-          }
-        }
-      }
-    }
-    setState(prev => undoDart(prev, settings));
-  };
-
-  const onEnter = () => {
-    if (cardMode) {
-      const thrower = state.players[state.playerTurnIdx];
-      if (!thrower) return;
-      const cs = cardStates[thrower.id];
-      if (!cs || cs.used.length === 0) return;
-      const endedState = endTurn(cs);
-      setCardStates(prev => ({ ...prev, [thrower.id]: endedState }));
-      setBonusSlots(0);
-      setState(prev => resolvePlayerVisit(prev, true));
-      return;
-    }
-    if (!state.darts.length) return;
-    setState(prev => resolvePlayerVisit(prev));
   };
 
   const onContinue = () => {
@@ -258,9 +145,6 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
     }
   };
 
-  const partyHpPct = Math.max(0, Math.min(100, (state.partyHp / state.partyMaxHp) * 100));
-  const maxDartsPerVisit = cardMode ? MAX_PLAYS_PER_TURN + bonusSlots : 3;
-  const totalCardsPlayed = cardMode && thrower ? (cardStates[thrower.id]?.used.length ?? 0) : 0;
   const playerVisitDone = state.phase === 'player'
     && (cardMode ? totalCardsPlayed >= maxDartsPerVisit : state.darts.length >= 3)
     && state.outcome === 'ongoing';
@@ -269,6 +153,18 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
     && state.appliedEnemyAttacks.length === 0
     && state.frozenEnemiesThisRound.length > 0;
   const showingOverlay = playerVisitDone || state.pendingEnemyAttacks.length > 0 || showingFrozen;
+
+  // Player chip extras: class icon + power-up charge badge
+  const playerChipExtras: Record<string, { icon?: string; iconTitle?: string; badge?: { label: string; title: string } }> = {};
+  for (const p of state.players) {
+    const srcPlayer = players.find(sp => sp.id === p.id);
+    const classDef = getCoopClass(srcPlayer?.coopProgress?.classId);
+    playerChipExtras[p.id] = {
+      icon: classDef?.icon,
+      iconTitle: classDef ? `${classDef.name}: ${classDef.desc}` : undefined,
+      badge: { label: `${Math.round(p.powerUpCharge)}%`, title: `${p.name}'s power-up charge` },
+    };
+  }
 
   return (
     <div className="view-noscroll coop-battle" style={{ position: 'relative', background: chapter?.theme.background || undefined, borderRadius: 14, overflow: 'hidden' }}>
@@ -307,55 +203,9 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
             <span className="muted small">VISIT {state.visitNumber} · {state.phase === 'player' ? 'YOUR TURN' : 'ENEMY TURN'}</span>
           </div>
         </div>
-        <div className="row between" style={{ width: '100%', margin: '4px 0' }}>
-          <span className="pill" style={{ background: 'color-mix(in srgb,#ef4444 18%,var(--bg-3))', color: '#fca5a5', borderColor: 'transparent' }}>
-            ❤️ Party {state.partyHp}/{state.partyMaxHp}
-          </span>
-          <span className="muted small">{aliveEnemies.length} enemy{aliveEnemies.length === 1 ? '' : 's'} alive</span>
-        </div>
-        <div style={{ width: '100%', height: 8, borderRadius: 4, background: 'var(--bg-3)', overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${partyHpPct}%`, background: '#ef4444', transition: 'width .4s' }} />
-        </div>
+        <PartyHpBar state={state} />
 
-        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-          {state.players.map((p, i) => {
-            const isThrower = state.phase === 'player' && i === state.playerTurnIdx;
-            const srcPlayer = players.find(sp => sp.id === p.id);
-            const classDef = getCoopClass(srcPlayer?.coopProgress?.classId);
-            return (
-              <div key={p.id} style={{
-                display: 'flex', alignItems: 'center', gap: 4,
-                padding: '4px 8px', borderRadius: 999,
-                background: isThrower ? p.color : 'var(--bg-3)',
-                color: isThrower ? '#0b0e13' : 'var(--text)',
-                border: isThrower ? '2px solid var(--accent)' : '1px solid var(--border)',
-                fontWeight: isThrower ? 800 : 600,
-                fontSize: 12,
-              }}>
-                <span className="avatar" style={{ width: 18, height: 18, fontSize: 9, background: isThrower ? 'rgba(0,0,0,.25)' : p.color }}>{initials(p.name)}</span>
-                {p.name}
-                {classDef && (
-                  <span title={`${classDef.name}: ${classDef.desc}`} style={{ fontSize: 11, marginLeft: 2 }}>
-                    {classDef.icon}
-                  </span>
-                )}
-                <span title={`${p.name}'s power-up charge`} style={{
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  minWidth: 22, padding: '1px 5px', borderRadius: 8, fontSize: 9, fontWeight: 800,
-                  background: isThrower ? 'rgba(0,0,0,.2)' : 'var(--bg-2)',
-                  color: isThrower ? '#0b0e13' : 'var(--muted)',
-                  border: '1px solid var(--border)',
-                  marginLeft: 2,
-                }}>
-                  {Math.round(p.powerUpCharge)}%
-                </span>
-                {p.buffs.length > 0 && (
-                  <PartyBuffBadges buffs={p.buffs} />
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <PlayerChips state={state} extras={playerChipExtras} />
 
         {state.passiveBonus && (state.passiveBonus.power > 0 || state.passiveBonus.health > 0 || state.passiveBonus.armor > 0) && (
           <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -432,53 +282,12 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
         )}
       </div>
 
-      <div className="play-others">
-        {state.enemies.map((e, i) => {
-          const hpPct = Math.max(0, Math.min(100, (e.hp / e.maxHp) * 100));
-          const isTarget = i === state.targetIdx && !e.defeated;
-          const canTarget = state.phase === 'player' && !e.defeated && (cardMode ? totalCardsPlayed < maxDartsPerVisit : state.darts.length < 3) && state.outcome === 'ongoing';
-          const frozen = e.frozenTurns > 0;
-          const vulnerable = e.vulnerableTurns > 0;
-          const distracted = e.distractedTurns > 0;
-          const effAcc = Math.max(0, e.accuracy - (distracted ? e.distractAmount : 0));
-          return (
-            <div
-              key={e.id}
-              className="play-other"
-              onClick={() => canTarget && setState(prev => setTarget(prev, e.id))}
-              style={{
-                cursor: canTarget ? 'pointer' : 'default',
-                opacity: e.defeated ? 0.4 : 1,
-                borderColor: isTarget ? 'var(--accent)' : e.defeated ? 'var(--border)' : frozen ? 'color-mix(in srgb,#60a5fa 60%,var(--border))' : distracted ? 'color-mix(in srgb,#a78bfa 60%,var(--border))' : vulnerable ? 'color-mix(in srgb,#fbbf24 60%,var(--border))' : 'var(--border)',
-                boxShadow: isTarget ? '0 0 0 2px var(--accent)' : 'none',
-                background: e.defeated ? 'var(--bg-3)' : frozen ? 'color-mix(in srgb,#60a5fa 12%,var(--bg-2))' : distracted ? 'color-mix(in srgb,#a78bfa 12%,var(--bg-2))' : vulnerable ? 'color-mix(in srgb,#fbbf24 12%,var(--bg-2))' : 'var(--bg-2)',
-              }}
-            >
-              <div className="row between">
-                <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-                  <span className="po-name">{e.name}</span>
-                  {e.defeated && <span style={{ fontSize: 14, color: '#ef4444', fontWeight: 900 }}>☠</span>}
-                  {!e.defeated && <EnemyDebuffBadges enemy={e} />}
-                </div>
-                <span className="pill" style={{ fontSize: 10 }}>{e.hp} HP</span>
-              </div>
-              <div style={{ marginTop: 4, height: 6, borderRadius: 3, background: 'var(--bg-3)', overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${hpPct}%`, background: e.defeated ? 'var(--muted)' : '#ef4444', transition: 'width .4s' }} />
-              </div>
-              <div className="po-sub">🛡 {e.armor}% armor · 🎯 {Math.round(effAcc * 100)}% acc{distracted ? ' (debuffed)' : ''}{e.shields.length ? ` · 🛡 ${e.shields.length} shield${e.shields.length === 1 ? '' : 's'}` : ''}</div>
-              {e.shields.length > 0 && !e.defeated && (
-                <div style={{ marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-                  {e.shields.map((s, si) => (
-                    <span key={si} className="pill" style={{ fontSize: 9, padding: '1px 6px', background: 'color-mix(in srgb,#fbbf24 18%,var(--bg-3))', color: '#fbbf24', borderColor: 'transparent' }}>
-                      🛡 {describeShield(s)}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      <EnemyList
+        state={state}
+        enemyIcon={enemyIcon}
+        canTarget={state.phase === 'player' && state.outcome === 'ongoing'}
+        onSelectTarget={(enemyId) => setState(prev => setTarget(prev, enemyId))}
+      />
 
       {state.phantomDarts > 0 && state.phase === 'player' && (
         <div className="pill" style={{ marginTop: 6, background: 'color-mix(in srgb,#22d3ee 22%,var(--bg-3))', color: '#cffafe', borderColor: 'transparent' }}>
@@ -489,39 +298,28 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
       {state.phase === 'player' && state.outcome === 'ongoing' && (cardMode ? totalCardsPlayed < maxDartsPerVisit : state.darts.length < 3) && (
         cardMode ? (
           <CardHand
-            cardState={thrower ? cardStates[thrower.id] ?? initCardPlayState([]) : initCardPlayState([])}
+            cardState={thrower ? cardBattle.cardStates[thrower.id] ?? initCardPlayState([]) : initCardPlayState([])}
             playerName={thrower?.name ?? 'Player'}
             isMyTurn={true}
             isBattle={true}
             canPlayMore={totalCardsPlayed < maxDartsPerVisit}
             canEndVisit={totalCardsPlayed > 0}
             canUndo={totalCardsPlayed > 0 || state.darts.length > 0}
-            onPlayCard={(handIdx) => playCampaignCard(handIdx)}
+            onPlayCard={(handIdx) => playCard(handIdx)}
             onUndo={onUndo}
             onEndVisit={onEnter}
           />
         ) : (
-          <div className="play-input">
-            <div className="pad-card">
-              <div className="mult">
-                <button className={mult === 1 ? 'on' : ''} onClick={() => setMult(1)}>Single</button>
-                <button className={mult === 2 ? 'on' : ''} onClick={() => setMult(2)}>Double</button>
-                <button className={mult === 3 ? 'on' : ''} onClick={() => setMult(3)}>Triple</button>
-              </div>
-              <div className="keypad">
-                {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20].map(n => (
-                  <button key={n} className="key" onClick={() => onAdd(n, mult)}>{n}</button>
-                ))}
-                <button className="key" style={{ background: 'color-mix(in srgb,var(--accent) 20%,var(--bg-3))' }} onClick={() => onAdd(25, mult === 2 ? 2 : 1)}>25</button>
-                <button className="key" style={{ gridColumn: 'span 2', background: 'color-mix(in srgb,var(--accent) 30%,var(--bg-3))' }} onClick={() => onAdd(50, 1, 'Bull', true)}>Bull<br /><small>50</small></button>
-                <button className="key" style={{ gridColumn: 'span 2', color: 'var(--muted)' }} onClick={() => onAdd(0, 1, '0')}>Miss</button>
-              </div>
-              <div className="row" style={{ gap: 8, marginTop: 8 }}>
-                <button className="btn block ghost" onClick={onUndo} disabled={!state.darts.length}>↶ Undo</button>
-                <button className="btn block primary" onClick={onEnter} disabled={!state.darts.length}>End visit</button>
-              </div>
-            </div>
-          </div>
+          <DartKeypad
+            mult={mult}
+            onSetMult={setMult}
+            onAdd={onAdd}
+            onUndo={onUndo}
+            onEnter={onEnter}
+            canThrow={true}
+            darts={state.darts}
+            dartCount={state.darts.length}
+          />
         )
       )}
 
@@ -537,7 +335,7 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
           settings={settings}
           enemyIcon={enemyIcon}
           playerVisitDone={playerVisitDone}
-          playedCards={cardMode && thrower ? (cardStates[thrower.id]?.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[] ?? []) : undefined}
+          playedCards={cardMode && thrower ? (cardBattle.cardStates[thrower.id]?.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[] ?? []) : undefined}
         />
       )}
 
