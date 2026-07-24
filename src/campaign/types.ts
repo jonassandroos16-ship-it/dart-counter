@@ -341,6 +341,8 @@ export interface CampaignBattleState {
   };
   // Card mode: true when playing with cards (campaign card mode / dartlite).
   cardMode?: boolean;
+  // Phantom darts remaining (from coop_phantom power-up): the next N darts auto-bullseye.
+  phantomDarts?: number;
 }
 
 // ── Classes ───────────────────────────────────────────────────────────
@@ -364,3 +366,57 @@ export interface CoopClassDef {
     crit?: number;
   };
 }
+
+// ── Classes — passives ─────────────────────────────────────────────────
+
+export type CoopPassiveId =
+  | 'war_power_1' | 'war_crit_1' | 'war_fury_1'
+  | 'war_power_2' | 'war_crit_2' | 'war_fury_2'
+  | 'war_power_3' | 'war_crit_3' | 'war_fury_3'
+  | 'war_power_4' | 'war_crit_4' | 'war_fury_4'
+  | 'war_power_5' | 'war_crit_5' | 'war_fury_5'
+  | 'pri_hp_1' | 'pri_regen_1' | 'pri_shield_1'
+  | 'pri_hp_2' | 'pri_regen_2' | 'pri_shield_2'
+  | 'pri_hp_3' | 'pri_regen_3' | 'pri_shield_3'
+  | 'pri_hp_4' | 'pri_regen_4' | 'pri_shield_4'
+  | 'pri_hp_5' | 'pri_regen_5' | 'pri_shield_5'
+  | 'rog_armor_1' | 'rog_dodge_1' | 'rog_thorns_1'
+  | 'rog_armor_2' | 'rog_dodge_2' | 'rog_thorns_2'
+  | 'rog_armor_3' | 'rog_dodge_3' | 'rog_thorns_3'
+  | 'rog_armor_4' | 'rog_dodge_4' | 'rog_thorns_4'
+  | 'rog_armor_5' | 'rog_dodge_5' | 'rog_thorns_5';
+
+export interface CoopPassiveDef {
+  id: CoopPassiveId;
+  classId: CoopClassId;
+  tier: 1 | 2 | 3 | 4 | 5;
+  name: string;
+  icon: string;
+  desc: string;
+  bonus: {
+    power?: number;
+    health?: number;
+    armor?: number;
+    crit?: number;
+  };
+  levelRequired: number;
+}
+
+// ── Player progress ────────────────────────────────────────────────────
+
+export interface PlayerCoopProgress {
+  classId?: CoopClassId | null;
+  xp: number;
+  unlockedPassives: CoopPassiveId[];
+  equippedPassives: CoopPassiveId[];
+}
+
+export interface PlayerCampaignProgress {
+  highest_level_beaten: number;
+  unlockedPowerUps: string[];
+  chapters?: Record<string, number>;
+}
+
+// Alias kept for backwards compatibility — CampaignProgress is the
+// per-player progress shape shared across the campaign screens.
+export type CampaignProgress = PlayerCampaignProgress;
