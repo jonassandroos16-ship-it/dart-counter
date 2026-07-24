@@ -1,5 +1,7 @@
 import type { CardDef } from '../../cards/types';
 import { cardDamage, cardRarityColor, cardTypeColor } from '../../cards/definitions';
+import { EffectPill } from '../../cards/EffectPill';
+import { getEffectMeta } from '../../cards/effectMeta';
 
 interface Props {
   handDefs: CardDef[];
@@ -70,6 +72,7 @@ export function CardBoardHand({
                   <div className="card-tile-inner">
                     <div className="card-tile-top">
                       <span className="card-tile-icon">{card.icon}</span>
+                      <EffectPill card={card} />
                     </div>
                     <div className="card-tile-name">{card.name}</div>
                     <div className="card-tile-type">{card.type === 'damage' ? `${cardDamage(card)} dmg` : card.type}</div>
@@ -131,22 +134,34 @@ export function CardPopup({
   onClose: () => void;
   onPlay: () => void;
 }) {
+  const effectMeta = card.effect ? getEffectMeta(card.effect) : null;
   return (
-    <div className="card-popup-overlay" onClick={onClose}>
-      <div className={`card-popup${popupClosing ? ' closing' : ''}`} onClick={e => e.stopPropagation()} style={{ '--card-color': cardTypeColor(card.type), '--card-rarity': cardRarityColor(card.rarity) } as React.CSSProperties}>
-        <div className="card-popup-header">
-          <span className="card-popup-icon">{card.icon}</span>
-          <span className="card-popup-name">{card.name}</span>
-          <span className="card-popup-rarity" style={{ color: cardRarityColor(card.rarity) }}>{card.rarity}</span>
+    <div className="card-popup-overlay card-popup-overlay-center" onClick={onClose}>
+      <div
+        className={`card-popup-card${popupClosing ? ' closing' : ''}`}
+        onClick={e => e.stopPropagation()}
+        style={{ '--card-color': cardTypeColor(card.type), '--card-rarity': cardRarityColor(card.rarity) } as React.CSSProperties}
+      >
+        <div className="card-popup-card-glow" />
+        <div className="card-popup-card-header">
+          <span className="card-popup-card-icon">{card.icon}</span>
+          <span className="card-popup-card-name">{card.name}</span>
+          <span className="card-popup-card-rarity" style={{ color: cardRarityColor(card.rarity) }}>{card.rarity}</span>
         </div>
-        <div className="card-popup-body">
-          <div className="card-popup-type" style={{ color: cardTypeColor(card.type) }}>
+        <div className="card-popup-card-body">
+          <div className="card-popup-card-type" style={{ color: cardTypeColor(card.type) }}>
             {card.type === 'damage' ? `Damage — ${cardDamage(card)} points` : card.type === 'spell' ? 'Spell' : 'Utility'}
           </div>
-          <div className="card-popup-desc">{card.desc}</div>
-          {card.class !== 'any' && <div className="card-popup-class">Class: {card.class}</div>}
+          {effectMeta && (
+            <div className="card-popup-card-effect">
+              <span className="card-popup-card-effect-icon" style={{ color: effectMeta.color }}>{effectMeta.icon}</span>
+              <span className="card-popup-card-effect-label">{effectMeta.label}</span>
+            </div>
+          )}
+          <div className="card-popup-card-desc">{card.desc}</div>
+          {card.class !== 'any' && <div className="card-popup-card-class">Class: {card.class}</div>}
         </div>
-        <div className="card-popup-actions">
+        <div className="card-popup-card-actions">
           <button className="btn block ghost" onClick={onClose}>Cancel</button>
           <button
             className="btn block primary"
