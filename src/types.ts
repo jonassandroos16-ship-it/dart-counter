@@ -8,6 +8,7 @@ export interface PlayerAttributes {
   health: number;      // current max health (starts 400)
   armor: number;       // current armor % (starts 0, capped at armorMax — percentage damage reduction per dart)
   power: number;       // current power — flat bonus added to every dart that hits (starts 0)
+  crit: number;        // current crit % chance (starts at class default, capped at critMax — chance to double flat damage before armor)
   pointsAvailable: number; // unspent attribute points
 }
 
@@ -18,6 +19,7 @@ export interface ClassAttributes {
   health: number;
   armor: number;
   power: number;
+  crit: number;
   pointsAvailable: number;
 }
 
@@ -220,11 +222,14 @@ export interface PowerUpScalingConfig {
   attributeStartHealth: number;
   attributeStartArmor: number;
   attributeStartPower: number;
+  attributeStartCrit: number;
   healthPerPoint: number;   // HP gained per point spent on health
   armorPerPoint: number;     // armor % gained per point spent on armor (percentage reduction per dart)
   powerPerPoint: number;     // power gained per point spent on power (flat, per dart)
+  critPerPoint: number;      // crit % gained per point spent on crit
   armorMax: number;          // hard cap for armor (percentage reduction per dart)
   powerMax: number;          // hard cap for power (flat bonus per dart)
+  critMax: number;           // hard cap for crit % chance
   healthMax: number;          // hard cap for HP at max level progression
   battleMinDamage: number;    // minimum damage on a successful hit (default 1)
   // Per-class starting stats. Each class begins with different base health,
@@ -232,11 +237,13 @@ export interface PowerUpScalingConfig {
   classStartHealth: Record<string, number>;
   classStartArmor: Record<string, number>;
   classStartPower: Record<string, number>;
+  classStartCrit: Record<string, number>;
   // Per-class stat caps. Higher caps for the class's primary stat lets them
   // specialize further as they level.
   classHealthMax: Record<string, number>;
   classArmorMax: Record<string, number>;
   classPowerMax: Record<string, number>;
+  classCritMax: Record<string, number>;
   // Starting charge (0..chargeMax) for specific power-ups at the start of a
   // match. Lets early-game power-ups like Surge begin partially charged.
   startingCharge: Record<string, number>;

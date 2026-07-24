@@ -167,7 +167,9 @@ export interface PlayerBuff {
     | 'double_up'
     | 'extra_dart'
     | 'reflect'
-    | 'crit';
+    | 'crit'
+    | 'crit_guarantee'
+    | 'crit_multiplier';
   amount: number;
   turnsLeft: number;
   source: string; // player id who granted it
@@ -203,6 +205,7 @@ export interface CoopPlayer {
   maxHp: number;    // per-player max HP (from their health attribute)
   power: number;    // per-player power (from their power attribute)
   armor: number;    // per-player armor (from their armor attribute)
+  crit: number;     // per-player crit % (from their crit attribute)
   buffs: PlayerBuff[];
   // Per-player coop power-up charge (0..chargeMax). Each player fills their
   // own orb from their own darts and spends it on their own power-up.
@@ -239,6 +242,8 @@ export interface ResolvedDart {
   attackerPower?: number;
   targetArmor?: number;
   vulnerable?: boolean;
+  crit?: boolean;
+  critMult?: number;
 }
 
 // An enemy attack step (one dart) — used for the dart-by-dart enemy overlay.
