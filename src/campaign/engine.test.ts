@@ -94,10 +94,10 @@ describe('campaign engine', () => {
   it('addDart can defeat an enemy and set outcome to victory when all are dead', () => {
     const lvl = getLevel(1)!;
     let state = startBattle(lvl, makePlayers(1), settings);
-    state = setTarget(state, 0);
-    state = addDart(state, 50, 1, 'Bull', true, settings);
     state = { ...state, enemies: state.enemies.map(e => ({ ...e, hp: 1 })) };
     state = setTarget(state, 0);
+    state = addDart(state, 20, 3, undefined, false, settings);
+    state = setTarget(state, 1);
     state = addDart(state, 20, 3, undefined, false, settings);
     expect(state.enemies.every(e => e.defeated)).toBe(true);
     expect(state.outcome).toBe('victory');
