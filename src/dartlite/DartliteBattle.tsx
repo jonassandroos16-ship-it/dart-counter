@@ -598,7 +598,8 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             );
           })()}
         </>
-      )}
+      )
+    )}
 
       {showDeckUpgrade && deckUpgradeOption && (
         <DeckUpgradeScreen
