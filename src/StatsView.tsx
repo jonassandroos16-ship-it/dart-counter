@@ -3,69 +3,10 @@ import type { Player, Settings } from './types';
 import { playerStats, levelFromXP, getPlayerXP, bucketAverages, filterGamesByDate, headToHeadStats } from './logic';
 import { LineChart, BarChart, DartboardHeatmap } from './Charts';
 import { CalendarPicker, filterForPeriod, describeFilter, type Period } from './CalendarPicker';
-import { loadDartliteGlobalStats } from './dartlite/stats';
-import { ALL_TRINKET_IDS, getTrinket } from './dartlite/trinkets';
-import { COOP_CLASSES, getClassXp } from './campaign/engine/classes';
-import { selectClassForPlayer, getCoopClass } from './campaign/engine';
-import type { CoopClassId } from './campaign/types';
-import { classStartHealth, classStartArmor, classStartPower, classStartCrit, defaultClassAttributes } from './logic';
+import { STAT_META, statValue } from './stats/StatMeta';
+import { ClassXpSection } from './stats/ClassXpSection';
+import { CoopStatsSection, DartliteStatsSection } from './stats/StatsSections';
 import type { SetPlayers, Toast } from './players/BasicTab';
-
-// For each stat: which direction is "better"? higher = bigger is better, lower = smaller is better.
-// null = neutral (no comparison). Used to color the comparison value red/green.
-type StatKey =
-  | 'avg' | 'first9' | 'games' | 'n180' | 'n140' | 'tons'
-  | 'highScore' | 'highCheckout' | 'legsWon' | 'dartsThrown'
-  | 'finishMin' | 'finishMax' | 'finishAvg' | 'legsFinished'
-  | 'level' | 'xp' | 'titles' | 'kills' | 'defeated' | 'battleGames';
-
-const STAT_META: { key: StatKey; label: string; better: 'higher' | 'lower' | null; format: (v: number) => string; empty?: string }[] = [
-  { key: 'avg', label: '3-dart avg', better: 'higher', format: v => v.toFixed(1) },
-  { key: 'first9', label: 'First 9', better: 'higher', format: v => v.toFixed(1) },
-  { key: 'games', label: 'Games', better: null, format: v => String(v) },
-  { key: 'n180', label: '180s', better: 'higher', format: v => String(v) },
-  { key: 'n140', label: '140+', better: 'higher', format: v => String(v) },
-  { key: 'tons', label: '100+', better: 'higher', format: v => String(v) },
-  { key: 'highScore', label: 'High score', better: 'higher', format: v => String(v) },
-  { key: 'highCheckout', label: 'High checkout', better: 'higher', format: v => String(v) },
-  { key: 'legsWon', label: 'Legs won', better: 'higher', format: v => String(v) },
-  { key: 'dartsThrown', label: 'Darts thrown', better: 'higher', format: v => String(v) },
-  { key: 'finishMin', label: 'Fastest finish', better: 'lower', format: v => String(v), empty: '—' },
-  { key: 'finishMax', label: 'Slowest finish', better: 'higher', format: v => String(v), empty: '—' },
-  { key: 'finishAvg', label: 'Avg finish', better: 'lower', format: v => v.toFixed(1), empty: '—' },
-  { key: 'legsFinished', label: 'Legs finished', better: 'higher', format: v => String(v) },
-  { key: 'level', label: 'Level', better: 'higher', format: v => String(v) },
-  { key: 'xp', label: 'Class XP', better: 'higher', format: v => String(v) },
-  { key: 'titles', label: 'Titles', better: 'higher', format: v => String(v) },
-  { key: 'kills', label: 'Kills', better: 'higher', format: v => String(v) },
-  { key: 'defeated', label: 'Times defeated', better: 'lower', format: v => String(v) },
-  { key: 'battleGames', label: 'Battle games', better: 'higher', format: v => String(v) },
-];
-
-function statValue(s: ReturnType<typeof playerStats>, xp: ReturnType<typeof getPlayerXP>, li: ReturnType<typeof levelFromXP>, key: StatKey): number {
-  switch (key) {
-    case 'avg': return s.avg;
-    case 'first9': return s.first9;
-    case 'games': return s.games;
-    case 'n180': return s.n180;
-    case 'n140': return s.n140;
-    case 'tons': return s.tons;
-    case 'highScore': return s.highScore;
-    case 'highCheckout': return s.highCheckout;
-    case 'legsWon': return s.legsWon;
-    case 'dartsThrown': return s.dartsThrown;
-    case 'finishMin': return s.finishMin;
-    case 'finishMax': return s.finishMax;
-    case 'finishAvg': return s.finishAvg;
-    case 'legsFinished': return s.legsFinished;
-    case 'level': return li.level;
-    case 'xp': return xp.xp || 0;
-    case 'titles': return xp.unlockedTitles.length;
-    case 'kills': return s.kills || 0;
-    case 'defeated': return s.defeatedCount || 0;
-    case 'battleGames': return s.battleGames || 0;
-  }
-}
 
 export function StatsView({ players, games, settings, setPlayers, toast }: { players: Player[]; games: any[]; settings: Settings; setPlayers: SetPlayers; toast: Toast }) {
   const [pid, setPid] = useState<string>(players[0]?.id || '');
@@ -150,7 +91,7 @@ export function StatsView({ players, games, settings, setPlayers, toast }: { pla
             <>
               <div className="card" style={{ marginTop: 12 }}>
                 <h3 style={{ marginBottom: 8 }}>Score trend</h3>
-                {(() => { const ba = bucketAverages(playerGames.flatMap((g: any) => (g.players.find((p: any) => p.id === pid)?.visits || []).filter((v: any) => !v.bust).map((v: any) => ({ ...v, date: v.date || g.date })))), 'Monthly'); return <LineChart labels={ba.labels} values={ba.values} />; })()}
+                {(() => { const ba = bucketAverages(playerGames.flatMap((g: any) => (g.players.find((p: any) => p.id === pid)?.visits || []).filter((v: any) => !v.bust).map((v: any) => ({ ...v, date: v.date || g.date }))), 'Monthly'); return <LineChart labels={ba.labels} values={ba.values} />; })()}
               </div>
               <div className="card" style={{ marginTop: 12 }}>
                 <h3 style={{ marginBottom: 8 }}>Checkout % by remaining score</h3>
@@ -214,169 +155,6 @@ export function StatsView({ players, games, settings, setPlayers, toast }: { pla
           )}
         </>
       )}
-    </div>
-  );
-}
-
-// ── Per-class XP section ───────────────────────────────────────────────
-
-function ClassXpSection({ player, settings, setPlayers, toast }: { player: Player; settings: Settings; setPlayers: SetPlayers; toast: Toast }) {
-  const prog = player.coopProgress;
-  if (!prog) return null;
-  const cfg = settings.powerUpScaling;
-
-  const pickClass = (classId: CoopClassId) => {
-    if (prog.classId === classId) return;
-    setPlayers((prev: Player[]) => prev.map(p => {
-      if (p.id !== player.id) return p;
-      const cur = p.coopProgress || { classId: null, unlockedPassives: [], equippedPassives: [] };
-      const next = selectClassForPlayer(cur, classId);
-      const caMap = { ...(p.classAttributes || {}) };
-      if (!caMap[classId]) {
-        caMap[classId] = defaultClassAttributes(classId, settings);
-      }
-      const activeAttrs = caMap[classId];
-      return { ...p, coopProgress: next, classAttributes: caMap, attributes: { ...activeAttrs } };
-    }));
-    const cls = getCoopClass(classId);
-    toast(`${cls?.name || classId} class selected`);
-  };
-
-  return (
-    <div className="card">
-      <h3 style={{ marginBottom: 10 }}>✨ Class XP & Attributes</h3>
-      <div className="muted small" style={{ marginBottom: 10 }}>Tap a class to switch your active class.</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {COOP_CLASSES.map(cls => {
-          const xp = getClassXp(prog, cls.id as CoopClassId);
-          const li = levelFromXP(xp, settings);
-          const isCurrent = prog.classId === cls.id;
-          const ca = (player.classAttributes || {})[cls.id] || defaultClassAttributes(cls.id, settings);
-          const sH = classStartHealth(cls.id, settings);
-          const sA = classStartArmor(cls.id, settings);
-          const sP = classStartPower(cls.id, settings);
-          const sC = classStartCrit(cls.id, settings);
-          const spent = Math.max(0, Math.round((ca.health - sH) / (cfg.healthPerPoint || 1)))
-            + Math.max(0, Math.round((ca.armor - sA) / (cfg.armorPerPoint || 1)))
-            + Math.max(0, Math.round((ca.power - sP) / (cfg.powerPerPoint || 1)))
-            + Math.max(0, Math.round((ca.crit - sC) / (cfg.critPerPoint || 1)));
-          return (
-            <button key={cls.id} onClick={() => pickClass(cls.id as CoopClassId)} disabled={isCurrent}
-              style={{
-                padding: 12, background: 'var(--bg-3)', borderRadius: 8,
-                border: isCurrent ? '1px solid var(--accent)' : '1px solid transparent',
-                cursor: isCurrent ? 'default' : 'pointer', color: 'inherit', textAlign: 'left',
-                display: 'block', width: '100%',
-                boxShadow: isCurrent ? '0 0 10px color-mix(in srgb,var(--accent) 40%,transparent)' : 'none',
-                transition: 'border-color .15s ease, box-shadow .15s ease',
-              }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <span style={{ fontWeight: 800, fontSize: 14 }}>{cls.icon} {cls.name}{isCurrent ? ' (active)' : ''}</span>
-                <span style={{ fontWeight: 900, fontSize: 16 }}>Lv {li.level}</span>
-              </div>
-              <div style={{ height: 8, background: 'var(--bg-2)', borderRadius: 4, overflow: 'hidden' }}>
-                <div style={{ width: `${li.xpNeeded > 0 ? (li.xpIntoLevel / li.xpNeeded) * 100 : 0}%`, height: '100%', background: 'var(--accent)', borderRadius: 4, transition: 'width .3s' }} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                <span className="muted small">{xp} XP</span>
-                <span className="muted small">{li.xpIntoLevel}/{li.xpNeeded}</span>
-              </div>
-              <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
-                <span className="small"><b>❤️ {ca.health}</b> HP</span>
-                <span className="small"><b>🛡️ {ca.armor}%</b> armor</span>
-                <span className="small"><b>⚡ {ca.power}</b> power</span>
-                <span className="small"><b>🎯 {ca.crit}%</b> crit</span>
-                <span className="muted small">{spent} pts spent</span>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ── Coop Campaign stats section ───────────────────────────────────────
-
-function CoopStatsSection({ players }: { players: Player[] }) {
-  const campaignKills = players.reduce((a, p) => a + ((p as any).campaignKills || 0), 0);
-  const levelsCleared = players.reduce((a, p) => a + (p.campaignProgress?.highest_level_beaten || 0), 0);
-
-  return (
-    <div className="card" style={{ marginTop: 12 }}>
-      <h3 style={{ marginBottom: 8 }}>⚔️ Co-op Campaign</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
-        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
-          <div style={{ fontSize: 20, fontWeight: 900 }}>{campaignKills}</div>
-          <div className="muted small">Campaign Kills</div>
-        </div>
-        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
-          <div style={{ fontSize: 20, fontWeight: 900 }}>{levelsCleared}</div>
-          <div className="muted small">Levels Cleared</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DartliteStatsSection({ players }: { players: Player[] }) {
-  const g = loadDartliteGlobalStats();
-  const totalSeen = players.reduce((a, p) => a + (p.dartliteStats?.seenTrinkets.length || 0), 0);
-  const uniqueSeen = new Set(players.flatMap(p => p.dartliteStats?.seenTrinkets || [])).size;
-
-  return (
-    <div className="card" style={{ marginTop: 12 }}>
-      <h3 style={{ marginBottom: 8 }}>🎲 Dartlite</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
-        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
-          <div style={{ fontSize: 20, fontWeight: 900 }}>{g.totalKills}</div>
-          <div className="muted small">Total Kills</div>
-        </div>
-        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
-          <div style={{ fontSize: 20, fontWeight: 900 }}>{g.totalBattles}</div>
-          <div className="muted small">Battles Won</div>
-        </div>
-        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
-          <div style={{ fontSize: 20, fontWeight: 900 }}>{g.totalMiniBosses}</div>
-          <div className="muted small">Mini-Bosses</div>
-        </div>
-        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
-          <div style={{ fontSize: 20, fontWeight: 900 }}>{g.totalBosses}</div>
-          <div className="muted small">Bosses</div>
-        </div>
-        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
-          <div style={{ fontSize: 20, fontWeight: 900 }}>{g.bestRound}</div>
-          <div className="muted small">Best Round</div>
-        </div>
-        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
-          <div style={{ fontSize: 20, fontWeight: 900 }}>{g.totalRuns}</div>
-          <div className="muted small">Runs</div>
-        </div>
-        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
-          <div style={{ fontSize: 20, fontWeight: 900 }}>{g.totalXp}</div>
-          <div className="muted small">XP Gained</div>
-        </div>
-        <div style={{ padding: 10, background: 'var(--bg-3)', borderRadius: 8 }}>
-          <div style={{ fontSize: 20, fontWeight: 900 }}>{uniqueSeen}/{ALL_TRINKET_IDS.length}</div>
-          <div className="muted small">Trinkets Seen</div>
-        </div>
-      </div>
-      {uniqueSeen > 0 && (
-        <div style={{ marginTop: 12 }}>
-          <div className="muted small" style={{ fontWeight: 700, marginBottom: 6 }}>Discovered Trinkets</div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {ALL_TRINKET_IDS.filter(id => players.some(p => p.dartliteStats?.seenTrinkets.includes(id))).map(id => {
-              const t = getTrinket(id);
-              return (
-                <span key={id} title={t.desc} className="pill" style={{ fontSize: 11, background: 'color-mix(in srgb,#7c3aed 18%,var(--bg-3))', color: '#c4b5fd', borderColor: 'transparent' }}>
-                  {t.icon} {t.name}
-                </span>
-              );
-            })}
-          </div>
-        </div>
-      )}
-      <div className="muted small" style={{ marginTop: 8 }}>Total trinket discoveries across all players: {totalSeen}</div>
     </div>
   );
 }
