@@ -57,7 +57,9 @@ export function useCardBattle(params: UseCardBattleParams): CardBattleApi {
     const next: Record<string, CardPlayState> = {};
     for (const rp of runPlayers) {
       const player = players.find(p => p.id === rp.id) as Player | undefined;
-      const deck = player ? getPlayerCards(player) : (rp.cards ?? []);
+      // Prefer rp.cards when populated (dartlite run decks, including reward cards).
+      // Fall back to the player's persistent deck for plain campaign card mode.
+      const deck = rp.cards?.length ? rp.cards : (player ? getPlayerCards(player) : []);
       next[rp.id] = initCardPlayState(deck);
     }
     setCardStates(next);
