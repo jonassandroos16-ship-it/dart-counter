@@ -64,5 +64,5 @@ export function playCardShared(
   const isBull = base === 50;
   const label = card.name;
   ctx.setCardStates(prev => ({ ...prev, [throwerId]: updated }));
-  return { updated, isDamage: true, base, mult: isBull ? 2 : (base === 25 && cardMult === 2 ? 2 : cardMult), label, isBull };
+  return { updated, isDamage: true, base, mult: isBull ? Math.max(2, cardMult) : (base === 25 && cardMult === 2 ? 2 : cardMult), label, isBull };
 }

@@ -141,7 +141,8 @@ export function playCard(params: PlayCardParams): void {
   const isBull = base === 50;
   const value = cardDamage(card);
   const label = card.name;
-  const dart = { value, label, base, mult: isBull ? 2 : (base === 25 && value === 50 ? 2 : mult), isDouble: !!(isBull || (base === 25 && value === 50) || mult === 2), isOuter: false };
+  const dartMult = isBull ? Math.max(2, mult) : (base === 25 && value === 50 ? 2 : mult);
+  const dart = { value, label, base, mult: dartMult, isDouble: !!(isBull || (base === 25 && value === 50) || mult === 2), isOuter: false };
   Sound.play('card_damage', {}, settings);
   prevHandRef.current = handIdx;
   setSelectedCardIdx(null);

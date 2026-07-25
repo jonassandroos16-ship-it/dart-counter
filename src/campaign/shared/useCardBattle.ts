@@ -124,7 +124,7 @@ export function useCardBattle(params: UseCardBattleParams): CardBattleApi {
       if (!updated) return;
       setCardStates(prev => ({ ...prev, [throwerId]: updated }));
       onStateChange(prev => prev
-        ? addDart(prev, base, isBull ? 2 : cardMult, def.name, isBull, settings, maxDartsPerVisit)
+        ? addDart(prev, base, isBull ? Math.max(2, cardMult) : cardMult, def.name, isBull, settings, maxDartsPerVisit)
         : prev);
       Sound.play('card', {}, settings);
       return;

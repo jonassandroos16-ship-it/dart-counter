@@ -12,7 +12,10 @@ export function addDartToGame(game: Game, base: number, mult: number, labelOverr
   if (game.powerUpsEnabled && cur._oneDartNext) maxDarts = 1;
   if (game.darts.length >= maxDarts) { toast(`${maxDarts} dart${maxDarts === 1 ? '' : 's'} already`); return null; }
   let value: number, label: string;
-  if (isBull) { value = 50; label = 'Bull'; }
+  if (isBull) {
+    value = base === 50 && mult > 1 ? 50 * mult : 50;
+    label = 'Bull';
+  }
   else if (base === 25) { value = mult === 2 ? 50 : 25; label = mult === 2 ? 'Bull' : '25'; }
   else if (base === 0) { value = 0; label = 'Miss'; }
   else { value = base * mult; label = (mult === 2 ? 'D' : mult === 3 ? 'T' : '') + base; }
