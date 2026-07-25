@@ -37,6 +37,7 @@ export function activateCoopPowerUp(state: CampaignBattleState, id: CoopPowerUpI
   // Update the legacy shared charge to mirror the thrower for backwards compat.
   const powerUpCharge = newCharge;
   const defeatedBefore = state.enemies.filter(e => e.defeated).length;
+  const hpBefore = state.enemies.reduce((a, e) => a + Math.max(0, e.hp), 0);
   const next = applyCoopPowerUp({ ...state, players }, id, thrower, powerUpCharge);
   // A power-up can defeat enemies (meteor, ice lance, …). Run the same
   // end-of-damage check that `addDart` runs so killing the last enemy with
@@ -46,13 +47,26 @@ export function activateCoopPowerUp(state: CampaignBattleState, id: CoopPowerUpI
   const outcome: CampaignBattleState['outcome'] = !anyAlive ? 'victory' : next.outcome;
   const defeatedAfter = next.enemies.filter(e => e.defeated).length;
   const newlyDefeated = Math.max(0, defeatedAfter - defeatedBefore);
+  const hpAfter = next.enemies.reduce((a, e) => a + Math.max(0, e.hp), 0);
+  const dmgDealt = Math.max(0, hpBefore - hpAfter);
+  const playersWithStats = next.players.map((p, i) =>
+    i === throwerIdx
+      ? {
+          ...p,
+          kills: p.kills + newlyDefeated,
+          damageDealt: p.damageDealt + dmgDealt,
+        }
+      : p,
+  );
   return {
     ...next,
+    players: playersWithStats,
     outcome,
     stats: {
       ...next.stats,
       powerUpsUsed: next.stats.powerUpsUsed + 1,
       enemiesDefeated: next.stats.enemiesDefeated + newlyDefeated,
+      damageDealt: next.stats.damageDealt + dmgDealt,
     },
   };
 }

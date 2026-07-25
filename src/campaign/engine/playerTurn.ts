@@ -130,11 +130,26 @@ export function addDart(
     i === state.playerTurnIdx ? { ...p, powerUpCharge: Math.min(chargeMax, p.powerUpCharge + chargeGained) } : p,
   );
   const throwerCharge = players[state.playerTurnIdx]?.powerUpCharge ?? 0;
+  const defeatedBefore = state.enemies.filter(e => e.defeated).length;
+  const defeatedAfter = newEnemies.filter(e => e.defeated).length;
+  const newlyDefeated = Math.max(0, defeatedAfter - defeatedBefore);
   const stats = {
     ...state.stats,
     totalDamage: state.stats.totalDamage + resolvedDart.damage,
     dartsThrown: state.stats.dartsThrown + 1,
+    damageDealt: state.stats.damageDealt + resolvedDart.damage,
+    enemiesDefeated: state.stats.enemiesDefeated + newlyDefeated,
   };
+  const throwerIdx = state.playerTurnIdx;
+  const playersWithStats = players.map((p, i) =>
+    i === throwerIdx
+      ? {
+          ...p,
+          kills: p.kills + newlyDefeated,
+          damageDealt: p.damageDealt + resolvedDart.damage,
+        }
+      : p,
+  );
   const allDefeated = newEnemies.every(e => e.defeated);
   const outcome = allDefeated ? ('victory' as const) : state.outcome;
   return {
@@ -142,7 +157,7 @@ export function addDart(
     darts,
     resolvedDarts,
     enemies: newEnemies,
-    players,
+    players: playersWithStats,
     stats,
     outcome,
     powerUpCharge: throwerCharge,
@@ -157,14 +172,33 @@ export function undoDart(state: CampaignBattleState, settings?: Settings): Campa
   const enemies = state.visitEnemiesSnapshot.length
     ? state.visitEnemiesSnapshot.map(e => ({ ...e }))
     : state.enemies;
+  // Reconstruct cumulative stats at the start of this visit by subtracting
+  // the current visit's dart contributions, then replay the remaining darts.
+  const defeatedAtVisitStart = state.visitEnemiesSnapshot.filter(e => e.defeated).length;
+  const defeatedNow = state.enemies.filter(e => e.defeated).length;
+  const killsThisVisit = Math.max(0, defeatedNow - defeatedAtVisitStart);
+  const dmgThisVisit = state.resolvedDarts.reduce((a, r) => a + r.damage, 0);
   let working: CampaignBattleState = {
     ...state,
     darts: [],
     resolvedDarts: [],
     enemies,
-    stats: { ...state.stats, totalDamage: 0, dartsThrown: 0 },
+    stats: {
+      ...state.stats,
+      totalDamage: 0,
+      dartsThrown: 0,
+      damageDealt: Math.max(0, state.stats.damageDealt - dmgThisVisit),
+      enemiesDefeated: Math.max(0, state.stats.enemiesDefeated - killsThisVisit),
+    },
     players: state.players.map((p, i) =>
-      i === state.playerTurnIdx ? { ...p, powerUpCharge: 0 } : p,
+      i === state.playerTurnIdx
+        ? {
+            ...p,
+            powerUpCharge: 0,
+            kills: Math.max(0, p.kills - killsThisVisit),
+            damageDealt: Math.max(0, p.damageDealt - dmgThisVisit),
+          }
+        : p,
     ),
     powerUpCharge: 0,
   };
