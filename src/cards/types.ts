@@ -19,6 +19,9 @@ export interface CardDef {
   effect?: string;
   /** Spell/utility cards: numeric magnitude for the effect */
   magnitude?: number;
+  /** Spell/utility cards: number of turns the effect lasts. When omitted the
+   * engine applies a per-effect default (see cardEffects.ts). */
+  duration?: number;
   /** Upgrade level: 0 = base, 1+ = upgraded (can stack multiple times) */
   upgraded?: boolean;
   /** Class level at which this card becomes available in the deck */
