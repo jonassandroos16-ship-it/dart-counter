@@ -27,6 +27,7 @@ export interface PostGameInfo {
   coopXpGained?: number;
   xpAwards?: XpAwardInfo[];
   levelUps?: LevelUpInfo[];
+  rewardCard?: { id: string; name: string; icon: string; desc: string } | null;
 }
 
 // Always shown after a Coop campaign level is cleared. Displays the level
@@ -36,13 +37,14 @@ export interface PostGameInfo {
 // below the stats. If this was the chapter's boss, the chapter outro is
 // shown as the story beat.
 export function PostGameOverlay({
-  chapter, levelName, isBoss, stats, rewardPowerUp, chapterComplete, coopXpGained, xpAwards, levelUps, players, onContinue,
+  chapter, levelName, isBoss, stats, rewardPowerUp, rewardCard, chapterComplete, coopXpGained, xpAwards, levelUps, players, onContinue,
 }: {
   chapter: CampaignChapter | null;
   levelName: string;
   isBoss: boolean;
   stats: CampaignBattleState['stats'];
   rewardPowerUp: { name: string; icon: string; desc: string; tier: 'starter' | 'advanced' } | null;
+  rewardCard: { id: string; name: string; icon: string; desc: string } | null;
   chapterComplete: boolean;
   coopXpGained?: number;
   xpAwards?: XpAwardInfo[];
@@ -134,6 +136,20 @@ export function PostGameOverlay({
                 <div className="muted small" style={{ marginTop: 2 }}>{rewardPowerUp.desc}</div>
               </div>
             </div>
+          </div>
+        )}
+
+        {rewardCard && (
+          <div className="card" style={{ marginTop: 12, padding: 12, background: 'var(--bg-3)', borderColor: accent }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: accent, marginBottom: 6 }}>🃏 Campaign Card Unlocked</div>
+            <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+              <div style={{ fontSize: 28 }}>{rewardCard.icon}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 800, fontSize: 14 }}>{rewardCard.name}</div>
+                <div className="muted small" style={{ marginTop: 2 }}>{rewardCard.desc}</div>
+              </div>
+            </div>
+            <div className="muted small" style={{ marginTop: 6, fontStyle: 'italic' }}>Added to every party member's deck.</div>
           </div>
         )}
 

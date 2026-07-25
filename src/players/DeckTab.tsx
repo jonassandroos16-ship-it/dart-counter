@@ -7,6 +7,8 @@ import type { CardDef, PlayerCard } from '../cards/types';
 import { effectiveLevel } from './helpers';
 import { COOP_CLASSES, getCoopClass, selectClassForPlayer, defaultCoopProgress } from '../campaign/engine';
 import type { CoopClassId } from '../campaign/types';
+import { CAMPAIGN_CHAPTERS } from '../campaign/campaignLevels';
+import { playerCampaignProgress } from '../campaign/engine/progress';
 import { defaultClassAttributes } from '../logic';
 
 const CLASS_ICONS: Record<string, string> = {
@@ -137,6 +139,23 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
   const sortedAvailable = allAvailable.sort((a, b) => (a.levelRequired ?? 1) - (b.levelRequired ?? 1));
   const { starter: availStarter, leveled: availLeveled } = splitStarterAndLeveled(sortedAvailable);
 
+  // ── Coop campaign reward cards ────────────────────────────────────────
+  // Themed cards unlocked by clearing Coop campaign missions. They live in
+  // their own subtitle below the level rewards. Each card is unlocked when
+  // the player has cleared the mission that grants it.
+  const campaignProg = playerCampaignProgress(player);
+  const campaignRewardCards = CAMPAIGN_CHAPTERS.flatMap(ch =>
+    ch.levels
+      .filter(l => l.reward_card)
+      .map(l => ({ chapter: ch, level: l, def: getCard(l.reward_card!)! }))
+      .filter(x => x.def),
+  );
+  const ownedCampaignIds = new Set(cards.map(c => c.cardId));
+  const campaignOwned = campaignRewardCards.filter(x => ownedCampaignIds.has(x.def.id));
+  const campaignLocked = campaignRewardCards.filter(x => !ownedCampaignIds.has(x.def.id));
+  const isCampaignCardUnlocked = (chapterId: string, levelId: number) =>
+    (campaignProg.chapters?.[chapterId] ?? 0) >= levelId;
+
   const gridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 };
   const sectionStyle: React.CSSProperties = { marginTop: 12 };
 
@@ -256,6 +275,57 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
                 </div>
               </div>
             ))}
+          </>
+        )}
+      </div>
+
+      {/* Coop Campaign Cards — themed rewards from clearing missions.
+          Shown in its own card below the level rewards. */}
+      <div className="card" key={`coop-campaign-${cls}`} style={{ marginTop: 12 }}>
+        <h3 style={{ marginBottom: 8 }}>Coop Campaign Cards</h3>
+        <div className="muted small" style={{ marginBottom: 8 }}>Themed cards earned by clearing Coop campaign missions. They are added to every class deck automatically on victory.</div>
+
+        {campaignRewardCards.length === 0 ? (
+          <div className="muted small" style={{ padding: 20, textAlign: 'center' }}>No campaign cards defined.</div>
+        ) : (
+          <>
+            {campaignOwned.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div className="muted small" style={{ fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em', fontSize: 10 }}>Unlocked ({campaignOwned.length})</div>
+                <div style={gridStyle}>
+                  {campaignOwned.map(({ def }) => (
+                    <CardTile
+                      key={def.id}
+                      pc={cards.find(c => c.cardId === def.id)!}
+                      def={def}
+                      cls={cls}
+                      onClick={() => showCardDetail(cards.find(c => c.cardId === def.id)!)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {campaignLocked.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div className="muted small" style={{ fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em', fontSize: 10 }}>Locked ({campaignLocked.length})</div>
+                <div style={gridStyle}>
+                  {campaignLocked.map(({ chapter, level, def }) => {
+                    const cleared = isCampaignCardUnlocked(chapter.id, level.level_id);
+                    return (
+                      <AvailableCardTile
+                        key={def.id}
+                        def={def}
+                        cls={cls}
+                        locked={!cleared}
+                        onAdd={() => addCardToPlayer(def.id)}
+                        onClick={() => showAvailableCardDetail(def)}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

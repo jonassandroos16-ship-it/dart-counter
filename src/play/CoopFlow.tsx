@@ -19,7 +19,8 @@ import {
   levelRewardPowerUp,
 } from '../campaign/engine';
 import { getChapter, isChapterComplete } from '../campaign/campaignLevels';
-import { cardsForLevelUp, getPlayerCards } from '../cards/deck';
+import { cardsForLevelUp, getPlayerCards, addCard, setPlayerCards } from '../cards/deck';
+import { getCard } from '../cards/definitions';
 import { PostGameOverlay, type PostGameInfo, type LevelUpInfo, type XpAwardInfo } from './PostGameOverlay';
 import type { LobbyPlayer } from '../multiplayer/client';
 
@@ -69,8 +70,10 @@ export function CoopFlow({ players, settings, music, setPlayers, toast, onExitTo
         const levelUps: LevelUpInfo[] = [];
         const xpAwards: XpAwardInfo[] = [];
         const chapter = getChapter(chapterId);
+        const level = chapter?.levels.find(l => l.level_id === levelId) || null;
         const levelIdx = chapter ? chapter.levels.findIndex(l => l.level_id === levelId) : -1;
         const rewardId = levelRewardPowerUp(levelId, chapterId);
+        const rewardCardId = level?.reward_card || null;
         if (levelIdx >= 0) {
           setProgress(prev => recordLevelClearForPlayer(
             { campaignProgress: prev } as Player,
@@ -94,6 +97,11 @@ export function CoopFlow({ players, settings, music, setPlayers, toast, onExitTo
           xpAwards.push({ playerId: p.id, classId: classId || '', className: cls?.name || 'Unknown', classIcon: cls?.icon || '✨', xpGained, newLevel: li.level });
           const { progress: nextProg } = reconcileCoopPassivesForPlayer(updatedProg, li.level);
           let next: Player = { ...p, coopProgress: nextProg, campaignProgress: clearedProgress };
+          if (rewardCardId && settings.gameMode === 'cards') {
+            const curCards = getPlayerCards(next);
+            const updated = addCard(curCards, rewardCardId);
+            next = setPlayerCards(next, updated);
+          }
           if (li.level > oldLevel && settings.gameMode === 'cards') {
             const curCards = getPlayerCards(next);
             const newCardDefs = cardsForLevelUp(next.coopProgress?.classId || null, li.level, 'coop', curCards);
@@ -103,7 +111,9 @@ export function CoopFlow({ players, settings, music, setPlayers, toast, onExitTo
           }
           return next;
         }));
-        setPostGame({ chapterId, levelId, stats, rewardPowerUpId: unlockedPowerUpId, coopXpGained: xpGained, xpAwards, levelUps });
+        const rewardCardDef = rewardCardId ? getCard(rewardCardId) : null;
+        const rewardCard = rewardCardDef ? { id: rewardCardDef.id, name: rewardCardDef.name, icon: rewardCardDef.icon, desc: rewardCardDef.desc } : null;
+        setPostGame({ chapterId, levelId, stats, rewardPowerUpId: unlockedPowerUpId, coopXpGained: xpGained, xpAwards, levelUps, rewardCard });
         setStage('postgame');
         music.startContext('setup', settings);
       }}
@@ -146,6 +156,7 @@ export function CoopFlow({ players, settings, music, setPlayers, toast, onExitTo
       isBoss={isBoss}
       stats={postGame.stats}
       rewardPowerUp={pu ? { name: pu.name, icon: pu.icon, desc: pu.desc, tier: pu.tier } : null}
+      rewardCard={postGame.rewardCard || null}
       chapterComplete={chapterComplete}
       coopXpGained={postGame.coopXpGained}
       xpAwards={postGame.xpAwards}

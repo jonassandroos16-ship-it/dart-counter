@@ -30,6 +30,9 @@ export interface CardDef {
   upgraded?: boolean;
   /** Class level at which this card becomes available in the deck */
   levelRequired?: number;
+  /** True for cards unlocked as Coop campaign mission rewards (themed per
+   * chapter). These are gated by mission progress, not class level. */
+  campaignReward?: boolean;
 }
 
 export interface PlayerCard {

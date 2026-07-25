@@ -36,6 +36,8 @@ export interface CampaignLevel {
   is_boss: boolean;
   enemies: string[];
   reward_power_up?: string;
+  /** Card id granted to all party members when this mission is cleared. */
+  reward_card?: string;
   story_bit?: string;
 }
 
