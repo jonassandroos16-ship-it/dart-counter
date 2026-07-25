@@ -99,4 +99,14 @@ describe('Card Definitions', () => {
     expect(CARD_DEFS.some(c => c.levelRequired === 4)).toBe(true);
     expect(CARD_DEFS.some(c => c.levelRequired === 5)).toBe(true);
   });
+
+  it('heal_over_time cards that promise extra draws carry extraDraws', () => {
+    const ids = ['spell_priest_divine_favor', 'spell_priest_feast', 'spell_priest_ascension', 'spell_priest_holy_revelation'];
+    for (const id of ids) {
+      const def = getCard(id);
+      expect(def).toBeDefined();
+      expect(def!.effect).toBe('heal_over_time');
+      expect(def!.extraDraws).toBeGreaterThan(0);
+    }
+  });
 });

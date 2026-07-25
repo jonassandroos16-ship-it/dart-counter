@@ -113,6 +113,15 @@ export function playCard(params: PlayCardParams): void {
       if (game.mode === 'battle') {
         applyGame({ players: game.players.map((pl, i) => i === game.turn ? { ...pl, hp: Math.min((pl as any).maxHp || 100, (pl.hp || 0) + (card.magnitude ?? 0)) } as any : pl) });
       }
+    } else if (card.effect === 'heal_over_time') {
+      if (game.mode === 'battle') {
+        applyGame({ players: game.players.map((pl, i) => i === game.turn ? { ...pl, hp: Math.min((pl as any).maxHp || 100, (pl.hp || 0) + (card.magnitude ?? 0)) } as any : pl) });
+      }
+      if (card.extraDraws && card.extraDraws > 0) {
+        const draws1 = { ...(game.nextTurnDraws || {}) };
+        draws1[p.id] = (draws1[p.id] ?? 0) + card.extraDraws;
+        applyGame({ nextTurnDraws: draws1 });
+      }
     } else if (card.effect === 'enemy_curse' || card.effect === 'enemy_miss') {
       // Curse/miss effects are handled by the battle engine, not the board.
     }

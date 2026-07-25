@@ -22,6 +22,10 @@ export interface CardDef {
   /** Spell/utility cards: number of turns the effect lasts. When omitted the
    * engine applies a per-effect default (see cardEffects.ts). */
   duration?: number;
+  /** Extra cards to draw next turn. Used by multi-effect cards (e.g. a
+   * heal-over-time that also grants draws) where the primary `effect` is
+   * not the `draw` channel. */
+  extraDraws?: number;
   /** Upgrade level: 0 = base, 1+ = upgraded (can stack multiple times) */
   upgraded?: boolean;
   /** Class level at which this card becomes available in the deck */

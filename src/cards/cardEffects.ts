@@ -56,6 +56,9 @@ export function applyCardEffect(params: CardEffectParams): CardPlayState {
     const buffId = `regen_${Date.now()}`;
     const turns = dur ?? 3;
     setBattleState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'regen' as const, amount: mag, turnsLeft: turns, source: throwerId }] })) } : prev);
+    if (card.extraDraws && card.extraDraws > 0) {
+      setNextTurnDraws(prev => ({ ...prev, [throwerId]: (prev[throwerId] ?? 0) + card.extraDraws! }));
+    }
   } else if (effect === 'party_shield_flat') {
     const buffId = `shield_${Date.now()}`;
     const turns = dur ?? 2;
