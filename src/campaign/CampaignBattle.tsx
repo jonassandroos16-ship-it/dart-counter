@@ -213,6 +213,8 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
             enemyIcon={enemyIcon}
             cardMode={cardMode}
             cardPlayState={cardMode ? (cardBattle.cardStates[thrower.id] ?? null) : null}
+            maxPlays={cardMode ? maxDartsPerVisit : undefined}
+            cardsPlayed={cardMode ? totalCardsPlayed : undefined}
           />
         )}
 

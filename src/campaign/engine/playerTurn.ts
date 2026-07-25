@@ -6,15 +6,43 @@ import type {
   CoopPlayer,
   EnemyDatabase,
   ResolvedDart,
-  Settings,
 } from '../types';
-import type { Player } from '../../types';
+import type { Player, Settings } from '../../types';
 import { ENEMY_DATABASE } from '../enemyDatabase';
 import { toCoopPlayer, partyMaxHpFor } from './party';
-import { computePartyPassiveBonus } from './classes';
+import { computePartyPassiveBonus, type PartyPassiveBonus } from './classes';
 import { dartMatchesShield, describeShield, flatHpForShield } from './shields';
 
 // ── Start a new battle ────────────────────────────────────────────────────────────
+
+function startingChargeFor(players: Player[], settings: Settings): number {
+  const cfg = settings.powerUpScaling;
+  const map = cfg?.startingCharge;
+  if (!map) return 0;
+  for (const p of players) {
+    const active = (p as any).powerUps?.coopActive;
+    if (active && typeof active === 'string' && active in map) {
+      return map[active];
+    }
+  }
+  return 0;
+}
+
+function applyPassiveToPlayer(p: CoopPlayer, bonus: PartyPassiveBonus, settings: Settings): CoopPlayer {
+  const cfg = settings.powerUpScaling;
+  const healthMax = cfg?.healthMax ?? Number.MAX_SAFE_INTEGER;
+  const powerMax = cfg?.powerMax ?? Number.MAX_SAFE_INTEGER;
+  const armorMax = cfg?.armorMax ?? Number.MAX_SAFE_INTEGER;
+  const critMax = cfg?.critMax ?? Number.MAX_SAFE_INTEGER;
+  return {
+    ...p,
+    power: Math.min(powerMax, p.power + bonus.power),
+    maxHp: Math.min(healthMax, p.maxHp + bonus.health),
+    hp: Math.min(healthMax, p.hp + bonus.health),
+    armor: Math.min(armorMax, p.armor + bonus.armor),
+    crit: Math.min(critMax, p.crit + bonus.crit),
+  };
+}
 
 export function startBattle(
   level: CampaignLevel,
@@ -24,11 +52,12 @@ export function startBattle(
   chapterId: string = 'crimson_vale',
   cardMode: boolean = false,
 ): CampaignBattleState {
-  const party = players.map(toCoopPlayer);
+  const startCharge = startingChargeFor(players, settings);
+  const party = players.map(p => toCoopPlayer(p, settings, startCharge));
   const passiveBonus = computePartyPassiveBonus(players);
-  const baseAvg = partyMaxHpFor(players.length);
+  const partyWithBonus = party.map(p => applyPassiveToPlayer(p, passiveBonus, settings));
+  const baseAvg = partyMaxHpFor(players, settings);
   const partyMaxHp = Math.max(1, baseAvg + passiveBonus.health);
-  const powerUpCharge = party.length ? party[0].powerUpCharge : 0;
   const enemies: ActiveEnemy[] = level.enemies.map((defId) => {
     const def = db[defId];
     if (!def) throw new Error(`Unknown enemy id: ${defId}`);
@@ -59,21 +88,23 @@ export function startBattle(
     targetIdx: 0,
     partyHp: partyMaxHp,
     partyMaxHp,
-    players: party,
+    players: partyWithBonus,
     playerTurnIdx: 0,
     phase: 'player',
     outcome: 'ongoing',
     darts: [],
     resolvedDarts: [],
-    visitEnemiesSnapshot: [],
+    visitEnemiesSnapshot: enemies.map(e => ({ ...e })),
     pendingEnemyAttacks: [],
     appliedEnemyAttacks: [],
     frozenEnemiesThisRound: [],
     visitNumber: 1,
     awaitContinue: false,
     lastVisitLog: [],
-    stats: { totalDamage: 0, partyHpLost: 0, enemiesDefeated: 0, dartsThrown: 0 },
+    stats: { totalDamage: 0, partyHpLost: 0, enemiesDefeated: 0, dartsThrown: 0, visitsUsed: 0, damageDealt: 0, powerUpsUsed: 0 },
     cardMode,
+    passiveBonus,
+    powerUpCharge: startCharge,
   };
 }
 
@@ -94,9 +125,11 @@ export function addDart(
   const { resolvedDart, newEnemies, newPlayers, chargeGained } = resolveDart(dart, state, settings);
   const darts = [...state.darts, dart];
   const resolvedDarts = [...state.resolvedDarts, resolvedDart];
+  const chargeMax = settings?.powerUpScaling?.chargeMax ?? Number.MAX_SAFE_INTEGER;
   const players = newPlayers.map((p, i) =>
-    i === state.playerTurnIdx ? { ...p, powerUpCharge: p.powerUpCharge + chargeGained } : p,
+    i === state.playerTurnIdx ? { ...p, powerUpCharge: Math.min(chargeMax, p.powerUpCharge + chargeGained) } : p,
   );
+  const throwerCharge = players[state.playerTurnIdx]?.powerUpCharge ?? 0;
   const stats = {
     ...state.stats,
     totalDamage: state.stats.totalDamage + resolvedDart.damage,
@@ -112,36 +145,38 @@ export function addDart(
     players,
     stats,
     outcome,
+    powerUpCharge: throwerCharge,
   };
 }
 
 // ── Undo the last dart ─────────────────────────────────────────────────────────────
 
-export function undoDart(state: CampaignBattleState, _settings?: Settings): CampaignBattleState {
+export function undoDart(state: CampaignBattleState, settings?: Settings): CampaignBattleState {
   if (state.darts.length === 0) return state;
   const darts = state.darts.slice(0, -1);
-  const resolvedDarts = state.resolvedDarts.slice(0, -1);
-  const stats = {
-    ...state.stats,
-    totalDamage: state.stats.totalDamage - (state.resolvedDarts[state.resolvedDarts.length - 1]?.damage ?? 0),
-    dartsThrown: Math.max(0, state.stats.dartsThrown - 1),
-  };
-  // Re-snapshot enemies from the visit start since we can't perfectly reverse
-  // individual dart resolutions (crits, shields, etc.).
   const enemies = state.visitEnemiesSnapshot.length
     ? state.visitEnemiesSnapshot.map(e => ({ ...e }))
     : state.enemies;
-  // Re-resolve all remaining darts against the snapshot.
-  let working = { ...state, darts: [], resolvedDarts: [], enemies, stats: { ...state.stats, totalDamage: 0, dartsThrown: 0 } };
+  let working: CampaignBattleState = {
+    ...state,
+    darts: [],
+    resolvedDarts: [],
+    enemies,
+    stats: { ...state.stats, totalDamage: 0, dartsThrown: 0 },
+    players: state.players.map((p, i) =>
+      i === state.playerTurnIdx ? { ...p, powerUpCharge: 0 } : p,
+    ),
+    powerUpCharge: 0,
+  };
   for (const dart of darts) {
-    working = addDart(working, dart.base, dart.mult, dart.label, dart.isBull);
+    working = addDart(working, dart.base, dart.mult, dart.label, dart.isBull, settings);
   }
   return { ...working, darts, resolvedDarts: working.resolvedDarts, stats: working.stats };
 }
 
 // ── Resolve a single dart against the current state ─────────────────────────────────
 
-function makeDartFromBase(base: number, mult: number, labelOverride?: string, isBull?: boolean): CampaignDart {
+function makeDartFromBase(base: number, mult: number, labelOverride?: string, _isBull?: boolean): CampaignDart {
   if (base === 25) {
     return { value: mult === 2 ? 50 : 25, label: labelOverride ?? (mult === 2 ? 'Bull' : '25'), base: 25, mult: mult === 2 ? 2 : 1, isDouble: mult === 2, isBull: true };
   }
@@ -149,17 +184,20 @@ function makeDartFromBase(base: number, mult: number, labelOverride?: string, is
     return { value: 50, label: labelOverride ?? 'Bull', base: 50, mult: 2, isDouble: true, isBull: true };
   }
   if (base === 0) {
-    return { value: 0, label: labelOverride ?? 'Miss', base: 0, mult: 1, isDouble: false };
+    return { value: 0, label: labelOverride ?? 'Miss', base: 0, mult: 1, isDouble: false, isBull: false };
   }
   const value = base * mult;
   const label = labelOverride ?? ((mult === 2 ? 'D' : mult === 3 ? 'T' : '') + base);
-  return { value, label, base, mult, isDouble: mult === 2 };
+  return { value, label, base, mult, isDouble: mult === 2, isBull: false };
 }
 
 function computeChargeGained(dart: CampaignDart, cfg?: Settings['powerUpScaling']): number {
   if (!cfg) return 0;
-  const perPoint = cfg.chargePerDartPoint ?? 0;
-  return Math.round(dart.value * perPoint);
+  let charge = dart.value * (cfg.chargePerScorePoint ?? 0);
+  if (dart.isDouble && !dart.isBull && cfg.chargePerDouble) charge += cfg.chargePerDouble;
+  if (dart.mult === 3 && cfg.chargePerTriple) charge += cfg.chargePerTriple;
+  if (dart.isBull && cfg.chargePerBull) charge += cfg.chargePerBull;
+  return charge;
 }
 
 export function resolveDart(
@@ -175,7 +213,6 @@ export function resolveDart(
     return { resolvedDart: step, newEnemies: state.enemies, newPlayers: state.players, chargeGained: computeChargeGained(dart, cfg) };
   }
 
-  // Compute attacker power (thrower's power + active power buffs)
   const powerMax = Number.isFinite(cfg?.powerMax) ? (cfg?.powerMax as number) : Number.MAX_SAFE_INTEGER;
   const basePower = thrower ? Math.min(powerMax, thrower.power + thrower.buffs.filter(b => b.kind === 'power').reduce((s, b) => s + b.amount, 0)) : 0;
   const power = basePower;
@@ -183,7 +220,6 @@ export function resolveDart(
   // Shield check: if the enemy has shields, handle them.
   if (t.shields.length > 0) {
     const shield = t.shields[0];
-    // Card mode: flat shields absorb damage until depleted.
     if (shield.flatHp != null) {
       if (dart.value <= 0) {
         const step: ResolvedDart = { dart, damage: 0, kind: 'miss', enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0 };
@@ -191,19 +227,16 @@ export function resolveDart(
       }
       const remaining = shield.flatHp - dart.value;
       if (remaining > 0) {
-        // Shield absorbs all damage, flat HP reduced.
         const step: ResolvedDart = { dart, damage: 0, kind: 'shield_break', shieldTarget: `${shield.flatHp}HP shield`, enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0 };
         const newEnemies = state.enemies.map((e, i) => i === state.targetIdx ? { ...e, shields: [{ ...shield, flatHp: remaining }] } : e);
         return { resolvedDart: step, newEnemies, newPlayers: state.players, chargeGained: 0 };
       }
-      // Shield broken — excess damage carries through.
       const overflow = -remaining;
       const newEnemies = state.enemies.map((e, i) => i === state.targetIdx ? { ...e, shields: e.shields.slice(1) } : e);
       if (overflow <= 0) {
         const step: ResolvedDart = { dart, damage: 0, kind: 'shield_break', shieldTarget: `${shield.flatHp}HP shield`, enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0 };
         return { resolvedDart: step, newEnemies, newPlayers: state.players, chargeGained: 0 };
       }
-      // Apply overflow damage to HP.
       const armorMax2a = Number.isFinite(cfg?.armorMax) ? (cfg?.armorMax as number) : Number.MAX_SAFE_INTEGER;
       const armorA = Math.min(armorMax2a, t.armor);
       const postArmorA = Math.max(1, Math.round(overflow * (1 - armorA / 100)));
@@ -213,12 +246,10 @@ export function resolveDart(
       const stepA: ResolvedDart = { dart, damage: postArmorA, kind: defeatedA ? 'defeated' : 'damage', enemyId: t.id, enemyName: t.name, hpAfter: newHpA, attackerPower: power, targetArmor: armorA, vulnerable: t.vulnerableTurns > 0 };
       return { resolvedDart: stepA, newEnemies: finalEnemiesA, newPlayers: state.players, chargeGained: computeChargeGained(dart, cfg) };
     }
-    // Dartboard mode: segment-matching shields.
     if (!dartMatchesShield(dart, shield)) {
       const step: ResolvedDart = { dart, damage: 0, kind: 'shield_break', shieldTarget: describeShield(shield), enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0 };
       return { resolvedDart: step, newEnemies: state.enemies, newPlayers: state.players, chargeGained: 0 };
     }
-    // Dart matches shield — break it, deal 0 damage.
     const step: ResolvedDart = { dart, damage: 0, kind: 'miss', enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0 };
     const newEnemies = state.enemies.map((e, i) => i === state.targetIdx ? { ...e, shields: e.shields.slice(1) } : e);
     return { resolvedDart: step, newEnemies, newPlayers: state.players, chargeGained: 0 };
@@ -252,10 +283,23 @@ export function resolveDart(
     i === state.targetIdx ? { ...e, hp: newHp, defeated } : e
   );
 
-  let chargeGained = computeChargeGained(dart, cfg);
+  const chargeGained = computeChargeGained(dart, cfg);
+
+  // Consume crit_guarantee buff: decrement amount, remove if it reaches 0.
+  let newPlayers = state.players;
+  if (isCrit && critGuarantee) {
+    const remaining = critGuarantee.amount - 1;
+    newPlayers = state.players.map((p, i) => {
+      if (i !== state.playerTurnIdx) return p;
+      const buffs = remaining > 0
+        ? p.buffs.map(b => b === critGuarantee ? { ...b, amount: remaining } : b)
+        : p.buffs.filter(b => b !== critGuarantee);
+      return { ...p, buffs };
+    });
+  }
 
   const step: ResolvedDart = { dart, damage: finalDmg, kind: defeated ? 'defeated' : 'damage', enemyId: t.id, enemyName: t.name, hpAfter: newHp, attackerPower: power, targetArmor: armor, vulnerable, crit: isCrit, critMult: isCrit ? critMult : undefined };
-  return { resolvedDart: step, newEnemies, newPlayers: state.players, chargeGained };
+  return { resolvedDart: step, newEnemies, newPlayers, chargeGained };
 }
 
 // ── Resolve the current player's visit ────────────────────────────────────────────
@@ -266,7 +310,6 @@ export function resolvePlayerVisit(state: CampaignBattleState, hasPlayedCards: b
   if (state.darts.length === 0 && !hasPlayedCards) return state;
   const isLastPlayer = state.playerTurnIdx >= state.players.length - 1;
   if (!isLastPlayer) {
-    // More players to throw — advance playerTurnIdx, snapshot, reset darts.
     const next = (state.playerTurnIdx + 1) % state.players.length;
     return {
       ...state,
@@ -276,7 +319,6 @@ export function resolvePlayerVisit(state: CampaignBattleState, hasPlayedCards: b
       visitEnemiesSnapshot: state.enemies.map(e => ({ ...e })),
     };
   }
-  // All players have thrown — move to the enemy phase.
   return {
     ...state,
     phase: 'enemy',
@@ -294,7 +336,6 @@ export function setTarget(state: CampaignBattleState, targetIdx: number): Campai
   if (state.enemies[targetIdx].defeated) return state;
   return { ...state, targetIdx };
 }
-
 
 // ── Utility helpers ────────────────────────────────────────────────────────────
 

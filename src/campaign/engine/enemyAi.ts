@@ -53,7 +53,7 @@ export function makeDart(base: number, mult: number): CampaignDart {
     return { value: 50, label: 'Bull', base: 50, mult: 2, isDouble: true, isBull: true };
   }
   if (base === 0) {
-    return { value: 0, label: 'Miss', base: 0, mult: 1, isDouble: false };
+    return { value: 0, label: 'Miss', base: 0, mult: 1, isDouble: false, isBull: false };
   }
   const value = base * mult;
   const label = (mult === 2 ? 'D' : mult === 3 ? 'T' : '') + base;

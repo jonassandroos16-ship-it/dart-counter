@@ -428,21 +428,6 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
               cardsPlayed={cardMode ? totalCardsPlayed : undefined}
             />
             )}
-
-            {state.phase === 'player' && thrower && !cardMode && (
-              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className="muted small">Multiplier</span>
-                {[1, 2, 3].map(m => (
-                  <button key={m} onClick={() => setMult(m)}
-                    style={{
-                      width: 36, height: 36, borderRadius: 8, cursor: 'pointer',
-                      border: `2px solid ${mult === m ? 'var(--accent)' : 'var(--border)'}`,
-                      background: mult === m ? 'color-mix(in srgb,var(--accent) 22%,var(--bg-3))' : 'var(--bg-3)',
-                      color: 'var(--text)', fontWeight: 800, fontSize: 14, padding: 0,
-                    }}>{m}×</button>
-                ))}
-              </div>
-            )}
           </div>
 
           {state.phase === 'player' && (
