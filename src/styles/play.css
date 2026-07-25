@@ -396,12 +396,3 @@ canvas { width: 100%; display:block; }
 .card-play-anim-player { font-size: 13px; font-weight: 700; margin-top: 8px; }
 
 /* Card play out: float up like hitting the board */
-@keyframes cardPlayOut {
-  0% { transform: rotate(var(--card-rot, 0deg)) translateY(var(--card-offset, 0px)) scale(1); }
-  30% { transform: rotate(0deg) translateY(-60px) scale(1.1); }
-  60% { transform: rotate(0deg) translateY(-20px) scale(.9); }
-  100% { transform: rotate(0deg) translateY(40px) scale(.2); }
-}
-.card-anim-out {
-  animation: cardPlayOut .6s ease-in forwards !important;
-}

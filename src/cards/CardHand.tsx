@@ -57,7 +57,7 @@ export function CardHand({
     if (handDefs.length < prevHandLen.current) {
       const removedIdx = prevHandLen.current - 1;
       setAnimatingOut(removedIdx);
-      const t = setTimeout(() => setAnimatingOut(null), 300);
+      const t = setTimeout(() => setAnimatingOut(null), 600);
       prevHandLen.current = handDefs.length;
       return () => clearTimeout(t);
     }

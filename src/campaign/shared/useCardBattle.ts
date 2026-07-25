@@ -51,7 +51,9 @@ export function useCardBattle(params: UseCardBattleParams): CardBattleApi {
 
   const maxDartsPerVisit = cardMode ? MAX_PLAYS_PER_TURN + bonusSlots : 3;
 
-  // Initialize card play state for each player at battle start / visit transitions
+  // Initialize card play state for each player at battle start. Only re-runs
+  // when a brand-new battle begins (mount or levelId change) — NOT on every
+  // visitNumber change, so deck/graveyard state persists across visits.
   useEffect(() => {
     if (!cardMode || !battle) return;
     const next: Record<string, CardPlayState> = {};
@@ -68,7 +70,7 @@ export function useCardBattle(params: UseCardBattleParams): CardBattleApi {
     // wiping them here discards effects like Focus (extra_slot) that were
     // earned in the previous round but apply to the next.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardMode, battle?.visitNumber, battle?.levelId]);
+  }, [cardMode, battle?.levelId]);
 
   // Reset bonus slots at the start of each player's turn so they don't leak
   // from one player to the next within the same visit.
@@ -80,7 +82,9 @@ export function useCardBattle(params: UseCardBattleParams): CardBattleApi {
 
   // Start of each player's turn: apply any pending extra slots from cards
   // played last turn (e.g. Focus), and draw a fresh hand when the previous
-  // turn has ended (hand + used empty).
+  // turn has ended (hand + used empty). Also runs on visitNumber change so
+  // a fresh hand is drawn from the EXISTING deck (preserving graveyard)
+  // rather than re-shuffling a brand-new deck.
   useEffect(() => {
     if (!cardMode || !battle || !throwerId) return;
     const cs = cardStates[throwerId];
@@ -103,7 +107,7 @@ export function useCardBattle(params: UseCardBattleParams): CardBattleApi {
       if (extraDraw > 0) setNextTurnDraws(prev => { const n = { ...prev }; delete n[throwerId]; return n; });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardMode, throwerId, battle?.playerTurnIdx]);
+  }, [cardMode, throwerId, battle?.playerTurnIdx, battle?.visitNumber]);
 
   const totalCardsPlayed = throwerId ? (cardStates[throwerId]?.used.length ?? 0) : 0;
 
