@@ -170,6 +170,7 @@ export function HighScoreBoard({ game, setGame, settings, players, games, toast,
                   <BadgeAvatar playerId={pl.id} players={players} games={games} size={22} fontSize={10} color={pl.color} />
                   <span className="po-name">{pl.name}</span>
                   {game.powerUpsEnabled && (pl as any)._shieldTurns > 0 && <span title="Shielded" style={{ fontSize: 11 }}>🏰</span>}
+                  {game.powerUpsEnabled && (pl as any)._frozenNext && <span title="Frozen — next visit skipped" style={{ fontSize: 11 }}>❄️</span>}
                 </div>
                 <span className="pill" style={{ fontSize: 10 }}>{pl.visits.length}/{HIGH_SCORE_VISITS}</span>
               </div>

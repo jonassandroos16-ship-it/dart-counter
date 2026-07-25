@@ -173,6 +173,7 @@ export function KillerBoard({ game, setGame, settings, players, games, toast, mu
                 <span className="po-name">{pl.name}</span>
                 {(pl.killerHits || 0) >= 5 && <span className="pill" style={{ background: '#ef4444', color: '#fff', fontSize: 9 }}>KILLER</span>}
                 {game.powerUpsEnabled && (pl as any)._shieldTurns > 0 && <span title="Shielded" style={{ fontSize: 11 }}>🏰</span>}
+                {game.powerUpsEnabled && (pl as any)._frozenNext && <span title="Frozen — next visit skipped" style={{ fontSize: 11 }}>❄️</span>}
               </div>
               <span className="pill" style={{ fontSize: 10 }}>{'❤️'.repeat(pl.lives || 0) || '💀'}</span>
             </div>

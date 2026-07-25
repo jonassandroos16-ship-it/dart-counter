@@ -305,6 +305,11 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
             🔥 Hot Streak! Each dart this visit earns +5 bonus per dart before it.
           </div>
         )}
+        {game.powerUpsEnabled && (p as any)._luckyMiss && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#22c55e 18%,var(--bg-3))', border: '1px solid #22c55e', color: '#4ade80' }}>
+            🍀 Lucky Miss armed! Your next bust this visit is cancelled.
+          </div>
+        )}
         {game.powerUpsEnabled && (p as any)._shieldTurns > 0 && (
           <div className="pu-banner" style={{ background: 'color-mix(in srgb,#38bdf8 18%,var(--bg-3))', border: '1px solid #38bdf8', color: '#7dd3fc' }}>
             🏰 Shield active! Protected from power-up attacks for {(p as any)._shieldTurns} more turn{(p as any)._shieldTurns === 1 ? '' : 's'}.
@@ -335,6 +340,7 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
                     <span className="po-name">{pl.name}</span>
                     {game.teamMode && <span style={{ fontSize: 9, fontWeight: 800, color: plTeamColor }}>T{plTeam + 1}</span>}
                     {game.powerUpsEnabled && (pl as any)._shieldTurns > 0 && <span title="Shielded" style={{ fontSize: 11 }}>🏰</span>}
+                    {game.powerUpsEnabled && (pl as any)._frozenNext && <span title="Frozen — next visit skipped" style={{ fontSize: 11 }}>❄️</span>}
                   </div>
                   <div className="row" style={{ gap: 4 }}>
                     {game.teamMode && game.legsBestOf > 1 ? <span className="pill" style={{ fontSize: 10, background: plTeamColor, color: '#04150a' }}>{(game.teamLegsWon || [])[plTeam] || 0}</span> : null}

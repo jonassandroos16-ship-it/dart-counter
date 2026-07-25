@@ -219,6 +219,11 @@ export function CardBoard({ game, setGame, settings, players, games, setGames, s
             🔥 Hot Streak! Each card this visit earns +5 bonus per card before it.
           </div>
         )}
+        {game.powerUpsEnabled && (p as any)._luckyMiss && (
+          <div className="pu-banner" style={{ background: 'color-mix(in srgb,#22c55e 18%,var(--bg-3))', border: '1px solid #22c55e', color: '#4ade80' }}>
+            🍀 Lucky Miss armed! Your next bust this visit is cancelled.
+          </div>
+        )}
         {game.powerUpsEnabled && (p as any)._shieldTurns > 0 && (
           <div className="pu-banner" style={{ background: 'color-mix(in srgb,#38bdf8 18%,var(--bg-3))', border: '1px solid #38bdf8', color: '#7dd3fc' }}>
             🏰 Shield active! Protected from power-up attacks for {(p as any)._shieldTurns} more turn{(p as any)._shieldTurns === 1 ? '' : 's'}.
