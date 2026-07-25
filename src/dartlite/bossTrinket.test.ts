@@ -41,16 +41,23 @@ describe('boss trinket maxHp boost persists across rounds', () => {
     expect(next.battle!.partyMaxHp).toBe(500);
     expect(next.battle!.partyHp).toBe(500);
 
-    // Simulate taking damage during round 11, then winning.
+    // Simulate taking damage during round 11, then winning. Damage taken
+    // must persist (no full-heal between non-boss rounds); only the maxHp
+    // boost should carry forward.
     next = { ...next, battle: { ...next.battle!, partyHp: 200 } };
     next = resolveBattle(next, true);
     expect(next.phase).toBe('choice');
     // After a non-boss round, maxHp must still be 500.
     expect(next.runPlayers[0].maxHp).toBe(500);
+    // Damage taken (500 -> 200) must persist onto the run player.
+    expect(next.runPlayers[0].hp).toBe(200);
 
-    // Begin round 12 — boost must STILL be active.
+    // Begin round 12 — boost must STILL be active. The party HP pool
+    // starts at the player's current HP (200), not maxHp.
     const r12 = beginRound(next, players, settings);
     expect(r12.round).toBe(12);
-    expect(r12.battle!.partyMaxHp).toBe(500);
+    expect(r12.runPlayers[0].maxHp).toBe(500);
+    expect(r12.battle!.partyMaxHp).toBe(200);
+    expect(r12.battle!.partyHp).toBe(200);
   });
 });

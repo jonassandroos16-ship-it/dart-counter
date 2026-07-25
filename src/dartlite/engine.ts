@@ -211,8 +211,25 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
 
     // Non-boss rounds: NO default healing. Players keep whatever HP they
     // ended the battle with. Healing only comes from card effects or
-    // choosing the heal reward boon.
-    const runPlayers = run.runPlayers.map(rp => ({ ...rp }));
+    // choosing the heal reward boon. The battle tracks damage on a shared
+    // partyHp pool, so deduct the lost amount proportionally from each
+    // runPlayer's hp — otherwise damage taken during the fight is silently
+    // discarded and players are effectively full-healed every round.
+    const partyHpLost = Math.max(0, (battle.partyMaxHp ?? 0) - (battle.partyHp ?? 0));
+    const totalMax = run.runPlayers.reduce((sum, rp) => sum + Math.max(1, rp.maxHp), 0);
+    let runPlayers: typeof run.runPlayers;
+    if (partyHpLost <= 0 || totalMax <= 0) {
+      runPlayers = run.runPlayers.map(rp => ({ ...rp }));
+    } else {
+      let remaining = partyHpLost;
+      runPlayers = run.runPlayers.map((rp, i) => {
+        const share = i === run.runPlayers.length - 1
+          ? remaining
+          : Math.min(remaining, Math.round((Math.max(1, rp.maxHp) / totalMax) * partyHpLost));
+        remaining -= share;
+        return { ...rp, hp: Math.max(0, rp.hp - share) };
+      });
+    }
 
     const stats: DartliteRunStats = {
       ...run.stats,
