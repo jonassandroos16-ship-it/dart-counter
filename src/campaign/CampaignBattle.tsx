@@ -42,13 +42,12 @@ interface Props {
 export function CampaignBattle({ levelId, chapterId, progress, settings, players, music, onWin, onLose, onQuit }: Props) {
   const chapter = getChapter(chapterId);
   const level = (chapter?.levels.find(l => l.level_id === levelId)) || getLevel(levelId)!;
+  const cardMode = settings.gameMode === 'cards';
   const [state, setState] = useState<CampaignBattleState>(() =>
     startBattle(level, players, settings, undefined, chapterId, cardMode),
   );
   const [showInfo, setShowInfo] = useState(false);
   const [mult, setMult] = useState(1);
-
-  const cardMode = settings.gameMode === 'cards';
 
   const cardBattle = useCardBattle({
     battle: state,
