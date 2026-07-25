@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Player } from '../types';
+import type { Player, Settings } from '../types';
 import { initials } from '../store';
 import type { DartliteRun } from './engine';
 import { getTrinket, TRINKETS } from './trinkets';
@@ -10,16 +10,17 @@ import type { TrinketId } from './trinkets';
 interface Props {
   run: DartliteRun;
   players?: Player[];
+  settings: Settings;
   setPlayers: (updater: (prev: any[]) => any[]) => void;
   onContinue: () => void;
 }
 
-export function DartliteGameOver({ run, players = [], setPlayers, onContinue }: Props) {
+export function DartliteGameOver({ run, players = [], settings, setPlayers, onContinue }: Props) {
   const [trinketInfo, setTrinketInfo] = useState<TrinketId | null>(null);
   const [tab, setTab] = useState<'overview' | 'players'>('overview');
 
   useEffect(() => {
-    recordDartliteRun(run, setPlayers as any);
+    recordDartliteRun(run, setPlayers as any, settings);
   }, []); // run once on mount
 
   const seenTrinkets = run.stats.trinketsCollected.filter(

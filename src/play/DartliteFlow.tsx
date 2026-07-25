@@ -113,6 +113,7 @@ export function DartliteFlow({ players, settings, music, setPlayers, onExitToMen
     return <DartliteGameOver
       run={run}
       players={players}
+      settings={settings}
       setPlayers={setPlayers}
       onContinue={() => { setStage('none'); setRun(null); onExitToMenu(); music.startContext('setup', settings); }}
     />;

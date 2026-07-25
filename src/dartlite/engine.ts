@@ -38,8 +38,9 @@ export {
   shouldPhoenixRevive, applyPhoenixRevive, applyBossTrinketChoice,
 } from './trinketEffects';
 
-import { isMiniBossRound, isBossRound, xpForBattleWin } from './engineTypes';
+import { isMiniBossRound, isBossRound, xpForBattleWin, xpForKill } from './engineTypes';
 import { scaledEnemyDb, levelForRound } from './roundLogic';
+import { ENEMY_DATABASE } from '../campaign/enemyDatabase';
 import { generateChoices } from './choices';
 
 // ── Run initialization ────────────────────────────────────────────────
@@ -139,7 +140,10 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
   if (!run.battle) return run;
   const battle = run.battle;
   if (won) {
-    const xp = xpForBattleWin(run.round);
+    const killXp = battle.enemies
+      .filter(e => e.defeated)
+      .reduce((sum, e) => sum + xpForKill(ENEMY_DATABASE[e.defId]?.difficulty ?? 'Easy'), 0);
+    const xp = xpForBattleWin(run.round) + killXp;
     let miniBosses = run.stats.miniBossesDefeated;
     let bosses = run.stats.bossesDefeated;
     let unlocked: import('./trinkets').TrinketId | null = null;

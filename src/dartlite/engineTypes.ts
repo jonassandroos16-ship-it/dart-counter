@@ -91,7 +91,8 @@ export function xpForKill(enemyDifficulty: string): number {
 }
 
 export function xpForBattleWin(round: number): number {
-  if (isBossRound(round)) return 200;
-  if (isMiniBossRound(round)) return 100;
-  return 50;
+  const scale = 1 + Math.floor(Math.max(0, round - 1) / 3) * 0.5;
+  if (isBossRound(round)) return Math.round(200 * scale);
+  if (isMiniBossRound(round)) return Math.round(100 * scale);
+  return Math.round(50 * scale);
 }
