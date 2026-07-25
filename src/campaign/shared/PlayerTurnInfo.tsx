@@ -4,6 +4,10 @@ import { resolveCardDef } from '../../cards/deck';
 import { effectivePower } from '../engine/playerTurn';
 import { describeShield } from '../engine/shields';
 
+function critBonus(player: { crit: number; buffs: { kind: string; amount: number }[] }): number {
+  return player.buffs.filter(b => b.kind === 'crit').reduce((s, b) => s + b.amount, 0);
+}
+
 export interface PlayerTurnInfoProps {
   state: CampaignBattleState;
   enemyIcon: (defId: string) => string;
@@ -91,6 +95,7 @@ export function PlayerTurnInfo({ state, enemyIcon, cardMode, cardPlayState, maxP
             {state.passiveBonus && state.passiveBonus.power > 0 && (
               <span style={{ opacity: 0.8 }}> (base {thrower.power - (state.passiveBonus?.power || 0)} + {state.passiveBonus.power} passive)</span>
             )}
+            <span style={{ marginLeft: 6, color: '#a78bfa' }}>🎯 crit {thrower.crit + critBonus(thrower)}{critBonus(thrower) > 0 && <span style={{ opacity: 0.8 }}> ({thrower.crit} + {critBonus(thrower)} buff)</span>}</span>
           </span>
           {validTarget && validTarget.shields.length > 0 && (
             <span style={{ marginLeft: 8, color: '#fbbf24' }}>
@@ -141,6 +146,7 @@ export function PlayerTurnInfo({ state, enemyIcon, cardMode, cardPlayState, maxP
           {state.passiveBonus && state.passiveBonus.power > 0 && (
             <span style={{ opacity: 0.8 }}> (base {thrower.power - (state.passiveBonus?.power || 0)} + {state.passiveBonus.power} passive)</span>
           )}
+          <span style={{ marginLeft: 6, color: '#a78bfa' }}>🎯 crit {thrower.crit + critBonus(thrower)}{critBonus(thrower) > 0 && <span style={{ opacity: 0.8 }}> ({thrower.crit} + {critBonus(thrower)} buff)</span>}</span>
         </span>
         {validTarget && validTarget.shields.length > 0 && (
           <span style={{ marginLeft: 8, color: '#fbbf24' }}>

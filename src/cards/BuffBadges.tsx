@@ -22,7 +22,7 @@ export function PartyBuffBadges({ buffs }: { buffs: BuffInfo[] }) {
           return (
             <button
               key={b.id}
-              onClick={(e) => { e.stopPropagation(); setSelected(b); }}
+              onClick={(e) => { e.stopPropagation(); e.preventDefault(); setSelected(b); }}
               title={effectLabel(b.kind)}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 2,
@@ -30,7 +30,7 @@ export function PartyBuffBadges({ buffs }: { buffs: BuffInfo[] }) {
                 background: `color-mix(in srgb, ${color} 25%, transparent)`,
                 border: `1px solid ${color}`,
                 cursor: 'pointer', fontSize: 9, fontWeight: 700,
-                color: color, lineHeight: 1.2,
+                color: '#fff', lineHeight: 1.2, position: 'relative', zIndex: 1,
               }}
             >
               <span style={{ fontSize: 11 }}>{effectIcon(b.kind)}</span>
