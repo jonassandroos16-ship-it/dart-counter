@@ -31,49 +31,51 @@ import type { DartliteRun, DartliteRunPlayer, DartliteRunStats } from './engineT
 export type { DartliteRun, DartliteRunPlayer, DartliteRunStats, DartlitePlayerRunStats, ChoiceOption, ChoiceKind } from './engineTypes';
 export { isMiniBossRound, isBossRound, xpForKill, xpForBattleWin } from './engineTypes';
 export { enemyHpScale, enemyAccScale, enemyPrecScale, scaledEnemyDb, levelForRound } from './roundLogic';
-export { generateChoices, applyPlayerChoice, applyBossTrinketChoice } from './choices';
-export { applyTrinketEffects, applyTrinketEffectsToPlayer, recalcRunPlayer, recalcAllRunPlayers } from './trinketEffects';
-import { scaledEnemyDb, levelForRound } from './roundLogic';
-import { generateChoices, applyPlayerChoice, applyBossTrinketChoice } from './choices';
-import { applyTrinketEffectsToPlayer, recalcRunPlayer, recalcAllRunPlayers } from './trinketEffects';
-import { ENEMY_DATABASE } from '../campaign/enemyDatabase';
-import { xpForKill, xpForBattleWin } from './engineTypes';
-import { isMiniBossRound, isBossRound } from './engineTypes';
-import { newlyUnlockedTrinket, availablePool, bossTrinketOptions } from './trinkets';
-import type { DartliteRunPlayer } from './engineTypes';
+export { generateChoices, applyPlayerChoice, applyChoice } from './choices';
+export {
+  hasTrinket, partyPowerBonus, partyArmorBonus, partyMaxHpBonus,
+  enemyAccuracyMultiplier, chargeGainMultiplier, xpMultiplier,
+  shouldPhoenixRevive, applyPhoenixRevive, applyBossTrinketChoice,
+} from './trinketEffects';
 
-// ── Start a new run ────────────────────────────────────────────────────
+import { isMiniBossRound, isBossRound, xpForBattleWin, xpForKill } from './engineTypes';
+import { scaledEnemyDb, levelForRound } from './roundLogic';
+import { ENEMY_DATABASE } from '../campaign/enemyDatabase';
+import { generateChoices } from './choices';
+
+// ── Run initialization ────────────────────────────────────────────────
 
 export function startRun(players: Player[], settings: Settings, cardMode: boolean = false): DartliteRun {
   const runPlayers: DartliteRunPlayer[] = players.map(p => {
+    const cfg = settings.powerUpScaling;
+    const startHealth = Number.isFinite(cfg.attributeStartHealth) ? cfg.attributeStartHealth : 400;
+    const startArmor = Number.isFinite(cfg.attributeStartArmor) ? cfg.attributeStartArmor : 0;
+    const startPower = Number.isFinite(cfg.attributeStartPower) ? cfg.attributeStartPower : 0;
+    const startCrit = Number.isFinite(cfg.attributeStartCrit) ? cfg.attributeStartCrit : 5;
     const attrs = effectiveAttributes(p, settings);
-    const cards = getPlayerCards(p, cardMode);
+    const h = Number.isFinite(attrs.health) ? attrs.health : startHealth;
+    const a = Number.isFinite(attrs.armor) ? attrs.armor : startArmor;
+    const pw = Number.isFinite(attrs.power) ? attrs.power : startPower;
+    const cr = Number.isFinite(attrs.crit) ? attrs.crit : startCrit;
     return {
       id: p.id,
       name: p.name,
       color: p.color,
-      hp: attrs?.health ?? 100,
-      maxHp: attrs?.health ?? 100,
-      power: attrs?.power ?? 0,
-      armor: attrs?.armor ?? 0,
-      crit: attrs?.crit ?? 0,
+      hp: Math.max(1, h),
+      maxHp: Math.max(1, h),
+      power: Math.max(0, pw),
+      armor: Math.max(0, a),
+      crit: Math.max(0, cr),
       trinkets: [],
       bonusHealth: 0,
       bonusArmor: 0,
       bonusPower: 0,
-      cards,
+      cards: cardMode ? getPlayerCards(p) : [],
     };
   });
-  const playerStats = runPlayers.map(rp => ({
-    playerId: rp.id,
-    kills: 0,
-    damageDealt: 0,
-    rewards: [],
-    trinkets: [],
-  }));
   return {
     round: 0,
-    playerIds: runPlayers.map(p => p.id),
+    playerIds: players.map(p => p.id),
     runPlayers,
     trinkets: [],
     pool: [...STARTER_POOL],
@@ -86,15 +88,21 @@ export function startRun(players: Player[], settings: Settings, cardMode: boolea
       xpGained: 0,
       trinketsCollected: [],
     },
-    playerStats,
+    playerStats: players.map(p => ({
+      playerId: p.id,
+      kills: 0,
+      damageDealt: 0,
+      rewards: [],
+      trinkets: [],
+    })),
     phase: 'setup',
-    cardMode,
     battle: null,
     pendingChoice: null,
     choicePlayerIdx: 0,
-    playerChoices: runPlayers.map(() => null),
+    playerChoices: players.map(() => null),
     lastUnlockedTrinket: null,
     bossVictory: null,
+    cardMode,
     log: [],
   };
 }
