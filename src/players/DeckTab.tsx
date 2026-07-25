@@ -126,11 +126,14 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
     ownedLeveled.get(lvl)!.push(x);
   }
 
-  // Available cards filtered by class and level
+  // Available cards filtered by class and level. cardsForClass already
+  // includes 'any'-class cards, so we must not append them again or the
+  // available list ends up with duplicate entries sharing React keys.
   const ownedIds = new Set(cards.map(c => c.cardId));
-  const classCards = cls ? cardsForClass(cls, 'competitive') : [];
-  const classAvailable = classCards.filter(c => !ownedIds.has(c.id));
-  const allAvailable = [...classAvailable, ...CARD_DEFS.filter(c => c.class === 'any' && !ownedIds.has(c.id))];
+  const classCards = cls
+    ? cardsForClass(cls, 'competitive')
+    : CARD_DEFS.filter(c => (c.mode === 'competitive' || c.mode === 'both') && c.class === 'any');
+  const allAvailable = classCards.filter(c => !ownedIds.has(c.id));
   const sortedAvailable = allAvailable.sort((a, b) => (a.levelRequired ?? 1) - (b.levelRequired ?? 1));
   const { starter: availStarter, leveled: availLeveled } = splitStarterAndLeveled(sortedAvailable);
 
@@ -175,8 +178,10 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
         })}
       </div>
 
-      {/* Owned deck — split by starter and levels */}
-      <div className="card" style={{ marginBottom: 12 }}>
+      {/* Owned deck — split by starter and levels. Keyed by cls so the
+          whole grid remounts when the player swaps classes, preventing
+          stale tiles from lingering across the deck switch. */}
+      <div className="card" key={`owned-${cls}`} style={{ marginBottom: 12 }}>
         <div className="row between" style={{ marginBottom: 8 }}>
           <h3 style={{ margin: 0 }}>Your Deck</h3>
           <span className="muted small">{cards.length} cards · Class: {cls || 'None'} · Level {playerLevel}</span>
@@ -215,8 +220,9 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
         ))}
       </div>
 
-      {/* Available cards — split by starter and levels */}
-      <div className="card">
+      {/* Available cards — split by starter and levels. Keyed by cls for the
+          same remount-on-swap reason as the owned deck above. */}
+      <div className="card" key={`avail-${cls}`}>
         <h3 style={{ marginBottom: 8 }}>Available Cards</h3>
         <div className="muted small" style={{ marginBottom: 8 }}>Level {playerLevel} · Add cards to your deck</div>
 
