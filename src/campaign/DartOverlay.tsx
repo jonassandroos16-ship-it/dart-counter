@@ -221,6 +221,11 @@ export function DartOverlay({ state, onContinue, onEndVisit, settings, enemyIcon
                     🛡️ Shield blocked {s.shielded}
                   </span>
                 )}
+                {s.reduced && s.reduced > 0 && (
+                  <span className="bo-step-calc" style={{ fontSize: 9, whiteSpace: 'nowrap', color: '#22c55e', fontWeight: 700 }}>
+                    🛡️ −{s.reduced} (Party Shield)
+                  </span>
+                )}
                 <span className="bo-step-dmg">{s.damage > 0 ? `-${s.damage}` : '0'}</span>
               </div>
             );

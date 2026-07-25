@@ -77,6 +77,8 @@ export {
   prepareEnemyTurn,
   applyNextEnemyAttack,
   finishEnemyTurn,
+  totalPartyShield,
+  partyDamageReductionMultiplier,
 } from './engine/enemyAi';
 
 export {

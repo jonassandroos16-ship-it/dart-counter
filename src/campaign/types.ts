@@ -96,7 +96,7 @@ export interface ActiveEnemy {
 
 export interface PlayerBuff {
   id: string;
-  kind: 'power' | 'crit' | 'crit_guarantee' | 'crit_multiplier' | 'shield' | string;
+  kind: 'power' | 'crit' | 'crit_guarantee' | 'crit_multiplier' | 'shield' | 'damage_reduction' | string;
   amount: number;
   turnsLeft: number;
   source?: string;
@@ -144,6 +144,7 @@ export interface EnemyAttackStep {
   weakenAmount?: number;
   distractAmount?: number;
   shielded?: number;
+  reduced?: number;
 }
 
 export interface VisitLogEntry {

@@ -56,10 +56,17 @@ export function applyCardEffect(params: CardEffectParams): CardPlayState {
     const buffId = `regen_${Date.now()}`;
     const turns = dur ?? 3;
     setBattleState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'regen' as const, amount: mag, turnsLeft: turns, source: throwerId }] })) } : prev);
-  } else if (effect === 'party_shield_flat' || effect === 'party_shield') {
+  } else if (effect === 'party_shield_flat') {
     const buffId = `shield_${Date.now()}`;
     const turns = dur ?? 2;
     setBattleState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'shield' as const, amount: mag, turnsLeft: turns, source: throwerId }] })) } : prev);
+  } else if (effect === 'party_shield') {
+    // Percentage damage reduction (e.g. "50% less damage"). Distinct from the
+    // flat-absorption `shield` buff: this multiplies incoming enemy damage
+    // and is not consumed per hit — it lasts for the buff duration.
+    const buffId = `dmgred_${Date.now()}`;
+    const turns = dur ?? 2;
+    setBattleState(prev => prev ? { ...prev, players: prev.players.map(p => ({ ...p, buffs: [...p.buffs, { id: buffId, kind: 'damage_reduction' as const, amount: mag, turnsLeft: turns, source: throwerId }] })) } : prev);
   } else if (effect === 'enemy_debuff') {
     // Weaken: reduces enemy outgoing damage by mag% for 2 turns.
     const weakenFrac = mag / 100;

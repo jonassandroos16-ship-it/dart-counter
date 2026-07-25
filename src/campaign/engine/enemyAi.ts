@@ -74,6 +74,15 @@ export function totalPartyShield(state: CampaignBattleState): number {
   );
 }
 
+// Party-wide incoming damage reduction from `damage_reduction` buffs (e.g. the
+// Party Shield card "50% less damage"). Each buff's amount is a percentage
+// (0..100). Reductions stack multiplicatively and apply to every enemy hit;
+// the buff is NOT consumed per hit — it lasts for its full duration.
+export function partyDamageReductionMultiplier(state: CampaignBattleState): number {
+  const percents = state.players.flatMap(p => p.buffs.filter(b => b.kind === 'damage_reduction').map(b => b.amount));
+  return percents.reduce((mult, pct) => mult * (1 - Math.min(100, Math.max(0, pct)) / 100), 1);
+}
+
 // Build the list of enemy attack steps for the upcoming enemy phase. Each
 // alive (and non-frozen) enemy throws 3 darts; each dart is one step so the
 // UI can animate them one at a time. Frozen enemies skip their turn and
@@ -85,6 +94,7 @@ export function prepareEnemyTurn(state: CampaignBattleState, rng: () => number =
   const steps: EnemyAttackStep[] = [];
   let partyHp = state.partyHp;
   let shieldPool = totalPartyShield(state);
+  const damageReductionMult = partyDamageReductionMultiplier(state);
   const frozenEnemiesThisRound: { id: string; name: string; frozenTurns: number }[] = [];
   const trinkets = state.trinkets ?? [];
   const enemies = state.enemies.map(e => ({ ...e }));
@@ -109,6 +119,13 @@ export function prepareEnemyTurn(state: CampaignBattleState, rng: () => number =
       if (trinkets.includes('trk_phantom_step') && rawDmg > 0 && Math.random() < 0.12) rawDmg = 0;
       // Trinket: Adamant — ignore the first enemy hit each round.
       if (!adamantUsed && rawDmg > 0) { rawDmg = 0; adamantUsed = true; }
+      // Percentage damage reduction (e.g. Party Shield "50% less damage").
+      let reduced = 0;
+      if (rawDmg > 0 && damageReductionMult < 1) {
+        const after = Math.round(rawDmg * damageReductionMult);
+        reduced = rawDmg - after;
+        rawDmg = after;
+      }
       // Consume the party shield pool before touching HP.
       let shielded = 0;
       let dmg = rawDmg;
@@ -127,6 +144,7 @@ export function prepareEnemyTurn(state: CampaignBattleState, rng: () => number =
         weakenAmount: weakenAmount > 0 ? weakenAmount : undefined,
         distractAmount: distractAmount > 0 ? distractAmount : undefined,
         shielded: shielded > 0 ? shielded : undefined,
+        reduced: reduced > 0 ? reduced : undefined,
       });
     }
   }
