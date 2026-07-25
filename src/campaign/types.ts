@@ -186,6 +186,7 @@ export interface CampaignBattleState {
   passiveBonus?: import('./engine/classes').PartyPassiveBonus;
   phantomDarts?: number;
   powerUpCharge?: number;
+  trinkets?: string[];
 }
 
 export interface CampaignProgress {

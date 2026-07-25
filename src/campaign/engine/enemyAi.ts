@@ -10,10 +10,12 @@ import { neighborsOf } from './shields';
 const DARTBOARD_ORDER = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
 
 // Effective accuracy/precision for an enemy, applying the distract debuff (clamped to >= 0).
-export function effectiveAccuracy(enemy: ActiveEnemy): number {
-  return enemy.distractedTurns > 0
+export function effectiveAccuracy(enemy: ActiveEnemy, trinkets?: string[]): number {
+  let acc = enemy.distractedTurns > 0
     ? Math.max(0, enemy.accuracy - enemy.distractAmount)
     : enemy.accuracy;
+  if (trinkets?.includes('trk_quick_reflex')) acc = Math.max(0, acc - acc * 0.1);
+  return acc;
 }
 export function effectivePrecision(enemy: ActiveEnemy): number {
   return enemy.distractedTurns > 0
@@ -26,10 +28,10 @@ export function effectiveWeakenMultiplier(enemy: ActiveEnemy): number {
   return enemy.weakenedTurns > 0 ? Math.max(0, 1 - enemy.weakenAmount) : 1;
 }
 
-export function simulateEnemyDart(enemy: ActiveEnemy, rng: () => number): CampaignDart {
+export function simulateEnemyDart(enemy: ActiveEnemy, rng: () => number, trinkets?: string[]): CampaignDart {
   const intendedBase = 20;
   const intendedMult = 3;
-  const hit = rng() < effectiveAccuracy(enemy);
+  const hit = rng() < effectiveAccuracy(enemy, trinkets);
   let base = intendedBase;
   let mult = intendedMult;
   if (!hit) {
@@ -84,7 +86,9 @@ export function prepareEnemyTurn(state: CampaignBattleState, rng: () => number =
   let partyHp = state.partyHp;
   let shieldPool = totalPartyShield(state);
   const frozenEnemiesThisRound: { id: string; name: string; frozenTurns: number }[] = [];
+  const trinkets = state.trinkets ?? [];
   const enemies = state.enemies.map(e => ({ ...e }));
+  let adamantUsed = !trinkets.includes('trk_adamant');
   for (const enemy of enemies) {
     if (enemy.defeated) continue;
     if (enemy.frozenTurns > 0) {
@@ -96,9 +100,15 @@ export function prepareEnemyTurn(state: CampaignBattleState, rng: () => number =
     const weakenAmount = enemy.weakenedTurns > 0 ? enemy.weakenAmount : 0;
     const distractAmount = enemy.distractedTurns > 0 ? enemy.distractAmount : 0;
     for (let i = 0; i < 3; i++) {
-      const dart = simulateEnemyDart(enemy, rng);
+      const dart = simulateEnemyDart(enemy, rng, trinkets);
       const baseDmg = Math.max(0, dart.value);
-      const rawDmg = baseDmg > 0 ? Math.max(0, Math.round(baseDmg * weakenMult)) : 0;
+      let rawDmg = baseDmg > 0 ? Math.max(0, Math.round(baseDmg * weakenMult)) : 0;
+      // Trinket: Bulwark — reduce every incoming hit by 5.
+      if (trinkets.includes('trk_bulwark') && rawDmg > 0) rawDmg = Math.max(0, rawDmg - 5);
+      // Trinket: Phantom Step — 12% chance to dodge an enemy dart.
+      if (trinkets.includes('trk_phantom_step') && rawDmg > 0 && Math.random() < 0.12) rawDmg = 0;
+      // Trinket: Adamant — ignore the first enemy hit each round.
+      if (!adamantUsed && rawDmg > 0) { rawDmg = 0; adamantUsed = true; }
       // Consume the party shield pool before touching HP.
       let shielded = 0;
       let dmg = rawDmg;

@@ -42,6 +42,7 @@ import { isMiniBossRound, isBossRound, xpForBattleWin, xpForKill } from './engin
 import { scaledEnemyDb, levelForRound } from './roundLogic';
 import { ENEMY_DATABASE } from '../campaign/enemyDatabase';
 import { generateChoices } from './choices';
+import { xpMultiplier, shouldPhoenixRevive, applyPhoenixRevive } from './trinketEffects';
 
 // ── Run initialization ────────────────────────────────────────────────
 
@@ -115,15 +116,30 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
   const level = levelForRound(round, playerCount);
   const pseudoPlayers: Player[] = run.runPlayers.map(rp => {
     const orig = players.find(p => p.id === rp.id) || ({} as Player);
+    let hp = rp.hp;
+    let maxHp = rp.maxHp;
+    let armor = rp.armor;
+    let power = rp.power;
+    let crit = rp.crit;
+    for (const tid of rp.trinkets) {
+      if (tid === 'trk_vitality') { hp += 60; maxHp += 60; }
+      else if (tid === 'trk_giants_belt') { const add = Math.round(rp.maxHp * 0.5); hp += add; maxHp += add; }
+      else if (tid === 'trk_sharp_tip') { power += 5; }
+      else if (tid === 'trk_berserker' && rp.hp < rp.maxHp * 0.3) { power += 15; }
+      else if (tid === 'trk_thick_hide') { armor += 8; }
+      else if (tid === 'trk_eagle_eye') { crit += 15; }
+    }
     return {
       ...orig,
       id: rp.id,
       name: rp.name,
       color: rp.color,
-      attributes: { health: rp.hp, armor: rp.armor, power: rp.power, crit: rp.crit, pointsAvailable: 0 },
+      attributes: { health: hp, armor, power, crit, pointsAvailable: 0 },
     } as Player;
   });
+  const allTrinkets = run.runPlayers.flatMap(rp => rp.trinkets);
   const battle = startBattle(level, pseudoPlayers, settings, scaledEnemyDb(round, playerCount), 'dartlite', run.cardMode);
+  battle.trinkets = allTrinkets;
   for (const rp of run.runPlayers) {
     if (rp.trinkets.includes('trk_overcharge')) {
       const idx = battle.players.findIndex(p => p.id === rp.id);
@@ -141,10 +157,11 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
   if (!run.battle) return run;
   const battle = run.battle;
   if (won) {
-    const killXp = battle.enemies
+    const soulMult = xpMultiplier(run);
+    const killXp = Math.round(battle.enemies
       .filter(e => e.defeated)
-      .reduce((sum, e) => sum + xpForKill(ENEMY_DATABASE[e.defId]?.difficulty ?? 'Easy'), 0);
-    const xp = xpForBattleWin(run.round) + killXp;
+      .reduce((sum, e) => sum + xpForKill(ENEMY_DATABASE[e.defId]?.difficulty ?? 'Easy'), 0) * soulMult);
+    const xp = Math.round((xpForBattleWin(run.round) + killXp) * soulMult);
     let miniBosses = run.stats.miniBossesDefeated;
     let bosses = run.stats.bossesDefeated;
     let unlocked: import('./trinkets').TrinketId | null = null;
@@ -202,6 +219,11 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
       return { ...ps, kills: ps.kills + (bp.kills ?? 0), damageDealt: ps.damageDealt + (bp.damageDealt ?? 0) };
     });
     return { ...run, runPlayers, pool: newPool, stats, playerStats, phase: 'choice', battle: null, pendingChoice: generateChoices({ ...run, runPlayers, pool: newPool, stats, playerStats }), choicePlayerIdx: 0, playerChoices: run.playerIds.map(() => null), lastUnlockedTrinket: unlocked, bossVictory: null, log };
+  }
+  if (shouldPhoenixRevive(run)) {
+    const revived = applyPhoenixRevive(run);
+    const log = [...run.log, `Phoenix Heart revived the party!`];
+    return { ...revived, phase: 'choice', battle: null, pendingChoice: null, bossVictory: null, log };
   }
   return { ...run, phase: 'gameover', battle: null, pendingChoice: null, bossVictory: null };
 }

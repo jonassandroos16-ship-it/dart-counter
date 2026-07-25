@@ -226,12 +226,13 @@ function makeDartFromBase(base: number, mult: number, labelOverride?: string, _i
   return { value, label, base, mult, isDouble: mult === 2, isBull: false };
 }
 
-function computeChargeGained(dart: CampaignDart, cfg?: Settings['powerUpScaling']): number {
+function computeChargeGained(dart: CampaignDart, cfg?: Settings['powerUpScaling'], trinkets?: string[]): number {
   if (!cfg) return 0;
   let charge = dart.value * (cfg.chargePerScorePoint ?? 0);
   if (dart.isDouble && !dart.isBull && cfg.chargePerDouble) charge += cfg.chargePerDouble;
   if (dart.mult === 3 && cfg.chargePerTriple) charge += cfg.chargePerTriple;
   if (dart.isBull && cfg.chargePerBull) charge += cfg.chargePerBull;
+  if (trinkets?.includes('trk_lucky_penny')) charge *= 1.3;
   return charge;
 }
 
@@ -245,9 +246,10 @@ export function resolveDart(
   const thrower = state.players[state.playerTurnIdx];
   if (!t || t.defeated) {
     const step: ResolvedDart = { dart, damage: 0, kind: 'miss', enemyId: t?.id ?? '', enemyName: t?.name ?? '', hpAfter: t?.hp ?? 0 };
-    return { resolvedDart: step, newEnemies: state.enemies, newPlayers: state.players, chargeGained: computeChargeGained(dart, cfg) };
+    return { resolvedDart: step, newEnemies: state.enemies, newPlayers: state.players, chargeGained: computeChargeGained(dart, cfg, state.trinkets) };
   }
 
+  const trinkets = state.trinkets ?? [];
   const powerMax = Number.isFinite(cfg?.powerMax) ? (cfg?.powerMax as number) : Number.MAX_SAFE_INTEGER;
   const basePower = thrower ? Math.min(powerMax, thrower.power + thrower.buffs.filter(b => b.kind === 'power').reduce((s, b) => s + b.amount, 0)) : 0;
   const power = basePower;
@@ -279,7 +281,7 @@ export function resolveDart(
       const defeatedA = newHpA <= 0;
       const finalEnemiesA = newEnemies.map((e, i) => i === state.targetIdx ? { ...e, hp: newHpA, defeated: defeatedA } : e);
       const stepA: ResolvedDart = { dart, damage: postArmorA, kind: defeatedA ? 'defeated' : 'damage', enemyId: t.id, enemyName: t.name, hpAfter: newHpA, attackerPower: power, targetArmor: armorA, vulnerable: t.vulnerableTurns > 0 };
-      return { resolvedDart: stepA, newEnemies: finalEnemiesA, newPlayers: state.players, chargeGained: computeChargeGained(dart, cfg) };
+      return { resolvedDart: stepA, newEnemies: finalEnemiesA, newPlayers: state.players, chargeGained: computeChargeGained(dart, cfg, trinkets) };
     }
     if (!dartMatchesShield(dart, shield)) {
       const step: ResolvedDart = { dart, damage: 0, kind: 'shield_break', shieldTarget: describeShield(shield), enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0 };
@@ -308,17 +310,43 @@ export function resolveDart(
   const armorMax2 = Number.isFinite(cfg?.armorMax) ? (cfg?.armorMax as number) : Number.MAX_SAFE_INTEGER;
   const armor = Math.min(armorMax2, t.armor);
   const postArmor = Math.max(1, Math.round(rawDmg * (1 - armor / 100)));
-  const surgeDmg = isCrit ? Math.round(postArmor * critMult) : postArmor;
+  let surgeDmg = isCrit ? Math.round(postArmor * critMult) : postArmor;
+
+  // Trinket: Double Tap — 20% chance to deal double damage.
+  if (trinkets.includes('trk_double_tap') && Math.random() < 0.2) surgeDmg *= 2;
+  // Trinket: Executioner — +50% damage to enemies below 25% HP.
+  if (trinkets.includes('trk_executioner') && t.hp < t.maxHp * 0.25) surgeDmg = Math.round(surgeDmg * 1.5);
+
   const vulnerable = t.vulnerableTurns > 0;
   const finalDmg = vulnerable ? Math.round(surgeDmg * 1.5) : surgeDmg;
 
   const newHp = Math.max(0, t.hp - finalDmg);
   const defeated = newHp <= 0;
-  const newEnemies = state.enemies.map((e, i) =>
+  let newEnemies = state.enemies.map((e, i) =>
     i === state.targetIdx ? { ...e, hp: newHp, defeated } : e
   );
 
-  const chargeGained = computeChargeGained(dart, cfg);
+  // Trinket: Chain Lightning — hits splash 25% damage to another enemy.
+  if (trinkets.includes('trk_chain_lightning') && finalDmg > 0) {
+    const splash = Math.max(1, Math.round(finalDmg * 0.25));
+    const splashTarget = newEnemies.find((e, i) => i !== state.targetIdx && !e.defeated && e.hp > 0);
+    if (splashTarget) {
+      const splashHp = Math.max(0, splashTarget.hp - splash);
+      const splashDefeated = splashHp <= 0;
+      newEnemies = newEnemies.map((e, i) =>
+        i === newEnemies.indexOf(splashTarget) ? { ...e, hp: splashHp, defeated: splashDefeated } : e
+      );
+    }
+  }
+
+  // Trinket: Frozen Core — 25% chance to freeze the target for 1 turn.
+  if (trinkets.includes('trk_frozen_core') && !defeated && Math.random() < 0.25) {
+    newEnemies = newEnemies.map((e, i) =>
+      i === state.targetIdx ? { ...e, frozenTurns: Math.max(e.frozenTurns, 1) } : e
+    );
+  }
+
+  const chargeGained = computeChargeGained(dart, cfg, trinkets);
 
   // Consume crit_guarantee buff: decrement amount, remove if it reaches 0.
   let newPlayers = state.players;
@@ -331,6 +359,20 @@ export function resolveDart(
         : p.buffs.filter(b => b !== critGuarantee);
       return { ...p, buffs };
     });
+  }
+
+  // Trinket: Vampiric — heal 3 HP for every dart that hits.
+  if (trinkets.includes('trk_vampiric') && dart.value > 0) {
+    newPlayers = newPlayers.map((p, i) =>
+      i === state.playerTurnIdx ? { ...p, hp: p.hp + 3 } : p
+    );
+  }
+
+  // Trinket: Second Wind — heal 15 HP when you defeat an enemy.
+  if (trinkets.includes('trk_second_wind') && defeated) {
+    newPlayers = newPlayers.map((p, i) =>
+      i === state.playerTurnIdx ? { ...p, hp: p.hp + 15 } : p
+    );
   }
 
   const step: ResolvedDart = { dart, damage: finalDmg, kind: defeated ? 'defeated' : 'damage', enemyId: t.id, enemyName: t.name, hpAfter: newHp, attackerPower: power, targetArmor: armor, vulnerable, crit: isCrit, critMult: isCrit ? critMult : undefined };
