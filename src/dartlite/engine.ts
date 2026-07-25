@@ -129,12 +129,23 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
       else if (tid === 'trk_thick_hide') { armor += 8; }
       else if (tid === 'trk_eagle_eye') { crit += 15; }
     }
+    // Boss trinkets bake their maxHp boost permanently into rp.maxHp/rp.hp
+    // (see applyBossTrinketChoice). effectiveAttributes prefers
+    // classAttributes over attributes, so mirror the boosted stats into the
+    // active class entry — otherwise the boss trinket's maxHp boost is
+    // dropped when the battle engine reads party/player HP.
+    const cid = orig.coopProgress?.classId;
+    const boostedAttrs = { health: hp, armor, power, crit, pointsAvailable: 0 };
+    const classAttributes = cid && orig.classAttributes
+      ? { ...orig.classAttributes, [cid]: boostedAttrs }
+      : undefined;
     return {
       ...orig,
       id: rp.id,
       name: rp.name,
       color: rp.color,
-      attributes: { health: hp, armor, power, crit, pointsAvailable: 0 },
+      attributes: boostedAttrs,
+      classAttributes,
     } as Player;
   });
   const allTrinkets = run.runPlayers.flatMap(rp => rp.trinkets);
