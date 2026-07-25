@@ -64,8 +64,9 @@ export function useCardBattle(params: UseCardBattleParams): CardBattleApi {
     }
     setCardStates(next);
     setBonusSlots(0);
-    setNextTurnSlots({});
-    setNextTurnDraws({});
+    // Preserve pending next-turn slots/draws across round boundaries —
+    // wiping them here discards effects like Focus (extra_slot) that were
+    // earned in the previous round but apply to the next.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cardMode, battle?.visitNumber, battle?.levelId]);
 
@@ -77,20 +78,30 @@ export function useCardBattle(params: UseCardBattleParams): CardBattleApi {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cardMode, battle?.playerTurnIdx]);
 
-  // Start of each player's turn: draw cards if none drawn yet this turn
+  // Start of each player's turn: apply any pending extra slots from cards
+  // played last turn (e.g. Focus), and draw a fresh hand when the previous
+  // turn has ended (hand + used empty).
   useEffect(() => {
     if (!cardMode || !battle || !throwerId) return;
     const cs = cardStates[throwerId];
     if (!cs) return;
-    if (cs.hand.length > 0 || cs.used.length > 0) return;
     const extraDraw = nextTurnDraws[throwerId] ?? 0;
     const extraSlot = nextTurnSlots[throwerId] ?? 0;
-    const updated = startTurnWithExtraDraws(cs, extraDraw, extraSlot, (n) => {
-      setBonusSlots(b => b + n);
-    });
-    setCardStates(prev => ({ ...prev, [throwerId]: updated }));
-    if (extraDraw > 0) setNextTurnDraws(prev => { const n = { ...prev }; delete n[throwerId]; return n; });
-    if (extraSlot > 0) setNextTurnSlots(prev => { const n = { ...prev }; delete n[throwerId]; return n; });
+
+    // Extra slots apply at turn start regardless of hand state — they only
+    // affect maxPlays, not the hand itself.
+    if (extraSlot > 0) {
+      setBonusSlots(b => b + extraSlot);
+      setNextTurnSlots(prev => { const n = { ...prev }; delete n[throwerId]; return n; });
+    }
+
+    // Draw a fresh hand (and any extra draws) only when the previous turn
+    // was ended — i.e. hand and used are both empty.
+    if (cs.hand.length === 0 && cs.used.length === 0) {
+      const updated = startTurnWithExtraDraws(cs, extraDraw, 0, () => {});
+      setCardStates(prev => ({ ...prev, [throwerId]: updated }));
+      if (extraDraw > 0) setNextTurnDraws(prev => { const n = { ...prev }; delete n[throwerId]; return n; });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cardMode, throwerId, battle?.playerTurnIdx]);
 
