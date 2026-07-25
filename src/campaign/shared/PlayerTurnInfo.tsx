@@ -10,10 +10,9 @@ export interface PlayerTurnInfoProps {
   cardMode?: boolean;
   cardPlayState?: CardPlayState | null;
   maxPlays?: number;
-  cardsPlayed?: number;
 }
 
-export function PlayerTurnInfo({ state, enemyIcon, cardMode, cardPlayState, maxPlays, cardsPlayed }: PlayerTurnInfoProps) {
+export function PlayerTurnInfo({ state, enemyIcon, cardMode, cardPlayState, maxPlays }: PlayerTurnInfoProps) {
   const thrower = state.players[state.playerTurnIdx];
   if (!thrower) return null;
 
@@ -21,13 +20,17 @@ export function PlayerTurnInfo({ state, enemyIcon, cardMode, cardPlayState, maxP
   const target = state.enemies[state.targetIdx];
   const validTarget = target && !target.defeated ? target : aliveEnemies[0];
 
-  // In card mode, show a slot for every played card (damage + utility/spell).
-  // Damage cards map 1-to-1 with state.darts in order.
-  // Non-damage cards show the card name/icon without dart resolution data.
+  // In card mode, show a slot for every playable card slot up front (matching
+  // dart mode's 3 empty pills that fill as darts are entered). Damage cards map
+  // 1-to-1 with state.darts in order; non-damage cards show name/icon without
+  // dart resolution data. Empty slots render as `–`.
   if (cardMode && cardPlayState) {
     const usedCards = cardPlayState.used;
+    const totalSlots = typeof maxPlays === 'number' && maxPlays > 0 ? maxPlays : usedCards.length;
     let dartIdx = 0;
-    const slots = usedCards.map((pc, i) => {
+    const slots = Array.from({ length: totalSlots }).map((_, i) => {
+      const pc = usedCards[i];
+      if (!pc) return <div key={i} className="pc-slot">–</div>;
       const def = resolveCardDef(pc);
       const isDamage = def?.type === 'damage';
       if (isDamage) {
@@ -83,11 +86,6 @@ export function PlayerTurnInfo({ state, enemyIcon, cardMode, cardPlayState, maxP
         </div>
         <div className="muted small">
           <b style={{ color: 'var(--text)' }}>{thrower.name}</b> is playing · this visit: <b style={{ color: 'var(--text)' }}>{state.resolvedDarts.reduce((a, d) => a + d.damage, 0)} dmg</b>
-          {typeof maxPlays === 'number' && typeof cardsPlayed === 'number' && (
-            <span style={{ marginLeft: 8, color: '#c4b5fd', fontWeight: 700 }}>
-              🃏 {cardsPlayed}/{maxPlays} cards · {Math.max(0, maxPlays - cardsPlayed)} left
-            </span>
-          )}
           <span style={{ marginLeft: 8, color: '#fbbf24' }}>
             ⚡ Effective power: <b>{effectivePower(thrower)}</b>
             {state.passiveBonus && state.passiveBonus.power > 0 && (
@@ -138,9 +136,6 @@ export function PlayerTurnInfo({ state, enemyIcon, cardMode, cardPlayState, maxP
       </div>
       <div className="muted small">
         <b style={{ color: 'var(--text)' }}>{thrower.name}</b> is throwing · this visit: <b style={{ color: 'var(--text)' }}>{state.resolvedDarts.reduce((a, d) => a + d.damage, 0)} dmg</b>
-        <span style={{ marginLeft: 8, color: '#c4b5fd', fontWeight: 700 }}>
-          🎯 {state.darts.length}/3 darts · {Math.max(0, 3 - state.darts.length)} left
-        </span>
         <span style={{ marginLeft: 8, color: '#fbbf24' }}>
           ⚡ Effective power: <b>{effectivePower(thrower)}</b>
           {state.passiveBonus && state.passiveBonus.power > 0 && (
