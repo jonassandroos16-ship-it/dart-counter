@@ -22,21 +22,49 @@ function pickN<T>(arr: T[], n: number, rng: () => number = Math.random): T[] {
   return out;
 }
 
-// Round scaling: enemies get harder as rounds progress.
-export function enemyHpScale(round: number): number {
-  return Math.min(5.0, 1 + Math.max(0, round - 1) * 0.10);
-}
-export function enemyAccScale(round: number): number {
-  return Math.min(1.4, 1 + Math.max(0, round - 1) * 0.015);
-}
-export function enemyPrecScale(round: number): number {
-  return Math.min(1.4, 1 + Math.max(0, round - 1) * 0.015);
+// Solo scaling: a single player has roughly half the party's combined
+// damage and HP, so enemies tuned for 2 players become overwhelming after
+// the mini-boss. These factors scale enemy stats down for solo play and
+// gently back up as the party grows beyond 2.
+const SOLO_HP_FACTOR = 0.6;
+const SOLO_ACC_FACTOR = 0.85;
+const SOLO_PREC_FACTOR = 0.85;
+
+function partySizeFactor(playerCount: number): number {
+  if (playerCount <= 1) return SOLO_HP_FACTOR;
+  if (playerCount === 2) return 1.0;
+  // Beyond 2 players, scale up slightly so larger parties stay challenging.
+  return Math.min(1.4, 1.0 + (playerCount - 2) * 0.15);
 }
 
-export function scaledEnemyDb(round: number): typeof ENEMY_DATABASE {
-  const hpMult = enemyHpScale(round);
-  const accMult = enemyAccScale(round);
-  const precMult = enemyPrecScale(round);
+function partyAccFactor(playerCount: number): number {
+  if (playerCount <= 1) return SOLO_ACC_FACTOR;
+  return 1.0;
+}
+
+function partyPrecFactor(playerCount: number): number {
+  if (playerCount <= 1) return SOLO_PREC_FACTOR;
+  return 1.0;
+}
+
+// Round scaling: enemies get harder as rounds progress.
+export function enemyHpScale(round: number, playerCount: number = 2): number {
+  const base = Math.min(5.0, 1 + Math.max(0, round - 1) * 0.10);
+  return base * partySizeFactor(playerCount);
+}
+export function enemyAccScale(round: number, playerCount: number = 2): number {
+  const base = Math.min(1.4, 1 + Math.max(0, round - 1) * 0.015);
+  return base * partyAccFactor(playerCount);
+}
+export function enemyPrecScale(round: number, playerCount: number = 2): number {
+  const base = Math.min(1.4, 1 + Math.max(0, round - 1) * 0.015);
+  return base * partyPrecFactor(playerCount);
+}
+
+export function scaledEnemyDb(round: number, playerCount: number = 2): typeof ENEMY_DATABASE {
+  const hpMult = enemyHpScale(round, playerCount);
+  const accMult = enemyAccScale(round, playerCount);
+  const precMult = enemyPrecScale(round, playerCount);
   const db: typeof ENEMY_DATABASE = {};
   for (const [id, def] of Object.entries(ENEMY_DATABASE)) {
     db[id] = {
@@ -49,7 +77,7 @@ export function scaledEnemyDb(round: number): typeof ENEMY_DATABASE {
   return db;
 }
 
-export function levelForRound(round: number): CampaignLevel {
+export function levelForRound(round: number, playerCount: number = 2): CampaignLevel {
   if (isBossRound(round)) {
     const bossPool = round <= 10 ? ['warlord_malakar'] : round <= 20 ? ['ice_queen', 'warlord_malakar'] : BOSS_IDS;
     return { level_id: round, name: `Boss — Round ${round}`, is_boss: true, enemies: [pick(bossPool)] };
@@ -58,7 +86,10 @@ export function levelForRound(round: number): CampaignLevel {
     const miniPool = round <= 5 ? ['warlord_malakar'] : round <= 15 ? MINIBOSS_IDS : ['frost_knight', 'bloom_warden'];
     return { level_id: round, name: `Mini-Boss — Round ${round}`, is_boss: false, enemies: [pick(miniPool)] };
   }
-  const count = Math.min(3, 1 + Math.floor(round / 3));
+  // Solo players face fewer enemies per round so the fight length stays
+  // proportional to party damage output.
+  const maxCount = playerCount <= 1 ? 2 : 3;
+  const count = Math.min(maxCount, 1 + Math.floor(round / 3));
   const pool = round <= 4 ? EASY_IDS : round <= 9 ? [...EASY_IDS, ...HARD_IDS] : HARD_IDS;
   return { level_id: round, name: `Round ${round}`, is_boss: false, enemies: pickN(pool, count) };
 }
