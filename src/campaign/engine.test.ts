@@ -336,6 +336,42 @@ describe('campaign engine', () => {
     expect(remainingShield).toBe(Math.max(0, 40 - totalRaw));
   });
 
+  it('party shield (damage_reduction) cuts incoming enemy damage by a percentage and is not consumed', () => {
+    const lvl = getLevel(1)!;
+    let state = startBattle(lvl, makePlayers(1), settings);
+    state = setTarget(state, 0);
+    state = addDart(state, 20, 3, undefined, false, settings);
+    state = resolvePlayerVisit(state);
+    const hpBefore = state.partyHp;
+    // Grant a 50% party damage reduction (as the Party Shield card does).
+    state = {
+      ...state,
+      players: state.players.map(p => ({
+        ...p,
+        buffs: [...p.buffs, { id: 'dmgred_test', kind: 'damage_reduction' as const, amount: 50, turnsLeft: 2, source: p.id }],
+      })),
+      phase: 'enemy' as const,
+    };
+    const prepared = prepareEnemyTurn(state, () => 0.99);
+    // Every non-zero hit should report a reduced amount equal to 50% of raw.
+    const hitting = prepared.pendingEnemyAttacks.filter(s => s.damage + (s.shielded ?? 0) + (s.reduced ?? 0) > 0);
+    expect(hitting.length).toBeGreaterThan(0);
+    for (const s of hitting) {
+      const raw = s.damage + (s.shielded ?? 0) + (s.reduced ?? 0);
+      // reduced = raw - round(raw * 0.5), so allow ±1 for rounding.
+      expect(s.reduced ?? 0).toBeGreaterThanOrEqual(Math.floor(raw / 2) - 1);
+      expect(s.reduced ?? 0).toBeLessThanOrEqual(Math.ceil(raw / 2) + 1);
+    }
+    let applied = prepared;
+    while (applied.pendingEnemyAttacks.length) applied = applyNextEnemyAttack(applied);
+    // Damage taken = sum of (damage + shielded) across hits; reduction is applied per-hit.
+    const expectedTaken = prepared.pendingEnemyAttacks.reduce((a, s) => a + (s.damage + (s.shielded ?? 0)), 0);
+    expect(applied.partyHp).toBe(Math.max(0, hpBefore - expectedTaken));
+    // The damage_reduction buff must still be present (not consumed like a flat shield).
+    const stillHasReduction = applied.players.some(p => p.buffs.some(b => b.kind === 'damage_reduction' && b.amount === 50));
+    expect(stillHasReduction).toBe(true);
+  });
+
   it('coop power-ups: heal restores party HP and consumes charge', () => {
     const lvl = getLevel(1)!;
     const state = startBattle(lvl, makePlayers(1), settings);
