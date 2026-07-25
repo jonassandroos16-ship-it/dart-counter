@@ -303,6 +303,39 @@ describe('campaign engine', () => {
     expect(applied.outcome).toBe('defeat');
   });
 
+  it('party shield buff absorbs enemy damage before it reaches party HP', () => {
+    const lvl = getLevel(1)!;
+    let state = startBattle(lvl, makePlayers(1), settings);
+    state = setTarget(state, 0);
+    state = addDart(state, 20, 3, undefined, false, settings);
+    state = resolvePlayerVisit(state);
+    const hpBefore = state.partyHp;
+    // Grant a flat 40-damage party shield (as the Holy Shield card does).
+    state = {
+      ...state,
+      players: state.players.map(p => ({
+        ...p,
+        buffs: [...p.buffs, { id: 'shield_test', kind: 'shield' as const, amount: 40, turnsLeft: 2, source: p.id }],
+      })),
+      phase: 'enemy' as const,
+    };
+    const prepared = prepareEnemyTurn(state, () => 0.99);
+    // At least one step should report shielded damage.
+    expect(prepared.pendingEnemyAttacks.some(s => (s.shielded ?? 0) > 0)).toBe(true);
+    let applied = prepared;
+    while (applied.pendingEnemyAttacks.length) applied = applyNextEnemyAttack(applied);
+    // Party HP should not have dropped by the full unshielded amount.
+    const totalRaw = prepared.pendingEnemyAttacks.reduce((a, s) => a + s.damage + (s.shielded ?? 0), 0);
+    const totalShielded = prepared.pendingEnemyAttacks.reduce((a, s) => a + (s.shielded ?? 0), 0);
+    expect(totalShielded).toBe(Math.min(40, totalRaw));
+    expect(applied.partyHp).toBe(Math.max(0, hpBefore - (totalRaw - totalShielded)));
+    // Shield buffs should be fully consumed (40 absorbed) and removed.
+    const remainingShield = applied.players.reduce(
+      (sum, p) => sum + p.buffs.filter(b => b.kind === 'shield').reduce((s, b) => s + b.amount, 0), 0,
+    );
+    expect(remainingShield).toBe(Math.max(0, 40 - totalRaw));
+  });
+
   it('coop power-ups: heal restores party HP and consumes charge', () => {
     const lvl = getLevel(1)!;
     const state = startBattle(lvl, makePlayers(1), settings);
