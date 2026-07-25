@@ -60,6 +60,18 @@ export function makeDart(base: number, mult: number): CampaignDart {
   return { value, label, base, mult, isDouble: mult === 2, isBull: false };
 }
 
+// Aggregate the total remaining flat-absorption shield across all party
+// members. Shield buffs (kind 'shield') stack a flat damage pool that is
+// consumed before any enemy damage reaches party HP.
+export function totalPartyShield(state: CampaignBattleState): number {
+  return state.players.reduce(
+    (sum, p) => sum + p.buffs
+      .filter(b => b.kind === 'shield')
+      .reduce((s, b) => s + b.amount, 0),
+    0,
+  );
+}
+
 // Build the list of enemy attack steps for the upcoming enemy phase. Each
 // alive (and non-frozen) enemy throws 3 darts; each dart is one step so the
 // UI can animate them one at a time. Frozen enemies skip their turn and
@@ -70,6 +82,7 @@ export function prepareEnemyTurn(state: CampaignBattleState, rng: () => number =
   if (state.phase !== 'enemy') return state;
   const steps: EnemyAttackStep[] = [];
   let partyHp = state.partyHp;
+  let shieldPool = totalPartyShield(state);
   const frozenEnemiesThisRound: { id: string; name: string; frozenTurns: number }[] = [];
   const enemies = state.enemies.map(e => ({ ...e }));
   for (const enemy of enemies) {
@@ -85,7 +98,15 @@ export function prepareEnemyTurn(state: CampaignBattleState, rng: () => number =
     for (let i = 0; i < 3; i++) {
       const dart = simulateEnemyDart(enemy, rng);
       const baseDmg = Math.max(0, dart.value);
-      const dmg = baseDmg > 0 ? Math.max(0, Math.round(baseDmg * weakenMult)) : 0;
+      const rawDmg = baseDmg > 0 ? Math.max(0, Math.round(baseDmg * weakenMult)) : 0;
+      // Consume the party shield pool before touching HP.
+      let shielded = 0;
+      let dmg = rawDmg;
+      if (rawDmg > 0 && shieldPool > 0) {
+        shielded = Math.min(shieldPool, rawDmg);
+        shieldPool -= shielded;
+        dmg = rawDmg - shielded;
+      }
       partyHp = Math.max(0, partyHp - dmg);
       steps.push({
         enemyId: enemy.id,
@@ -95,6 +116,7 @@ export function prepareEnemyTurn(state: CampaignBattleState, rng: () => number =
         partyHpAfter: partyHp,
         weakenAmount: weakenAmount > 0 ? weakenAmount : undefined,
         distractAmount: distractAmount > 0 ? distractAmount : undefined,
+        shielded: shielded > 0 ? shielded : undefined,
       });
     }
   }
@@ -121,9 +143,26 @@ export function applyNextEnemyAttack(state: CampaignBattleState): CampaignBattle
   const [step, ...rest] = state.pendingEnemyAttacks;
   const log: VisitLogEntry[] = [...state.lastVisitLog, { kind: 'player_attack_step', step }];
   const partyHpLost = state.stats.partyHpLost + (step.damage > 0 ? step.damage : 0);
+  // Deduct the absorbed amount from party shield buffs, draining the
+  // earliest shields first so the remaining pool stays consistent.
+  let toDeduct = step.shielded ?? 0;
+  let players = state.players;
+  if (toDeduct > 0) {
+    players = state.players.map(p => {
+      if (toDeduct <= 0) return p;
+      const buffs = p.buffs.map(b => {
+        if (toDeduct <= 0 || b.kind !== 'shield' || b.amount <= 0) return b;
+        const take = Math.min(toDeduct, b.amount);
+        toDeduct -= take;
+        return { ...b, amount: b.amount - take };
+      }).filter(b => !(b.kind === 'shield' && b.amount <= 0));
+      return { ...p, buffs };
+    });
+  }
   const next: CampaignBattleState = {
     ...state,
     partyHp: step.partyHpAfter,
+    players,
     pendingEnemyAttacks: rest,
     appliedEnemyAttacks: [...state.appliedEnemyAttacks, step],
     lastVisitLog: log,
