@@ -44,6 +44,7 @@ import { scaledEnemyDb, levelForRound, rewardScale } from './roundLogic';
 import { ENEMY_DATABASE } from '../campaign/enemyDatabase';
 import { generateChoices } from './choices';
 import { xpMultiplier, shouldPhoenixRevive, applyPhoenixRevive } from './trinketEffects';
+import { computePartyPassiveBonus } from '../campaign/engine/classes';
 
 // ── Run initialization ────────────────────────────────────────────────
 
@@ -120,10 +121,18 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
   // attributes.health is set to maxHp so that partyMaxHpFor and toCoopPlayer
   // use the correct max HP — not the current HP — as the ceiling. The actual
   // current HP is applied to the battle players after startBattle returns.
+  // startBattle adds the party passive bonus to each battle player's hp/maxHp
+  // (applyPassiveToPlayer) and to partyMaxHp. We then override bp.hp with
+  // playerCurrentHp below — so playerCurrentHp must include the passive health
+  // bonus too, otherwise the party starts below full and resolveBattle treats
+  // the missing passive HP as damage already taken. We add the passive to hp
+  // only (not to maxHp/attributes) so startBattle adds it exactly once to
+  // partyMaxHp and each bp.maxHp, keeping partyHp == partyMaxHp at round start.
+  const passiveBonus = computePartyPassiveBonus(players);
   const playerCurrentHp: Record<string, number> = {};
   const pseudoPlayers: Player[] = run.runPlayers.map(rp => {
     const orig = players.find(p => p.id === rp.id) || ({} as Player);
-    let hp = rp.hp;
+    let hp = rp.hp + passiveBonus.health;
     let maxHp = rp.maxHp;
     let armor = rp.armor;
     let power = rp.power;
@@ -137,7 +146,7 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
       else if (tid === 'trk_thick_hide') { armor += Math.round(8 * scale); }
       else if (tid === 'trk_eagle_eye') { crit += Math.round(15 * scale); }
     }
-    playerCurrentHp[rp.id] = Math.max(1, Math.min(maxHp, hp));
+    playerCurrentHp[rp.id] = Math.max(1, Math.min(maxHp + passiveBonus.health, hp));
     // Boss trinkets bake their maxHp boost permanently into rp.maxHp/rp.hp
     // (see applyBossTrinketChoice). effectiveAttributes prefers
     // classAttributes over attributes, so mirror the boosted stats into the
