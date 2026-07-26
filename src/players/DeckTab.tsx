@@ -135,7 +135,9 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
   const classCards = cls
     ? cardsForClass(cls, 'competitive')
     : CARD_DEFS.filter(c => (c.mode === 'competitive' || c.mode === 'both') && c.class === 'any');
-  const allAvailable = classCards.filter(c => !ownedIds.has(c.id));
+  // Campaign reward cards are managed in their own section below; exclude
+  // them from the general available list so they don't leak into Starter.
+  const allAvailable = classCards.filter(c => !ownedIds.has(c.id) && !c.campaignReward);
   const sortedAvailable = allAvailable.sort((a, b) => (a.levelRequired ?? 1) - (b.levelRequired ?? 1));
   const { starter: availStarter, leveled: availLeveled } = splitStarterAndLeveled(sortedAvailable);
 
@@ -150,11 +152,12 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
       .map(l => ({ chapter: ch, level: l, def: getCard(l.reward_card!)! }))
       .filter(x => x.def),
   );
-  const ownedCampaignIds = new Set(cards.map(c => c.cardId));
-  const campaignOwned = campaignRewardCards.filter(x => ownedCampaignIds.has(x.def.id));
-  const campaignLocked = campaignRewardCards.filter(x => !ownedCampaignIds.has(x.def.id));
   const isCampaignCardUnlocked = (chapterId: string, levelId: number) =>
     (campaignProg.chapters?.[chapterId] ?? 0) >= levelId;
+  // A campaign card is "unlocked" when its mission is cleared, regardless
+  // of whether it has been added to the deck.
+  const campaignOwned = campaignRewardCards.filter(x => isCampaignCardUnlocked(x.chapter.id, x.level.level_id));
+  const campaignLocked = campaignRewardCards.filter(x => !isCampaignCardUnlocked(x.chapter.id, x.level.level_id));
 
   const gridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 };
   const sectionStyle: React.CSSProperties = { marginTop: 12 };
@@ -293,15 +296,12 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
               <div style={{ marginTop: 8 }}>
                 <div className="muted small" style={{ fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em', fontSize: 10 }}>Unlocked ({campaignOwned.length})</div>
                 <div style={gridStyle}>
-                  {campaignOwned.map(({ def }) => (
-                    <CardTile
-                      key={def.id}
-                      pc={cards.find(c => c.cardId === def.id)!}
-                      def={def}
-                      cls={cls}
-                      onClick={() => showCardDetail(cards.find(c => c.cardId === def.id)!)}
-                    />
-                  ))}
+                  {campaignOwned.map(({ def }) => {
+                    const pc = cards.find(c => c.cardId === def.id);
+                    return pc
+                      ? <CardTile key={def.id} pc={pc} def={def} cls={cls} onClick={() => showCardDetail(pc)} />
+                      : <AvailableCardTile key={def.id} def={def} cls={cls} onAdd={() => addCardToPlayer(def.id)} onClick={() => showAvailableCardDetail(def)} />;
+                  })}
                 </div>
               </div>
             )}
