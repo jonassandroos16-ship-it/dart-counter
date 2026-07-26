@@ -47,7 +47,7 @@ export function ClassTab({ player, setPlayers, toast, settings }: {
     setPlayers((prev: Player[]) => prev.map(p => {
       if (p.id !== player.id) return p;
       const cur = p.coopProgress || defaultCoopProgress();
-      const next = equipPassiveForPlayer(cur, passiveId);
+      const next = equipPassiveForPlayer(cur, passiveId, playerLevel);
       return { ...p, coopProgress: next };
     }));
     const def = getCoopPassive(passiveId);

@@ -203,11 +203,13 @@ export function selectClassForPlayer(prog: PlayerCoopProgress, classId: CoopClas
 }
 
 // Equip a passive for the player. Replaces any currently-equipped passive of
-// the same class (only one per class at a time).
-export function equipPassiveForPlayer(prog: PlayerCoopProgress, passiveId: CoopPassiveId): PlayerCoopProgress {
+// the same class (only one per class at a time). `playerLevel` determines which
+// passives are unlocked; pass it so higher tiers can be equipped, not just the
+// default level-1 set.
+export function equipPassiveForPlayer(prog: PlayerCoopProgress, passiveId: CoopPassiveId, playerLevel: number = 1): PlayerCoopProgress {
   const def = getCoopPassive(passiveId);
   if (!def || !prog.classId || def.classId !== prog.classId) return prog;
-  const unlocked = unlockedPassivesForPlayer(prog);
+  const unlocked = unlockedPassivesForPlayer(prog, playerLevel);
   if (!unlocked.includes(passiveId)) return prog;
   // Remove any currently-equipped passives of the same class, then add this one.
   const other = (prog.equippedPassives || []).filter(id => {
