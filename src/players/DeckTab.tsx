@@ -283,7 +283,7 @@ export function DeckTab({ player, setPlayers, toast, settings }: {
           Shown in its own card below the level rewards. */}
       <div className="card" key={`coop-campaign-${cls}`} style={{ marginTop: 12 }}>
         <h3 style={{ marginBottom: 8 }}>Coop Campaign Cards</h3>
-        <div className="muted small" style={{ marginBottom: 8 }}>Themed cards earned by clearing Coop campaign missions. They are added to every class deck automatically on victory.</div>
+        <div className="muted small" style={{ marginBottom: 8 }}>Themed cards earned by clearing Coop campaign missions. Unlock them by beating the mission, then add them to your deck manually.</div>
 
         {campaignRewardCards.length === 0 ? (
           <div className="muted small" style={{ padding: 20, textAlign: 'center' }}>No campaign cards defined.</div>

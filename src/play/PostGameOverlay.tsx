@@ -149,7 +149,7 @@ export function PostGameOverlay({
                 <div className="muted small" style={{ marginTop: 2 }}>{rewardCard.desc}</div>
               </div>
             </div>
-            <div className="muted small" style={{ marginTop: 6, fontStyle: 'italic' }}>Added to every party member's deck.</div>
+            <div className="muted small" style={{ marginTop: 6, fontStyle: 'italic' }}>Unlocked for every party member — add it to your deck from the Cards tab.</div>
           </div>
         )}
 
