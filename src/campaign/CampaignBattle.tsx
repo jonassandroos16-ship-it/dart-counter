@@ -253,6 +253,7 @@ export function CampaignBattle({ levelId, chapterId, progress, settings, players
             onUndo={onUndo}
             onEndVisit={onEnter}
             visitNumber={state.visitNumber}
+            extraPower={thrower?.power ?? 0}
           />
         ) : (
           <DartKeypad
