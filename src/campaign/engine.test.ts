@@ -310,7 +310,6 @@ describe('campaign engine', () => {
     state = addDart(state, 20, 3, undefined, false, settings);
     state = resolvePlayerVisit(state);
     const hpBefore = state.partyHp;
-    // Grant a flat 40-damage party shield (as the Holy Shield card does).
     state = {
       ...state,
       players: state.players.map(p => ({
@@ -320,16 +319,13 @@ describe('campaign engine', () => {
       phase: 'enemy' as const,
     };
     const prepared = prepareEnemyTurn(state, () => 0.99);
-    // At least one step should report shielded damage.
     expect(prepared.pendingEnemyAttacks.some(s => (s.shielded ?? 0) > 0)).toBe(true);
     let applied = prepared;
     while (applied.pendingEnemyAttacks.length) applied = applyNextEnemyAttack(applied);
-    // Party HP should not have dropped by the full unshielded amount.
     const totalRaw = prepared.pendingEnemyAttacks.reduce((a, s) => a + s.damage + (s.shielded ?? 0), 0);
     const totalShielded = prepared.pendingEnemyAttacks.reduce((a, s) => a + (s.shielded ?? 0), 0);
     expect(totalShielded).toBe(Math.min(40, totalRaw));
     expect(applied.partyHp).toBe(Math.max(0, hpBefore - (totalRaw - totalShielded)));
-    // Shield buffs should be fully consumed (40 absorbed) and removed.
     const remainingShield = applied.players.reduce(
       (sum, p) => sum + p.buffs.filter(b => b.kind === 'shield').reduce((s, b) => s + b.amount, 0), 0,
     );
@@ -343,7 +339,6 @@ describe('campaign engine', () => {
     state = addDart(state, 20, 3, undefined, false, settings);
     state = resolvePlayerVisit(state);
     const hpBefore = state.partyHp;
-    // Grant a 50% party damage reduction (as the Party Shield card does).
     state = {
       ...state,
       players: state.players.map(p => ({
@@ -353,21 +348,17 @@ describe('campaign engine', () => {
       phase: 'enemy' as const,
     };
     const prepared = prepareEnemyTurn(state, () => 0.99);
-    // Every non-zero hit should report a reduced amount equal to 50% of raw.
     const hitting = prepared.pendingEnemyAttacks.filter(s => s.damage + (s.shielded ?? 0) + (s.reduced ?? 0) > 0);
     expect(hitting.length).toBeGreaterThan(0);
     for (const s of hitting) {
       const raw = s.damage + (s.shielded ?? 0) + (s.reduced ?? 0);
-      // reduced = raw - round(raw * 0.5), so allow ±1 for rounding.
       expect(s.reduced ?? 0).toBeGreaterThanOrEqual(Math.floor(raw / 2) - 1);
       expect(s.reduced ?? 0).toBeLessThanOrEqual(Math.ceil(raw / 2) + 1);
     }
     let applied = prepared;
     while (applied.pendingEnemyAttacks.length) applied = applyNextEnemyAttack(applied);
-    // Damage taken = sum of (damage + shielded) across hits; reduction is applied per-hit.
     const expectedTaken = prepared.pendingEnemyAttacks.reduce((a, s) => a + (s.damage + (s.shielded ?? 0)), 0);
     expect(applied.partyHp).toBe(Math.max(0, hpBefore - expectedTaken));
-    // The damage_reduction buff must still be present (not consumed like a flat shield).
     const stillHasReduction = applied.players.some(p => p.buffs.some(b => b.kind === 'damage_reduction' && b.amount === 50));
     expect(stillHasReduction).toBe(true);
   });
@@ -541,7 +532,7 @@ describe('campaign engine', () => {
       coopProgress: { classId: 'priest' as CoopClassId, xp: 200, unlockedPassives: ['pri_hp_1', 'pri_hp_2', 'pri_hp_3'] as CoopPassiveId[], equippedPassives: ['pri_hp_3'] as CoopPassiveId[] },
     }));
     const state = startBattle(lvl, players, settings);
-    expect(state.players[0].maxHp).toBe(400);
+    expect(state.partyMaxHp).toBe(400);
     expect(state.passiveBonus?.health).toBe(300);
   });
 
@@ -555,9 +546,7 @@ describe('campaign engine', () => {
     const state = startBattle(lvl, players, settings);
     expect(state.passiveBonus?.health).toBe(180);
     expect(state.passiveBonus?.sources).toHaveLength(3);
-    for (const p of state.players) {
-      expect(p.maxHp).toBe(280);
-    }
+    expect(state.partyMaxHp).toBe(280);
   });
 
   it('passive bonus: distinct priest tiers each apply once per player', () => {
