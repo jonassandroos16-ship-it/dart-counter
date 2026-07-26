@@ -54,11 +54,13 @@ describe('boss trinket maxHp boost persists across rounds', () => {
     expect(next.runPlayers[0].hp).toBe(200);
 
     // Begin round 12 — boost must STILL be active. The party HP pool
-    // starts at the player's current HP (200), not maxHp.
+    // starts at the player's current HP (200), not maxHp. The party maxHp
+    // must be the actual maxHp (680), not capped to current HP — so healing
+    // cards can restore HP up to the real max.
     const r12 = beginRound(next, players, settings);
     expect(r12.round).toBe(12);
     expect(r12.runPlayers[0].maxHp).toBe(680);
-    expect(r12.battle!.partyMaxHp).toBe(200);
+    expect(r12.battle!.partyMaxHp).toBe(680);
     expect(r12.battle!.partyHp).toBe(200);
   });
 });
