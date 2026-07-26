@@ -108,8 +108,6 @@ export interface CoopPlayer {
   id: string;
   name: string;
   color: string;
-  hp: number;
-  maxHp: number;
   power: number;
   armor: number;
   crit: number;

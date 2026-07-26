@@ -1,7 +1,7 @@
 import type { CoopPlayer } from '../types';
 import type { Player, Settings } from '../../types';
 import { computePartyPassiveBonus, type PartyPassiveBonus } from './classes';
-import { effectiveAttributes, classStartHealth, classStartArmor, classStartPower, classStartCrit, classHealthMax, classArmorMax, classPowerMax, classCritMax } from '../../logic';
+import { effectiveAttributes, classStartArmor, classStartPower, classStartCrit, classArmorMax, classPowerMax, classCritMax } from '../../logic';
 
 // ── Party attribute aggregation ──────────────────────────────────────
 //
@@ -50,16 +50,13 @@ export function partyPowerFor(players: Player[], settings: Settings): number {
 // Per-player snapshot used during a battle.
 export function toCoopPlayer(p: Player, settings: Settings, startCharge: number): CoopPlayer {
   const cid = p.coopProgress?.classId;
-  const healthMax = classHealthMax(cid, settings);
   const armorMax = classArmorMax(cid, settings);
   const powerMax = classPowerMax(cid, settings);
-  const startHealth = classStartHealth(cid, settings);
   const startArmor = classStartArmor(cid, settings);
   const startPower = classStartPower(cid, settings);
   const startCrit = classStartCrit(cid, settings);
   const critMax = classCritMax(cid, settings);
   const attrs = effectiveAttributes(p, settings);
-  const h = Number.isFinite(attrs.health) ? attrs.health : startHealth;
   const a = Number.isFinite(attrs.armor) ? attrs.armor : startArmor;
   const pw = Number.isFinite(attrs.power) ? attrs.power : startPower;
   const cr = Number.isFinite(attrs.crit) ? attrs.crit : startCrit;
@@ -67,8 +64,6 @@ export function toCoopPlayer(p: Player, settings: Settings, startCharge: number)
     id: p.id,
     name: p.name,
     color: p.color,
-    hp: Math.max(1, Math.min(healthMax, h)),
-    maxHp: Math.max(1, Math.min(healthMax, h)),
     power: Math.max(0, Math.min(powerMax, pw)),
     armor: Math.max(0, Math.min(armorMax, a)),
     crit: Math.max(0, Math.min(critMax, cr)),

@@ -53,14 +53,18 @@ export interface DartliteRun {
   // mid-run — so the heal reward can show effective numbers without needing
   // the full Player[] at choice time.
   partyPassiveHealth: number;
+  // Team HP pool — the single source of truth for the party's health in a
+  // Dartlite run. All players share this pool. Damage hits the team; healing
+  // and max-HP upgrades increase it. No per-player HP is tracked.
+  teamHp: number;
+  teamMaxHp: number;
 }
 
 export interface DartliteRunPlayer {
   id: string;
   name: string;
   color: string;
-  hp: number;
-  maxHp: number;
+  baseHp: number;
   power: number;
   armor: number;
   crit: number;
