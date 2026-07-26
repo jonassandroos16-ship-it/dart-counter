@@ -30,15 +30,12 @@ function startingChargeFor(players: Player[], settings: Settings): number {
 
 function applyPassiveToPlayer(p: CoopPlayer, bonus: PartyPassiveBonus, settings: Settings): CoopPlayer {
   const cfg = settings.powerUpScaling;
-  const healthMax = cfg?.healthMax ?? Number.MAX_SAFE_INTEGER;
   const powerMax = cfg?.powerMax ?? Number.MAX_SAFE_INTEGER;
   const armorMax = cfg?.armorMax ?? Number.MAX_SAFE_INTEGER;
   const critMax = cfg?.critMax ?? Number.MAX_SAFE_INTEGER;
   return {
     ...p,
     power: Math.min(powerMax, p.power + bonus.power),
-    maxHp: Math.min(healthMax, p.maxHp + bonus.health),
-    hp: Math.min(healthMax, p.hp + bonus.health),
     armor: Math.min(armorMax, p.armor + bonus.armor),
     crit: Math.min(critMax, p.crit + bonus.crit),
   };
@@ -122,7 +119,7 @@ export function addDart(
   const dart = makeDartFromBase(base, mult, labelOverride, isBull);
   const max = maxDartsPerVisit ?? 3;
   if (state.darts.length >= max) return state;
-  const { resolvedDart, newEnemies, newPlayers, chargeGained } = resolveDart(dart, state, settings);
+  const { resolvedDart, newEnemies, newPlayers, chargeGained, partyHeal } = resolveDart(dart, state, settings);
   const darts = [...state.darts, dart];
   const resolvedDarts = [...state.resolvedDarts, resolvedDart];
   const chargeMax = settings?.powerUpScaling?.chargeMax ?? Number.MAX_SAFE_INTEGER;
@@ -152,6 +149,7 @@ export function addDart(
   );
   const allDefeated = newEnemies.every(e => e.defeated);
   const outcome = allDefeated ? ('victory' as const) : state.outcome;
+  const healedPartyHp = Math.min(state.partyMaxHp, state.partyHp + partyHeal);
   return {
     ...state,
     darts,
@@ -161,6 +159,7 @@ export function addDart(
     stats,
     outcome,
     powerUpCharge: throwerCharge,
+    partyHp: healedPartyHp,
   };
 }
 
@@ -172,8 +171,6 @@ export function undoDart(state: CampaignBattleState, settings?: Settings): Campa
   const enemies = state.visitEnemiesSnapshot.length
     ? state.visitEnemiesSnapshot.map(e => ({ ...e }))
     : state.enemies;
-  // Reconstruct cumulative stats at the start of this visit by subtracting
-  // the current visit's dart contributions, then replay the remaining darts.
   const defeatedAtVisitStart = state.visitEnemiesSnapshot.filter(e => e.defeated).length;
   const defeatedNow = state.enemies.filter(e => e.defeated).length;
   const killsThisVisit = Math.max(0, defeatedNow - defeatedAtVisitStart);
@@ -240,13 +237,13 @@ export function resolveDart(
   dart: CampaignDart,
   state: CampaignBattleState,
   settings?: Settings,
-): { resolvedDart: ResolvedDart; newEnemies: ActiveEnemy[]; newPlayers: CoopPlayer[]; chargeGained: number } {
+): { resolvedDart: ResolvedDart; newEnemies: ActiveEnemy[]; newPlayers: CoopPlayer[]; chargeGained: number; partyHeal: number } {
   const cfg = settings?.powerUpScaling;
   const t = state.enemies[state.targetIdx];
   const thrower = state.players[state.playerTurnIdx];
   if (!t || t.defeated) {
     const step: ResolvedDart = { dart, damage: 0, kind: 'miss', enemyId: t?.id ?? '', enemyName: t?.name ?? '', hpAfter: t?.hp ?? 0 };
-    return { resolvedDart: step, newEnemies: state.enemies, newPlayers: state.players, chargeGained: computeChargeGained(dart, cfg, state.trinkets) };
+    return { resolvedDart: step, newEnemies: state.enemies, newPlayers: state.players, chargeGained: computeChargeGained(dart, cfg, state.trinkets), partyHeal: 0 };
   }
 
   const trinkets = state.trinkets ?? [];
@@ -254,25 +251,24 @@ export function resolveDart(
   const basePower = thrower ? Math.min(powerMax, thrower.power + thrower.buffs.filter(b => b.kind === 'power').reduce((s, b) => s + b.amount, 0)) : 0;
   const power = basePower;
 
-  // Shield check: if the enemy has shields, handle them.
   if (t.shields.length > 0) {
     const shield = t.shields[0];
     if (shield.flatHp != null) {
       if (dart.value <= 0) {
         const step: ResolvedDart = { dart, damage: 0, kind: 'miss', enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0 };
-        return { resolvedDart: step, newEnemies: state.enemies, newPlayers: state.players, chargeGained: 0 };
+        return { resolvedDart: step, newEnemies: state.enemies, newPlayers: state.players, chargeGained: 0, partyHeal: 0 };
       }
       const remaining = shield.flatHp - dart.value;
       if (remaining > 0) {
         const step: ResolvedDart = { dart, damage: 0, kind: 'shield_break', shieldTarget: `${shield.flatHp}HP shield`, enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0 };
         const newEnemies = state.enemies.map((e, i) => i === state.targetIdx ? { ...e, shields: [{ ...shield, flatHp: remaining }] } : e);
-        return { resolvedDart: step, newEnemies, newPlayers: state.players, chargeGained: 0 };
+        return { resolvedDart: step, newEnemies, newPlayers: state.players, chargeGained: 0, partyHeal: 0 };
       }
       const overflow = -remaining;
       const newEnemies = state.enemies.map((e, i) => i === state.targetIdx ? { ...e, shields: e.shields.slice(1) } : e);
       if (overflow <= 0) {
         const step: ResolvedDart = { dart, damage: 0, kind: 'shield_break', shieldTarget: `${shield.flatHp}HP shield`, enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0 };
-        return { resolvedDart: step, newEnemies, newPlayers: state.players, chargeGained: 0 };
+        return { resolvedDart: step, newEnemies, newPlayers: state.players, chargeGained: 0, partyHeal: 0 };
       }
       const armorMax2a = Number.isFinite(cfg?.armorMax) ? (cfg?.armorMax as number) : Number.MAX_SAFE_INTEGER;
       const armorA = Math.min(armorMax2a, t.armor);
@@ -281,23 +277,22 @@ export function resolveDart(
       const defeatedA = newHpA <= 0;
       const finalEnemiesA = newEnemies.map((e, i) => i === state.targetIdx ? { ...e, hp: newHpA, defeated: defeatedA } : e);
       const stepA: ResolvedDart = { dart, damage: postArmorA, kind: defeatedA ? 'defeated' : 'damage', enemyId: t.id, enemyName: t.name, hpAfter: newHpA, attackerPower: power, targetArmor: armorA, vulnerable: t.vulnerableTurns > 0 };
-      return { resolvedDart: stepA, newEnemies: finalEnemiesA, newPlayers: state.players, chargeGained: computeChargeGained(dart, cfg, trinkets) };
+      return { resolvedDart: stepA, newEnemies: finalEnemiesA, newPlayers: state.players, chargeGained: computeChargeGained(dart, cfg, trinkets), partyHeal: 0 };
     }
     if (!dartMatchesShield(dart, shield)) {
       const step: ResolvedDart = { dart, damage: 0, kind: 'shield_break', shieldTarget: describeShield(shield), enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0 };
-      return { resolvedDart: step, newEnemies: state.enemies, newPlayers: state.players, chargeGained: 0 };
+      return { resolvedDart: step, newEnemies: state.enemies, newPlayers: state.players, chargeGained: 0, partyHeal: 0 };
     }
     const step: ResolvedDart = { dart, damage: 0, kind: 'miss', enemyId: t.id, enemyName: t.name, hpAfter: t.hp, attackerPower: power, targetArmor: t.armor, vulnerable: t.vulnerableTurns > 0 };
     const newEnemies = state.enemies.map((e, i) => i === state.targetIdx ? { ...e, shields: e.shields.slice(1) } : e);
-    return { resolvedDart: step, newEnemies, newPlayers: state.players, chargeGained: 0 };
+    return { resolvedDart: step, newEnemies, newPlayers: state.players, chargeGained: 0, partyHeal: 0 };
   }
 
   if (dart.value <= 0) {
     const step: ResolvedDart = { dart, damage: 0, kind: 'miss', enemyId: t.id, enemyName: t.name, hpAfter: t.hp };
-    return { resolvedDart: step, newEnemies: state.enemies, newPlayers: state.players, chargeGained: 0 };
+    return { resolvedDart: step, newEnemies: state.enemies, newPlayers: state.players, chargeGained: 0, partyHeal: 0 };
   }
 
-  // Compute crit
   const critBuff = thrower?.buffs.find(b => b.kind === 'crit');
   const critGuarantee = thrower?.buffs.find(b => b.kind === 'crit_guarantee');
   const critMultBuff = thrower?.buffs.find(b => b.kind === 'crit_multiplier');
@@ -305,16 +300,13 @@ export function resolveDart(
   const isCrit = critGuarantee ? true : Math.random() * 100 < critChance;
   const critMult = critMultBuff ? critMultBuff.amount : 2;
 
-  // Raw damage: dart value + attacker power
   const rawDmg = dart.value + power;
   const armorMax2 = Number.isFinite(cfg?.armorMax) ? (cfg?.armorMax as number) : Number.MAX_SAFE_INTEGER;
   const armor = Math.min(armorMax2, t.armor);
   const postArmor = Math.max(1, Math.round(rawDmg * (1 - armor / 100)));
   let surgeDmg = isCrit ? Math.round(postArmor * critMult) : postArmor;
 
-  // Trinket: Double Tap — 20% chance to deal double damage.
   if (trinkets.includes('trk_double_tap') && Math.random() < 0.2) surgeDmg *= 2;
-  // Trinket: Executioner — +50% damage to enemies below 25% HP.
   if (trinkets.includes('trk_executioner') && t.hp < t.maxHp * 0.25) surgeDmg = Math.round(surgeDmg * 1.5);
 
   const vulnerable = t.vulnerableTurns > 0;
@@ -326,7 +318,6 @@ export function resolveDart(
     i === state.targetIdx ? { ...e, hp: newHp, defeated } : e
   );
 
-  // Trinket: Chain Lightning — hits splash 25% damage to another enemy.
   if (trinkets.includes('trk_chain_lightning') && finalDmg > 0) {
     const splash = Math.max(1, Math.round(finalDmg * 0.25));
     const splashTarget = newEnemies.find((e, i) => i !== state.targetIdx && !e.defeated && e.hp > 0);
@@ -339,7 +330,6 @@ export function resolveDart(
     }
   }
 
-  // Trinket: Frozen Core — 25% chance to freeze the target for 1 turn.
   if (trinkets.includes('trk_frozen_core') && !defeated && Math.random() < 0.25) {
     newEnemies = newEnemies.map((e, i) =>
       i === state.targetIdx ? { ...e, frozenTurns: Math.max(e.frozenTurns, 1) } : e
@@ -348,7 +338,6 @@ export function resolveDart(
 
   const chargeGained = computeChargeGained(dart, cfg, trinkets);
 
-  // Consume crit_guarantee buff: decrement amount, remove if it reaches 0.
   let newPlayers = state.players;
   if (isCrit && critGuarantee) {
     const remaining = critGuarantee.amount - 1;
@@ -361,22 +350,12 @@ export function resolveDart(
     });
   }
 
-  // Trinket: Vampiric — heal 3 HP for every dart that hits.
-  if (trinkets.includes('trk_vampiric') && dart.value > 0) {
-    newPlayers = newPlayers.map((p, i) =>
-      i === state.playerTurnIdx ? { ...p, hp: p.hp + 3 } : p
-    );
-  }
-
-  // Trinket: Second Wind — heal 15 HP when you defeat an enemy.
-  if (trinkets.includes('trk_second_wind') && defeated) {
-    newPlayers = newPlayers.map((p, i) =>
-      i === state.playerTurnIdx ? { ...p, hp: p.hp + 15 } : p
-    );
-  }
-
   const step: ResolvedDart = { dart, damage: finalDmg, kind: defeated ? 'defeated' : 'damage', enemyId: t.id, enemyName: t.name, hpAfter: newHp, attackerPower: power, targetArmor: armor, vulnerable, crit: isCrit, critMult: isCrit ? critMult : undefined };
-  return { resolvedDart: step, newEnemies, newPlayers, chargeGained };
+  let partyHeal = 0;
+  if (trinkets.includes('trk_vampiric') && dart.value > 0) partyHeal += 3;
+  if (trinkets.includes('trk_second_wind') && defeated) partyHeal += 15;
+
+  return { resolvedDart: step, newEnemies, newPlayers, chargeGained, partyHeal };
 }
 
 // ── Resolve the current player's visit ────────────────────────────────────────────
@@ -408,6 +387,7 @@ export function resolvePlayerVisit(state: CampaignBattleState, hasPlayedCards: b
 
 // ── Target selection ───────────────────────────────────────────────────────────
 
+
 export function setTarget(state: CampaignBattleState, targetIdx: number): CampaignBattleState {
   if (targetIdx < 0 || targetIdx >= state.enemies.length) return state;
   if (state.enemies[targetIdx].defeated) return state;
@@ -415,6 +395,7 @@ export function setTarget(state: CampaignBattleState, targetIdx: number): Campai
 }
 
 // ── Utility helpers ────────────────────────────────────────────────────────────
+
 
 export function computePlayerDartDamage(dart: CampaignDart, power: number, armor: number): number {
   const rawDmg = dart.value + power;
