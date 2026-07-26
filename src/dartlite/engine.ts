@@ -25,7 +25,7 @@ import {
   STARTER_POOL, availablePool, newlyUnlockedTrinket,
   bossTrinketOptions,
 } from './trinkets';
-import { getPlayerCards } from '../cards/deck';
+import { defaultPlayerCards } from '../cards/deck';
 
 import type { DartliteRun, DartliteRunPlayer, DartliteRunStats } from './engineTypes';
 export type { DartliteRun, DartliteRunPlayer, DartliteRunStats, DartlitePlayerRunStats, ChoiceOption, ChoiceKind } from './engineTypes';
@@ -71,7 +71,7 @@ export function startRun(players: Player[], settings: Settings, cardMode: boolea
       bonusHealth: 0,
       bonusArmor: 0,
       bonusPower: 0,
-      cards: cardMode ? getPlayerCards(p) : [],
+      cards: cardMode ? defaultPlayerCards(p.coopProgress?.classId) : [],
     };
   });
   return {
