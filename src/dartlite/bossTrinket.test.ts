@@ -21,45 +21,30 @@ describe('boss trinket maxHp boost persists across rounds', () => {
     const settings = defaultSettings();
     const players = [makePlayer('p1')];
     let run = startRun(players, settings, false);
-    // Force a boss round (round 10).
     run = { ...run, round: 9 };
     run = beginRound(run, players, settings);
     expect(run.round).toBe(10);
-    // Simulate winning the boss battle.
     run = resolveBattle({ ...run, battle: { ...run.battle!, outcome: 'ongoing' } } as any, true);
     expect(run.phase).toBe('boss_victory');
-    // Choose the verdant seed boss trinket (+200 maxHp, scaled by round 10).
-    // rewardScale(10) = 1 + 9*0.10 = 1.9 -> Math.round(200 * 1.9) = 380.
     run = applyBossTrinketChoice(run, 'trk_boss_verdant_seed' as any);
-    expect(run.runPlayers[0].maxHp).toBe(680); // 300 + 380
+    expect(run.teamMaxHp).toBe(680);
     expect(run.runPlayers[0].bonusHealth).toBe(380);
 
-    // Begin the next round (round 11). The boss trinket boost must still be active.
     let next = beginRound(run, players, settings);
     expect(next.round).toBe(11);
     expect(next.battle).not.toBeNull();
-    // The shared party HP pool must reflect the +380 boost.
     expect(next.battle!.partyMaxHp).toBe(680);
     expect(next.battle!.partyHp).toBe(680);
 
-    // Simulate taking damage during round 11, then winning. Damage taken
-    // must persist (no full-heal between non-boss rounds); only the maxHp
-    // boost should carry forward.
     next = { ...next, battle: { ...next.battle!, partyHp: 200 } };
     next = resolveBattle(next, true);
     expect(next.phase).toBe('choice');
-    // After a non-boss round, maxHp must still be 680.
-    expect(next.runPlayers[0].maxHp).toBe(680);
-    // Damage taken (500 -> 200) must persist onto the run player.
-    expect(next.runPlayers[0].hp).toBe(200);
+    expect(next.teamMaxHp).toBe(680);
+    expect(next.teamHp).toBe(200);
 
-    // Begin round 12 — boost must STILL be active. The party HP pool
-    // starts at the player's current HP (200), not maxHp. The party maxHp
-    // must be the actual maxHp (680), not capped to current HP — so healing
-    // cards can restore HP up to the real max.
     const r12 = beginRound(next, players, settings);
     expect(r12.round).toBe(12);
-    expect(r12.runPlayers[0].maxHp).toBe(680);
+    expect(r12.teamMaxHp).toBe(680);
     expect(r12.battle!.partyMaxHp).toBe(680);
     expect(r12.battle!.partyHp).toBe(200);
   });

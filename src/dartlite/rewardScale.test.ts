@@ -26,7 +26,6 @@ describe('rewardScale', () => {
 
   it('grows ~10% per round, matching the base enemy HP curve', () => {
     for (const round of [2, 3, 5, 10, 15, 20, 30]) {
-      // rewardScale tracks the base enemy HP scale (2-player party factor is 1.0).
       expect(rewardScale(round)).toBeCloseTo(enemyHpScale(round, 2), 5);
     }
   });
@@ -51,7 +50,6 @@ describe('stat reward scales with round', () => {
     const settings = defaultSettings();
     const players = [makePlayer('p1')];
     let run = startRun(players, settings, false);
-    // Round 1 -> win -> choice phase.
     run = beginRound(run, players, settings);
     expect(run.round).toBe(1);
     run = resolveBattle({ ...run, battle: { ...run.battle!, outcome: 'ongoing' } } as any, true);
@@ -66,14 +64,12 @@ describe('stat reward scales with round', () => {
     const settings = defaultSettings();
     const players = [makePlayer('p1')];
     let run = startRun(players, settings, false);
-    // Jump to round 18 so beginRound advances to 19 (a normal, non-boss round).
     run = { ...run, round: 18 };
     run = beginRound(run, players, settings);
     expect(run.round).toBe(19);
     run = resolveBattle({ ...run, battle: { ...run.battle!, outcome: 'ongoing' } } as any, true);
     expect(run.phase).toBe('choice');
     const statOpt = run.pendingChoice!.find((o: ChoiceOption) => o.kind === 'stat')!;
-    // rewardScale(19) = 1 + 18*0.10 = 2.8 -> HP 56, armor 8, power 11 (rounded).
     expect(statOpt.desc).toContain('+56 HP');
     expect(statOpt.desc).toContain('+8% armor');
     expect(statOpt.desc).toContain('+11 power');
@@ -86,18 +82,14 @@ describe('stat reward scales with round', () => {
     run = { ...run, round: 18 };
     run = beginRound(run, players, settings);
     run = resolveBattle({ ...run, battle: { ...run.battle!, outcome: 'ongoing' } } as any, true);
-    const before = run.runPlayers[0];
-    // Force a health stat roll by constructing the option and applying it.
+    const before = run.teamMaxHp;
     const statOpt: ChoiceOption = { kind: 'stat', label: 'Gain a Stat', desc: '', icon: '📊' };
-    // Stub Math.random to pick health (< 0.4).
     const orig = Math.random;
     Math.random = () => 0.1;
     try {
       const after = applyPlayerChoice(run, statOpt);
-      const p = after.runPlayers[0];
-      // +56 max HP at round 19 (scale 2.8 -> 56).
-      expect(p.maxHp).toBe(before.maxHp + 56);
-      expect(p.bonusHealth).toBe(before.bonusHealth + 56);
+      expect(after.teamMaxHp).toBe(before + 56);
+      expect(after.runPlayers[0].bonusHealth).toBe(56);
     } finally {
       Math.random = orig;
     }
@@ -109,19 +101,14 @@ describe('trinket flat bonuses scale with round', () => {
     const settings = defaultSettings();
     const players = [makePlayer('p1')];
     let run = startRun(players, settings, false);
-    // Give the player a Sharp Tip trinket.
     run = { ...run, runPlayers: run.runPlayers.map(rp => ({ ...rp, trinkets: ['trk_sharp_tip'] })), round: 0 };
     run = beginRound(run, players, settings);
     expect(run.round).toBe(1);
-    // beginRound bakes trinket bonuses into the battle players (pseudoPlayers),
-    // not into run.runPlayers. Check the battle player's power.
     expect(run.battle!.players[0].power).toBe(5);
 
-    // Advance to round 20.
     run = { ...run, round: 19, runPlayers: run.runPlayers.map(rp => ({ ...rp, power: 0, bonusPower: 0, trinkets: ['trk_sharp_tip'] })) };
     run = beginRound(run, players, settings);
     expect(run.round).toBe(20);
-    // rewardScale(20) = 2.9 -> Math.round(5 * 2.9) = 15 (rounded).
     expect(run.battle!.players[0].power).toBe(Math.round(5 * rewardScale(20)));
   });
 });
@@ -131,16 +118,14 @@ describe('boss trinket flat bonuses scale with round', () => {
     const settings = defaultSettings();
     const players = [makePlayer('p1')];
     let run = startRun(players, settings, false);
-    // Force a boss round (round 10).
     run = { ...run, round: 9 };
     run = beginRound(run, players, settings);
     expect(run.round).toBe(10);
     run = resolveBattle({ ...run, battle: { ...run.battle!, outcome: 'ongoing' } } as any, true);
     expect(run.phase).toBe('boss_victory');
-    const before = run.runPlayers[0].maxHp;
+    const before = run.teamMaxHp;
     run = applyBossTrinketChoice(run, 'trk_boss_verdant_seed' as any);
-    // rewardScale(10) = 1 + 9*0.10 = 1.9 -> Math.round(200 * 1.9) = 380.
-    expect(run.runPlayers[0].maxHp).toBe(before + Math.round(200 * rewardScale(10)));
+    expect(run.teamMaxHp).toBe(before + Math.round(200 * rewardScale(10)));
   });
 });
 
@@ -149,7 +134,6 @@ describe('heal reward includes trinket and passive HP bonuses', () => {
     const settings = defaultSettings();
     const players = [makePlayer('p1')];
     let run = startRun(players, settings, false);
-    // Give the player a Vitality trinket (+60 max HP at round 1).
     run = {
       ...run,
       runPlayers: run.runPlayers.map(rp => ({ ...rp, trinkets: ['trk_vitality'] })),
@@ -160,7 +144,6 @@ describe('heal reward includes trinket and passive HP bonuses', () => {
     run = resolveBattle({ ...run, battle: { ...run.battle!, outcome: 'ongoing' } } as any, true);
     expect(run.phase).toBe('choice');
     const healOpt = run.pendingChoice!.find((o: ChoiceOption) => o.kind === 'heal')!;
-    // Base 300 + vitality 60 = 360 effective max HP. 20% = 72.
     expect(healOpt.amount).toBe(72);
     expect(healOpt.desc).toContain('360');
     expect(healOpt.desc).toContain('72');
@@ -168,7 +151,6 @@ describe('heal reward includes trinket and passive HP bonuses', () => {
 
   it('heal amount and description reflect party passive HP bonus', () => {
     const settings = defaultSettings();
-    // Priest's pri_hp_1 passive grants +60 max HP.
     const players: Player[] = [{
       ...makePlayer('p1'),
       coopProgress: { classId: 'priest', unlockedPassives: ['pri_hp_1'], equippedPassives: ['pri_hp_1'] },
@@ -181,7 +163,6 @@ describe('heal reward includes trinket and passive HP bonuses', () => {
     run = resolveBattle({ ...run, battle: { ...run.battle!, outcome: 'ongoing' } } as any, true);
     expect(run.phase).toBe('choice');
     const healOpt = run.pendingChoice!.find((o: ChoiceOption) => o.kind === 'heal')!;
-    // Base 300 + passive 60 = 360 effective max HP. 20% = 72.
     expect(healOpt.amount).toBe(72);
     expect(healOpt.desc).toContain('360');
   });
@@ -192,15 +173,15 @@ describe('heal reward includes trinket and passive HP bonuses', () => {
     let run = startRun(players, settings, false);
     run = {
       ...run,
-      runPlayers: run.runPlayers.map(rp => ({ ...rp, trinkets: ['trk_vitality'], hp: 100 })),
+      runPlayers: run.runPlayers.map(rp => ({ ...rp, trinkets: ['trk_vitality'] })),
       round: 0,
     };
     run = beginRound(run, players, settings);
-    run = resolveBattle({ ...run, battle: { ...run.battle!, outcome: 'ongoing' } } as any, true);
+    run = { ...run, teamHp: 100, battle: { ...run.battle!, partyHp: 100 } };
+    run = resolveBattle(run, true);
     const healOpt = run.pendingChoice!.find((o: ChoiceOption) => o.kind === 'heal')!;
-    const before = run.runPlayers[0].hp;
+    const before = run.teamHp;
     const after = applyPlayerChoice(run, healOpt);
-    // 360 effective max * 0.2 = 72 heal, capped at 360.
-    expect(after.runPlayers[0].hp).toBe(before + 72);
+    expect(after.teamHp).toBe(before + 72);
   });
 });
