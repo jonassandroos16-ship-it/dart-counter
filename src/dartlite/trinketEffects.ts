@@ -47,6 +47,23 @@ export function partyMaxHpBonus(run: DartliteRun): number {
   return bonus;
 }
 
+// Effective max HP for a single run player, including trinket HP bonuses
+// (trk_vitality, trk_giants_belt) and the party's flat passive HP bonus.
+// Boss-trinket and stat-reward HP are already baked into rp.maxHp by
+// applyBossTrinketChoice / applyPlayerChoice, so they're included automatically.
+// Mirrors the per-player maxHp computation in beginRound so the heal reward
+// shows the same numbers the player actually sees in battle.
+export function effectiveRunPlayerMaxHp(rp: DartliteRunPlayer, run: DartliteRun): number {
+  const scale = rewardScale(run.round);
+  let maxHp = rp.maxHp;
+  for (const tid of rp.trinkets) {
+    if (tid === 'trk_vitality') maxHp += Math.round(60 * scale);
+    else if (tid === 'trk_giants_belt') maxHp += Math.round(rp.maxHp * 0.5);
+  }
+  maxHp += run.partyPassiveHealth || 0;
+  return maxHp;
+}
+
 export function enemyAccuracyMultiplier(run: DartliteRun): number {
   let mult = 1;
   for (const p of run.runPlayers) {

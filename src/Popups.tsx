@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Settings } from './types';
 import { Sound } from './sound';
+import type { DartliteLevelUpInfo } from './dartlite/stats';
 
 export function Toast({ msg }: { msg: string | null }) {
   return <div className={`toast${msg ? ' show' : ''}`}>{msg || ''}</div>;
@@ -132,6 +133,49 @@ export function ShieldBlockedPopup({ attacker, defender, onDone, settings }: { a
         <div className="kill-emoji">🏰</div>
         <div className="kill-title" style={{ color: '#7dd3fc' }}>SHIELD BLOCKED!</div>
         <div className="kill-sub"><b>{defender}</b>'s Shield absorbed <b>{attacker}</b>'s attack.</div>
+      </div>
+    </div>
+  );
+}
+
+export function CpProgressPopup({ info, onDone, settings }: { info: DartliteLevelUpInfo[]; onDone: () => void; settings?: Settings }) {
+  const [visibleIdx, setVisibleIdx] = useState(0);
+  const current = info[visibleIdx];
+
+  useEffect(() => {
+    if (!current) { onDone(); return; }
+    if (current.leveledUp) Sound.playSfx('levelup', settings || ({} as Settings));
+    const t = setTimeout(() => {
+      if (visibleIdx < info.length - 1) setVisibleIdx(visibleIdx + 1);
+      else onDone();
+    }, current.leveledUp ? 2600 : 1400);
+    return () => clearTimeout(t);
+  }, [visibleIdx, current, info.length, onDone, settings]);
+
+  if (!current) return null;
+
+  return (
+    <div className="levelup-bg" onClick={() => { if (visibleIdx < info.length - 1) setVisibleIdx(visibleIdx + 1); else onDone(); }}>
+      <div className="levelup" onClick={(e) => e.stopPropagation()}>
+        <div className="lu-ring" style={{ borderColor: 'var(--accent)', background: 'color-mix(in srgb,var(--accent) 15%,var(--bg-2))' }}>
+          <div style={{ fontSize: 40 }}>{current.classIcon}</div>
+        </div>
+        <div className="lu-title">{current.leveledUp ? 'Level Up!' : 'CP Earned'}</div>
+        <div className="lu-sub">{current.playerName} · {current.className}</div>
+        <div className="lu-xp">+{current.xpGained} CP</div>
+        {current.leveledUp && (
+          <div className="lu-level-change">
+            <span className="lu-level-old">Lv {current.oldLevel}</span>
+            <span className="lu-arrow">→</span>
+            <span className="lu-level-new">Lv {current.newLevel}</span>
+          </div>
+        )}
+        <div className="cp-progress-wrap">
+          <div className="cp-progress-bar" style={{ ['--cp-fill' as any]: '100%' }} />
+        </div>
+        <div className="muted small" style={{ marginTop: 14, fontStyle: 'italic' }}>
+          {visibleIdx < info.length - 1 ? 'Tap for next player' : 'Tap to continue'}
+        </div>
       </div>
     </div>
   );

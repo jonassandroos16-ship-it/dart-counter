@@ -143,3 +143,64 @@ describe('boss trinket flat bonuses scale with round', () => {
     expect(run.runPlayers[0].maxHp).toBe(before + Math.round(200 * rewardScale(10)));
   });
 });
+
+describe('heal reward includes trinket and passive HP bonuses', () => {
+  it('heal amount and description reflect trk_vitality bonus', () => {
+    const settings = defaultSettings();
+    const players = [makePlayer('p1')];
+    let run = startRun(players, settings, false);
+    // Give the player a Vitality trinket (+60 max HP at round 1).
+    run = {
+      ...run,
+      runPlayers: run.runPlayers.map(rp => ({ ...rp, trinkets: ['trk_vitality'] })),
+      round: 0,
+    };
+    run = beginRound(run, players, settings);
+    expect(run.round).toBe(1);
+    run = resolveBattle({ ...run, battle: { ...run.battle!, outcome: 'ongoing' } } as any, true);
+    expect(run.phase).toBe('choice');
+    const healOpt = run.pendingChoice!.find((o: ChoiceOption) => o.kind === 'heal')!;
+    // Base 300 + vitality 60 = 360 effective max HP. 20% = 72.
+    expect(healOpt.amount).toBe(72);
+    expect(healOpt.desc).toContain('360');
+    expect(healOpt.desc).toContain('72');
+  });
+
+  it('heal amount and description reflect party passive HP bonus', () => {
+    const settings = defaultSettings();
+    // Priest's pri_hp_1 passive grants +60 max HP.
+    const players: Player[] = [{
+      ...makePlayer('p1'),
+      coopProgress: { classId: 'priest', unlockedPassives: ['pri_hp_1'], equippedPassives: ['pri_hp_1'] },
+      classAttributes: { priest: { health: 300, armor: 0, power: 0, crit: 5, pointsAvailable: 0 } },
+    } as Player];
+    let run = startRun(players, settings, false);
+    expect(run.partyPassiveHealth).toBe(60);
+    run = beginRound(run, players, settings);
+    expect(run.round).toBe(1);
+    run = resolveBattle({ ...run, battle: { ...run.battle!, outcome: 'ongoing' } } as any, true);
+    expect(run.phase).toBe('choice');
+    const healOpt = run.pendingChoice!.find((o: ChoiceOption) => o.kind === 'heal')!;
+    // Base 300 + passive 60 = 360 effective max HP. 20% = 72.
+    expect(healOpt.amount).toBe(72);
+    expect(healOpt.desc).toContain('360');
+  });
+
+  it('applyPlayerChoice heals based on effective max HP including trinkets', () => {
+    const settings = defaultSettings();
+    const players = [makePlayer('p1')];
+    let run = startRun(players, settings, false);
+    run = {
+      ...run,
+      runPlayers: run.runPlayers.map(rp => ({ ...rp, trinkets: ['trk_vitality'], hp: 100 })),
+      round: 0,
+    };
+    run = beginRound(run, players, settings);
+    run = resolveBattle({ ...run, battle: { ...run.battle!, outcome: 'ongoing' } } as any, true);
+    const healOpt = run.pendingChoice!.find((o: ChoiceOption) => o.kind === 'heal')!;
+    const before = run.runPlayers[0].hp;
+    const after = applyPlayerChoice(run, healOpt);
+    // 360 effective max * 0.2 = 72 heal, capped at 360.
+    expect(after.runPlayers[0].hp).toBe(before + 72);
+  });
+});

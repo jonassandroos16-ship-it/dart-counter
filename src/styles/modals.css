@@ -17,6 +17,13 @@
 .levelup .lu-title { font-size:22px; font-weight:900; }
 .levelup .lu-sub { font-size:14px; color: var(--muted); margin-top:4px; }
 .levelup .lu-xp { font-size:13px; font-weight:700; color:var(--accent); margin-top:8px; }
+.levelup .lu-level-change { display:flex; align-items:center; justify-content:center; gap:10px; margin-top:10px; }
+.levelup .lu-level-old { font-size:18px; font-weight:700; color:var(--muted); }
+.levelup .lu-arrow { font-size:18px; color:var(--accent); animation:msPop .4s ease; }
+.levelup .lu-level-new { font-size:28px; font-weight:900; color:var(--accent); animation:msPop .5s cubic-bezier(.18,.89,.32,1.28); }
+.cp-progress-wrap { width:220px; height:10px; border-radius:6px; background:var(--bg-3); margin:14px auto 0; overflow:hidden; border:1px solid var(--border); }
+.cp-progress-bar { height:100%; width:0; border-radius:6px; background:linear-gradient(90deg,var(--accent),color-mix(in srgb,var(--accent) 60%,#fff)); animation:cpFill 1.1s cubic-bezier(.2,.8,.3,1) forwards; }
+@keyframes cpFill { from { width:0; } to { width:var(--cp-fill,80%); } }
 
 .kill-bg { position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:center; justify-content:center; z-index:75; padding:16px; animation:msFade .3s ease; }
 .kill { text-align:center; animation: killPop .5s cubic-bezier(.18,.89,.32,1.28); }

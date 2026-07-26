@@ -48,6 +48,11 @@ export interface DartliteRun {
   lastUnlockedTrinket: TrinketId | null;
   bossVictory: { bossName: string; trinketOptions: TrinketId[]; chosenTrinket: TrinketId | null; claimedTrinket: TrinketId | null } | null;
   log: string[];
+  // Flat HP granted by the party's equipped class passives (e.g. Priest's
+  // +60 max HP). Computed once at run start — equipped passives don't change
+  // mid-run — so the heal reward can show effective numbers without needing
+  // the full Player[] at choice time.
+  partyPassiveHealth: number;
 }
 
 export interface DartliteRunPlayer {

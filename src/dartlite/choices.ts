@@ -3,6 +3,7 @@ import { STARTER_POOL } from './trinkets';
 import type { TrinketId } from './trinkets';
 import { generateCardRewardOptions } from './cardRewards';
 import { pick, rewardScale } from './roundLogic';
+import { effectiveRunPlayerMaxHp } from './trinketEffects';
 
 export function generateChoices(run: DartliteRun): ChoiceOption[] {
   if (run.cardMode) {
@@ -11,9 +12,10 @@ export function generateChoices(run: DartliteRun): ChoiceOption[] {
   const pool = run.pool.length ? run.pool : STARTER_POOL;
   const idx = run.choicePlayerIdx;
   const rp = run.runPlayers[idx];
-  const healAmt = rp ? Math.round(rp.maxHp * 0.2) : 0;
+  const effMaxHp = rp ? effectiveRunPlayerMaxHp(rp, run) : 0;
+  const healAmt = rp ? Math.round(effMaxHp * 0.2) : 0;
   const healDesc = rp
-    ? `Heal ${healAmt} HP (${rp.hp}/${rp.maxHp} → ${Math.min(rp.maxHp, rp.hp + healAmt)})`
+    ? `Heal ${healAmt} HP (${rp.hp}/${effMaxHp} → ${Math.min(effMaxHp, rp.hp + healAmt)})`
     : `Restore 20% of max HP.`;
   const scale = rewardScale(run.round);
   const hpAmt = Math.round(20 * scale);
@@ -35,9 +37,10 @@ function generateCardChoices(run: DartliteRun): ChoiceOption[] {
   const idx = run.choicePlayerIdx;
   const rp = run.runPlayers[idx];
   const ownedCards = rp?.cards ?? [];
-  const healAmt = rp ? Math.round(rp.maxHp * 0.2) : 0;
+  const effMaxHp = rp ? effectiveRunPlayerMaxHp(rp, run) : 0;
+  const healAmt = rp ? Math.round(effMaxHp * 0.2) : 0;
   const healDesc = rp
-    ? `Heal ${healAmt} HP (${rp.hp}/${rp.maxHp} → ${Math.min(rp.maxHp, rp.hp + healAmt)})`
+    ? `Heal ${healAmt} HP (${rp.hp}/${effMaxHp} → ${Math.min(effMaxHp, rp.hp + healAmt)})`
     : `Restore 20% of max HP.`;
   const cardOpts = generateCardRewardOptions(ownedCards, 'coop', healAmt, healDesc, run.round);
   const options: ChoiceOption[] = cardOpts.map(o => ({
@@ -65,8 +68,9 @@ export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): Dartl
 
   if (option.kind === 'heal') {
     const rp = runPlayers[idx];
-    const healAmt = Math.round(rp.maxHp * 0.2);
-    runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, hp: Math.min(p.maxHp, p.hp + healAmt) } : p);
+    const effMaxHp = effectiveRunPlayerMaxHp(rp, run);
+    const healAmt = Math.round(effMaxHp * 0.2);
+    runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, hp: Math.min(effMaxHp, p.hp + healAmt) } : p);
     resolved = { ...option, amount: healAmt, label: `Heal ${healAmt} HP`, desc: `Restored ${healAmt} HP (${rp.name}).` };
   } else if (option.kind === 'deck_upgrade') {
     resolved = { ...option };

@@ -36,7 +36,7 @@ export {
   hasTrinket, partyPowerBonus, partyArmorBonus, partyMaxHpBonus,
   enemyAccuracyMultiplier, chargeGainMultiplier, xpMultiplier,
   shouldPhoenixRevive, applyPhoenixRevive, applyBossTrinketChoice,
-  playerPowerInfo,
+  playerPowerInfo, effectiveRunPlayerMaxHp,
 } from './trinketEffects';
 
 import { isMiniBossRound, isBossRound, xpForBattleWin, xpForKill } from './engineTypes';
@@ -107,6 +107,7 @@ export function startRun(players: Player[], settings: Settings, cardMode: boolea
     bossVictory: null,
     cardMode,
     log: [],
+    partyPassiveHealth: computePartyPassiveBonus(players).health,
   };
 }
 
@@ -116,18 +117,6 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
   const round = run.round + 1;
   const playerCount = run.runPlayers.length;
   const level = levelForRound(round, playerCount);
-  // Compute the current HP for each player (rp.hp + trinket HP bonuses)
-  // and the max HP (rp.maxHp + trinket HP bonuses). The pseudoPlayer's
-  // attributes.health is set to maxHp so that partyMaxHpFor and toCoopPlayer
-  // use the correct max HP — not the current HP — as the ceiling. The actual
-  // current HP is applied to the battle players after startBattle returns.
-  // startBattle adds the party passive bonus to each battle player's hp/maxHp
-  // (applyPassiveToPlayer) and to partyMaxHp. We then override bp.hp with
-  // playerCurrentHp below — so playerCurrentHp must include the passive health
-  // bonus too, otherwise the party starts below full and resolveBattle treats
-  // the missing passive HP as damage already taken. We add the passive to hp
-  // only (not to maxHp/attributes) so startBattle adds it exactly once to
-  // partyMaxHp and each bp.maxHp, keeping partyHp == partyMaxHp at round start.
   const passiveBonus = computePartyPassiveBonus(players);
   const playerCurrentHp: Record<string, number> = {};
   const pseudoPlayers: Player[] = run.runPlayers.map(rp => {
@@ -147,11 +136,6 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
       else if (tid === 'trk_eagle_eye') { crit += Math.round(15 * scale); }
     }
     playerCurrentHp[rp.id] = Math.max(1, Math.min(maxHp + passiveBonus.health, hp));
-    // Boss trinkets bake their maxHp boost permanently into rp.maxHp/rp.hp
-    // (see applyBossTrinketChoice). effectiveAttributes prefers
-    // classAttributes over attributes, so mirror the boosted stats into the
-    // active class entry — otherwise the boss trinket's maxHp boost is
-    // dropped when the battle engine reads party/player HP.
     const cid = orig.coopProgress?.classId;
     const boostedAttrs = { health: maxHp, armor, power, crit, pointsAvailable: 0 };
     const classAttributes = cid && orig.classAttributes
@@ -169,16 +153,10 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
   const allTrinkets = run.runPlayers.flatMap(rp => rp.trinkets);
   const battle = startBattle(level, pseudoPlayers, settings, scaledEnemyDb(round, playerCount), 'dartlite', run.cardMode);
   battle.trinkets = allTrinkets;
-  // Override each battle player's hp to their actual current HP (not full
-  // maxHp) so that damage taken during the round is relative to the real
-  // current health, and healing cards can restore HP up to maxHp.
   battle.players = battle.players.map(bp => {
     const cur = playerCurrentHp[bp.id];
     return cur != null ? { ...bp, hp: cur } : bp;
   });
-  // The party HP pool should also reflect the sum of current player HPs,
-  // not the full party maxHp — otherwise the party starts every round at
-  // full and healing cards have no effect.
   const partyHpStart = battle.players.reduce((sum, bp) => sum + bp.hp, 0);
   battle.partyHp = Math.min(battle.partyMaxHp, partyHpStart);
   for (const rp of run.runPlayers) {

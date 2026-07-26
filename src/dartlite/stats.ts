@@ -10,10 +10,22 @@
 import type { Player } from '../types';
 import type { DartliteRun } from './engine';
 import type { TrinketId } from './trinkets';
-import { addClassXp, classLevelFromXp, reconcileCoopPassivesForPlayer } from '../campaign/engine/classes';
+import { addClassXp, classLevelFromXp, getCoopClass, reconcileCoopPassivesForPlayer } from '../campaign/engine/classes';
 import type { Settings } from '../types';
 
 const GLOBAL_KEY = 'dc_dartlite_stats';
+
+export interface DartliteLevelUpInfo {
+  playerId: string;
+  playerName: string;
+  classId: string;
+  className: string;
+  classIcon: string;
+  oldLevel: number;
+  newLevel: number;
+  xpGained: number;
+  leveledUp: boolean;
+}
 
 export interface DartliteGlobalStats {
   totalKills: number;
@@ -97,10 +109,42 @@ export function recordDartliteRun(
   run: DartliteRun,
   setPlayers: (updater: (prev: Player[]) => Player[]) => void,
   settings?: Settings,
-): void {
+  playersSnapshot?: Player[],
+): DartliteLevelUpInfo[] {
   const seenTrinkets = ([...new Set(run.stats.trinketsCollected)] as TrinketId[])
     .filter(id => (id as string) !== 'trk_phoenix_heart_used');
   const xpToAward = run.stats.xpGained;
+
+  // Compute level-up info from the pre-update snapshot so it's stable
+  // regardless of how many times React runs the setPlayers updater.
+  const levelUps: DartliteLevelUpInfo[] = [];
+  const snapshotById = new Map((playersSnapshot || []).map(p => [p.id, p]));
+  for (const pid of run.playerIds) {
+    const p = snapshotById.get(pid);
+    if (!p) continue;
+    if (!settings || xpToAward <= 0) {
+      const classId = p.coopProgress?.classId ?? null;
+      const cls = getCoopClass(classId);
+      const oldLevel = classLevelFromXp(p.coopProgress, classId, settings).level;
+      levelUps.push({
+        playerId: p.id, playerName: p.name, classId: classId || '',
+        className: cls?.name || 'Adventurer', classIcon: cls?.icon || '✨',
+        oldLevel, newLevel: oldLevel, xpGained: xpToAward, leveledUp: false,
+      });
+      continue;
+    }
+    const classId = p.coopProgress?.classId ?? null;
+    const oldLevel = classLevelFromXp(p.coopProgress, classId, settings).level;
+    const updatedProg = addClassXp(p.coopProgress, classId, xpToAward);
+    const li = classLevelFromXp(updatedProg, classId, settings);
+    const cls = getCoopClass(classId);
+    levelUps.push({
+      playerId: p.id, playerName: p.name, classId: classId || '',
+      className: cls?.name || 'Adventurer', classIcon: cls?.icon || '✨',
+      oldLevel, newLevel: li.level, xpGained: xpToAward, leveledUp: li.level > oldLevel,
+    });
+  }
+
   setPlayers((prev: Player[]) => prev.map(p => {
     if (!run.playerIds.includes(p.id)) return p;
     const cur = p.dartliteStats || defaultDartliteStats();
@@ -116,7 +160,6 @@ export function recordDartliteRun(
     };
     if (!settings || xpToAward <= 0) return { ...p, dartliteStats: updated };
     const classId = p.coopProgress?.classId ?? null;
-    const oldLevel = classLevelFromXp(p.coopProgress, classId, settings).level;
     const updatedProg = addClassXp(p.coopProgress, classId, xpToAward);
     const li = classLevelFromXp(updatedProg, classId, settings);
     let next: Player = { ...p, dartliteStats: updated, coopProgress: updatedProg };
@@ -137,4 +180,6 @@ export function recordDartliteRun(
     totalRuns: g.totalRuns + 1,
     totalXp: g.totalXp + run.stats.xpGained,
   });
+
+  return levelUps;
 }

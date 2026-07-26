@@ -3,8 +3,8 @@ import type { Player, Settings } from '../types';
 import { initials } from '../store';
 import type { DartliteRun } from './engine';
 import { getTrinket, TRINKETS } from './trinkets';
-import { recordDartliteRun } from './stats';
-import { Modal } from '../Popups';
+import { recordDartliteRun, type DartliteLevelUpInfo } from './stats';
+import { Modal, CpProgressPopup } from '../Popups';
 import type { TrinketId } from './trinkets';
 
 interface Props {
@@ -18,9 +18,13 @@ interface Props {
 export function DartliteGameOver({ run, players = [], settings, setPlayers, onContinue }: Props) {
   const [trinketInfo, setTrinketInfo] = useState<TrinketId | null>(null);
   const [tab, setTab] = useState<'overview' | 'players'>('overview');
+  const [cpPopup, setCpPopup] = useState<DartliteLevelUpInfo[] | null>(null);
 
   useEffect(() => {
-    recordDartliteRun(run, setPlayers as any, settings);
+    const levelUps = recordDartliteRun(run, setPlayers as any, settings, players);
+    if (levelUps.length && levelUps.some(lu => lu.xpGained > 0)) {
+      setCpPopup(levelUps);
+    }
   }, []); // run once on mount
 
   const seenTrinkets = run.stats.trinketsCollected.filter(
@@ -216,6 +220,10 @@ export function DartliteGameOver({ run, players = [], settings, setPlayers, onCo
             <button className="btn primary block" style={{ marginTop: 14 }} onClick={() => setTrinketInfo(null)}>Close</button>
           </div>
         </Modal>
+      )}
+
+      {cpPopup && (
+        <CpProgressPopup info={cpPopup} onDone={() => setCpPopup(null)} settings={settings} />
       )}
     </div>
   );
