@@ -134,7 +134,7 @@ export function CardHand({
                       <EffectPill card={card} />
                     </div>
                     <div className="card-tile-name">{card.name}</div>
-                    <div className="card-tile-type">{card.type === 'damage' ? `${cardDamage(card)}${extraPower > 0 ? ` + ${extraPower}` : ''} dmg` : card.type}</div>
+                    <div className="card-tile-type">{card.type === 'damage' ? (extraPower > 0 ? `${cardDamage(card) + extraPower} (${cardDamage(card)}+${extraPower}) dmg` : `${cardDamage(card)} dmg`) : card.type}</div>
                   </div>
                 </div>
               );
@@ -187,7 +187,7 @@ export function CardHand({
             </div>
             <div className="card-popup-body">
               <div className="card-popup-type" style={{ color: cardTypeColor(selectedCard.type) }}>
-                {selectedCard.type === 'damage' ? `Damage — ${cardDamage(selectedCard)}${extraPower > 0 ? ` + ${extraPower}` : ''} points` : selectedCard.type === 'spell' ? 'Spell' : 'Utility'}
+                {selectedCard.type === 'damage' ? `Damage — ${extraPower > 0 ? `${cardDamage(selectedCard) + extraPower} (${cardDamage(selectedCard)}+${extraPower})` : cardDamage(selectedCard)} points` : selectedCard.type === 'spell' ? 'Spell' : 'Utility'}
               </div>
               <div className="card-popup-desc">{selectedCard.desc}</div>
               {selectedCard.class !== 'any' && <div className="card-popup-class">Class: {selectedCard.class}</div>}

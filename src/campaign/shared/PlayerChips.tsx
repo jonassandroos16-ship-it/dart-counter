@@ -8,6 +8,14 @@ import { getCoopPowerUp, canActivateCoopPowerUp } from '../engine';
 import { ChargeRing } from '../../components/ChargeRing';
 import { Modal } from '../../Popups';
 
+function powerBreakdown(p: CoopPlayer): { base: number; passive: number; buff: number; total: number } {
+  const passive = p.power - (p as any).bonusPower - ((p as any).basePower ?? p.power - (p as any).bonusPower);
+  const buff = p.buffs.filter(b => b.kind === 'power').reduce((s, b) => s + b.amount, 0);
+  const baseOnly = p.power - (p as any).bonusPower;
+  const base = (p as any).basePower ?? baseOnly;
+  return { base, passive: (p as any).bonusPower ?? 0, buff, total: effectivePower(p) };
+}
+
 export interface PlayerChipExtra {
   icon?: string;
   iconTitle?: string;
@@ -26,6 +34,7 @@ export interface PlayerChipsProps {
 
 export function PlayerChips({ state, players, onPlayerClick, playerClickTitle, extras, onActivatePowerUp }: PlayerChipsProps) {
   const [infoPlayer, setInfoPlayer] = useState<string | null>(null);
+  const [powerPlayer, setPowerPlayer] = useState<string | null>(null);
 
   const { infoPu, infoReady, infoChargedButWaiting, infoCharge } = (() => {
     if (!infoPlayer) return { infoPu: null, infoReady: false, infoChargedButWaiting: false, infoCharge: 0 };
@@ -103,7 +112,11 @@ export function PlayerChips({ state, players, onPlayerClick, playerClickTitle, e
                   {extra.badge.label}
                 </span>
               )}
-              <span style={{ fontSize: 10, opacity: 0.8 }}>⚡{effectivePower(p)}</span>
+              <span
+                onClick={(e) => { e.stopPropagation(); setPowerPlayer(p.id); }}
+                title="Tap to see power calculation"
+                style={{ fontSize: 10, opacity: 0.8, cursor: 'pointer', textDecoration: 'underline dotted' }}
+              >⚡{effectivePower(p)}</span>
               {p.buffs.length > 0 && (
                 <PartyBuffBadges buffs={p.buffs} />
               )}
@@ -111,6 +124,32 @@ export function PlayerChips({ state, players, onPlayerClick, playerClickTitle, e
           );
         })}
       </div>
+      {powerPlayer && (() => {
+        const p = state.players.find(pl => pl.id === powerPlayer);
+        if (!p) return null;
+        const bd = powerBreakdown(p);
+        return (
+          <Modal onClose={() => setPowerPlayer(null)}>
+            <div style={{ padding: 16, maxWidth: 320 }}>
+              <h3 style={{ margin: '0 0 12px 0' }}>{p.name} — Power</h3>
+              <div className="muted small" style={{ marginBottom: 12 }}>How effective power is calculated</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div className="row between"><span className="muted small">Base power</span><span style={{ fontWeight: 700 }}>{bd.base}</span></div>
+                {bd.passive > 0 && <div className="row between"><span className="muted small">Passive bonus</span><span style={{ fontWeight: 700, color: '#fbbf24' }}>+{bd.passive}</span></div>}
+                {bd.buff > 0 && <div className="row between"><span className="muted small">Active buffs</span><span style={{ fontWeight: 700, color: '#a78bfa' }}>+{bd.buff}</span></div>}
+                <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0', paddingTop: 8 }} className="row between">
+                  <span style={{ fontWeight: 800 }}>Effective power</span>
+                  <span style={{ fontWeight: 900, fontSize: 18, color: '#fbbf24' }}>{bd.total}</span>
+                </div>
+                <div className="muted small" style={{ marginTop: 4, lineHeight: 1.4 }}>
+                  Damage = dart value + effective power, then reduced by enemy armor.
+                </div>
+              </div>
+              <button className="btn block ghost" style={{ marginTop: 16 }} onClick={() => setPowerPlayer(null)}>Close</button>
+            </div>
+          </Modal>
+        );
+      })()}
       {infoPu && (
         <Modal onClose={() => setInfoPlayer(null)}>
           <div style={{ textAlign: 'center', padding: 8 }}>
