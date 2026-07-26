@@ -9,7 +9,6 @@ import { ChargeRing } from '../../components/ChargeRing';
 import { Modal } from '../../Popups';
 
 function powerBreakdown(p: CoopPlayer): { base: number; passive: number; buff: number; total: number } {
-  const passive = p.power - (p as any).bonusPower - ((p as any).basePower ?? p.power - (p as any).bonusPower);
   const buff = p.buffs.filter(b => b.kind === 'power').reduce((s, b) => s + b.amount, 0);
   const baseOnly = p.power - (p as any).bonusPower;
   const base = (p as any).basePower ?? baseOnly;

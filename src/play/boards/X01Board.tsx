@@ -111,11 +111,9 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
       const legsToWin = Math.ceil(game.legsBestOf / 2);
       const reachedThreshold = cur.legsWon >= (game.legsBestOf === 1 ? 1 : legsToWin);
       if (reachedThreshold) {
-        const MAX_CHECKOUT = 170;
-        const playersLeft = newPlayers.filter(pl => !checkedOut.includes(pl.id) && pl.score > 0);
-        const canTie = playersLeft.filter(pl => pl.score <= MAX_CHECKOUT);
-        if (playersLeft.length > 0 && canTie.length === playersLeft.length) {
-          toast(`${cur.name} checked out! ${playersLeft.length} player${playersLeft.length > 1 ? 's' : ''} left to tie.`);
+        const playersLeftToThrow = newPlayers.filter(pl => !checkedOut.includes(pl.id) && !thrown.includes(pl.id) && pl.score > 0);
+        if (playersLeftToThrow.length > 0) {
+          toast(`${cur.name} checked out! ${playersLeftToThrow.length} player${playersLeftToThrow.length > 1 ? 's' : ''} left to tie.`);
           Sound.play('win', {}, settings);
           const next = advanceTurn({ ...game, players: newPlayers, checkedOutThisRound: checkedOut, thrownThisRound: thrown, darts: [], mult: 1 });
           setGame(next);
@@ -208,16 +206,9 @@ export function X01Board({ game, setGame, settings, players, games, setGames, se
       const legsToWin = Math.ceil(g.legsBestOf / 2);
       const anyReached = g.players.some(pl => g.checkedOutThisRound.includes(pl.id) && pl.legsWon >= (g.legsBestOf === 1 ? 1 : legsToWin));
       if (anyReached) {
-        const MAX_CHECKOUT = 170;
         const playersLeftToThrow = g.players.filter(pl =>
           !g.checkedOutThisRound.includes(pl.id) && !thrown.includes(pl.id) && pl.score > 0);
         if (playersLeftToThrow.length === 0) {
-          if (checkedOutCount > 1) { finishGame({ ...g, turn }, null, g.checkedOutThisRound); return { ...g, turn, finished: true }; }
-          const winner = g.players.find(pl => g.checkedOutThisRound.includes(pl.id));
-          if (winner) { finishGame({ ...g, turn }, winner, null); return { ...g, turn, finished: true }; }
-        }
-        const canTie = playersLeftToThrow.filter(pl => pl.score <= MAX_CHECKOUT);
-        if (canTie.length === 0) {
           if (checkedOutCount > 1) { finishGame({ ...g, turn }, null, g.checkedOutThisRound); return { ...g, turn, finished: true }; }
           const winner = g.players.find(pl => g.checkedOutThisRound.includes(pl.id));
           if (winner) { finishGame({ ...g, turn }, winner, null); return { ...g, turn, finished: true }; }
