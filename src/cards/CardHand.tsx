@@ -19,6 +19,7 @@ export interface CardHandProps {
   playedCount?: number;
   onShowPlayed?: () => void;
   visitNumber?: number;
+  extraPower?: number;
 }
 
 export function CardHand({
@@ -35,6 +36,7 @@ export function CardHand({
   playedCount = 0,
   onShowPlayed,
   visitNumber,
+  extraPower = 0,
 }: CardHandProps) {
   const handDefs = cs.hand.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
   const usedDefs = cs.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
@@ -132,7 +134,7 @@ export function CardHand({
                       <EffectPill card={card} />
                     </div>
                     <div className="card-tile-name">{card.name}</div>
-                    <div className="card-tile-type">{card.type === 'damage' ? `${cardDamage(card)} dmg` : card.type}</div>
+                    <div className="card-tile-type">{card.type === 'damage' ? `${cardDamage(card)}${extraPower > 0 ? ` + ${extraPower}` : ''} dmg` : card.type}</div>
                   </div>
                 </div>
               );
@@ -185,7 +187,7 @@ export function CardHand({
             </div>
             <div className="card-popup-body">
               <div className="card-popup-type" style={{ color: cardTypeColor(selectedCard.type) }}>
-                {selectedCard.type === 'damage' ? `Damage — ${cardDamage(selectedCard)} points` : selectedCard.type === 'spell' ? 'Spell' : 'Utility'}
+                {selectedCard.type === 'damage' ? `Damage — ${cardDamage(selectedCard)}${extraPower > 0 ? ` + ${extraPower}` : ''} points` : selectedCard.type === 'spell' ? 'Spell' : 'Utility'}
               </div>
               <div className="card-popup-desc">{selectedCard.desc}</div>
               {selectedCard.class !== 'any' && <div className="card-popup-class">Class: {selectedCard.class}</div>}

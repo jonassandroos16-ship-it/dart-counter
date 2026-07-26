@@ -8,13 +8,24 @@ export function hasTrinket(run: DartliteRun, id: TrinketId): boolean {
 }
 
 export function partyPowerBonus(run: DartliteRun): number {
+  return run.runPlayers.reduce((sum, p) => sum + playerPowerInfo(run, p.id).extra, 0);
+}
+
+// Returns the total current power for a player during a run, including base
+// stats, stat rewards, boss-trinket bonuses (already baked into rp.power by
+// applyBossTrinketChoice), and conditional trinket bonuses (trk_sharp_tip,
+// trk_berserker). `extra` is the portion that comes from non-boss trinkets
+// only — the amount NOT already reflected in rp.power.
+export function playerPowerInfo(run: DartliteRun, playerId: string): { total: number; extra: number } {
+  const rp = run.runPlayers.find(p => p.id === playerId);
+  if (!rp) return { total: 0, extra: 0 };
   const scale = rewardScale(run.round);
-  let bonus = 0;
-  for (const p of run.runPlayers) {
-    if (p.trinkets.includes('trk_sharp_tip')) bonus += Math.round(5 * scale);
-    if (p.trinkets.includes('trk_berserker') && p.hp < p.maxHp * 0.3) bonus += Math.round(15 * scale);
+  let extra = 0;
+  for (const tid of rp.trinkets) {
+    if (tid === 'trk_sharp_tip') extra += Math.round(5 * scale);
+    else if (tid === 'trk_berserker' && rp.hp < rp.maxHp * 0.3) extra += Math.round(15 * scale);
   }
-  return bonus;
+  return { total: rp.power + extra, extra };
 }
 
 export function partyArmorBonus(run: DartliteRun): number {
