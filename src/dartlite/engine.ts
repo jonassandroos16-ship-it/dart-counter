@@ -36,7 +36,7 @@ export {
   hasTrinket, partyPowerBonus, partyArmorBonus, partyMaxHpBonus,
   enemyAccuracyMultiplier, chargeGainMultiplier, xpMultiplier,
   shouldPhoenixRevive, applyPhoenixRevive, applyBossTrinketChoice,
-  playerPowerInfo, effectiveRunPlayerMaxHp,
+  playerPowerInfo, effectiveTeamMaxHp,
 } from './trinketEffects';
 
 import { isMiniBossRound, isBossRound, xpForBattleWin, xpForKill } from './engineTypes';
@@ -49,6 +49,7 @@ import { computePartyPassiveBonus } from '../campaign/engine/classes';
 // ── Run initialization ────────────────────────────────────────────────
 
 export function startRun(players: Player[], settings: Settings, cardMode: boolean = false): DartliteRun {
+  const passiveBonus = computePartyPassiveBonus(players);
   const runPlayers: DartliteRunPlayer[] = players.map(p => {
     const cfg = settings.powerUpScaling;
     const startHealth = Number.isFinite(cfg.attributeStartHealth) ? cfg.attributeStartHealth : 400;
@@ -64,8 +65,7 @@ export function startRun(players: Player[], settings: Settings, cardMode: boolea
       id: p.id,
       name: p.name,
       color: p.color,
-      hp: Math.max(1, h),
-      maxHp: Math.max(1, h),
+      baseHp: Math.max(1, h),
       power: Math.max(0, pw),
       armor: Math.max(0, a),
       crit: Math.max(0, cr),
@@ -76,6 +76,9 @@ export function startRun(players: Player[], settings: Settings, cardMode: boolea
       cards: cardMode ? defaultPlayerCards(p.coopProgress?.classId) : [],
     };
   });
+  // Team HP = sum of each player's base HP + party passive HP bonus.
+  const baseTeamHp = runPlayers.reduce((sum, rp) => sum + rp.baseHp, 0);
+  const teamMaxHp = Math.max(1, baseTeamHp + passiveBonus.health);
   return {
     round: 0,
     playerIds: players.map(p => p.id),
@@ -107,7 +110,9 @@ export function startRun(players: Player[], settings: Settings, cardMode: boolea
     bossVictory: null,
     cardMode,
     log: [],
-    partyPassiveHealth: computePartyPassiveBonus(players).health,
+    partyPassiveHealth: passiveBonus.health,
+    teamHp: teamMaxHp,
+    teamMaxHp,
   };
 }
 
@@ -117,25 +122,27 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
   const round = run.round + 1;
   const playerCount = run.runPlayers.length;
   const level = levelForRound(round, playerCount);
-  const passiveBonus = computePartyPassiveBonus(players);
-  const playerCurrentHp: Record<string, number> = {};
+  // Build pseudo-Player objects for startBattle. HP is no longer per-player —
+  // the team HP pool is the single source of truth. We still pass each
+  // player's base HP + bonuses into the pseudo-Player's health attribute so
+  // startBattle's partyMaxHpFor computes the correct partyMaxHp, then we
+  // override partyHp/partyMaxHp with the run's teamHp/teamMaxHp afterwards.
+  const scale = rewardScale(round);
+  let teamMaxHpBonus = 0;
   const pseudoPlayers: Player[] = run.runPlayers.map(rp => {
-    const orig = players.find(p => p.id === rp.id) || ({} as Player);
-    let hp = rp.hp + passiveBonus.health;
-    let maxHp = rp.maxHp;
     let armor = rp.armor;
     let power = rp.power;
     let crit = rp.crit;
-    const scale = rewardScale(round);
+    let maxHp = rp.baseHp + rp.bonusHealth;
     for (const tid of rp.trinkets) {
-      if (tid === 'trk_vitality') { const add = Math.round(60 * scale); hp += add; maxHp += add; }
-      else if (tid === 'trk_giants_belt') { const add = Math.round(rp.maxHp * 0.5); hp += add; maxHp += add; }
+      if (tid === 'trk_vitality') { const add = Math.round(60 * scale); maxHp += add; teamMaxHpBonus += add; }
+      else if (tid === 'trk_giants_belt') { const add = Math.round(rp.baseHp * 0.5); maxHp += add; teamMaxHpBonus += add; }
       else if (tid === 'trk_sharp_tip') { power += Math.round(5 * scale); }
-      else if (tid === 'trk_berserker' && rp.hp < rp.maxHp * 0.3) { power += Math.round(15 * scale); }
+      else if (tid === 'trk_berserker' && run.teamHp < run.teamMaxHp * 0.3) { power += Math.round(15 * scale); }
       else if (tid === 'trk_thick_hide') { armor += Math.round(8 * scale); }
       else if (tid === 'trk_eagle_eye') { crit += Math.round(15 * scale); }
     }
-    playerCurrentHp[rp.id] = Math.max(1, Math.min(maxHp + passiveBonus.health, hp));
+    const orig = players.find(p => p.id === rp.id) || ({} as Player);
     const cid = orig.coopProgress?.classId;
     const boostedAttrs = { health: maxHp, armor, power, crit, pointsAvailable: 0 };
     const classAttributes = cid && orig.classAttributes
@@ -153,12 +160,14 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
   const allTrinkets = run.runPlayers.flatMap(rp => rp.trinkets);
   const battle = startBattle(level, pseudoPlayers, settings, scaledEnemyDb(round, playerCount), 'dartlite', run.cardMode);
   battle.trinkets = allTrinkets;
-  battle.players = battle.players.map(bp => {
-    const cur = playerCurrentHp[bp.id];
-    return cur != null ? { ...bp, hp: cur } : bp;
-  });
-  const partyHpStart = battle.players.reduce((sum, bp) => sum + bp.hp, 0);
-  battle.partyHp = Math.min(battle.partyMaxHp, partyHpStart);
+  // Override the battle's party HP with the run's team HP pool. The battle
+  // engine reads and writes partyHp; after the battle, resolveBattle copies
+  // it back to run.teamHp. teamMaxHp grows with trinket/stat upgrades via
+  // teamMaxHpBonus (already applied above) — the battle's partyMaxHp is
+  // derived from the pseudo-Players' health, which includes those bonuses.
+  const teamMaxHp = Math.max(1, run.teamMaxHp + teamMaxHpBonus);
+  battle.partyMaxHp = teamMaxHp;
+  battle.partyHp = Math.min(teamMaxHp, run.teamHp + teamMaxHpBonus);
   for (const rp of run.runPlayers) {
     if (rp.trinkets.includes('trk_overcharge')) {
       const idx = battle.players.findIndex(p => p.id === rp.id);
@@ -167,7 +176,7 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
       }
     }
   }
-  return { ...run, round, phase: 'battle', battle, lastUnlockedTrinket: null, bossVictory: null, choicePlayerIdx: 0, playerChoices: run.playerIds.map(() => null) };
+  return { ...run, round, phase: 'battle', battle, teamMaxHp, lastUnlockedTrinket: null, bossVictory: null, choicePlayerIdx: 0, playerChoices: run.playerIds.map(() => null) };
 }
 
 // ── Resolve a battle outcome ──────────────────────────────────────────
@@ -175,6 +184,8 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
 export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
   if (!run.battle) return run;
   const battle = run.battle;
+  // The battle's partyHp IS the team HP. Copy it back to the run.
+  const teamHpAfter = Math.max(0, battle.partyHp);
   if (won) {
     const soulMult = xpMultiplier(run);
     const killXp = Math.round(battle.enemies
@@ -194,9 +205,8 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
     }
     const newPool = availablePool(miniBosses, bosses);
 
-    // Boss round: full heal to max HP.
+    // Boss round: full heal to max team HP.
     if (isBossRound(run.round)) {
-      const runPlayers = run.runPlayers.map(rp => ({ ...rp, hp: rp.maxHp }));
       const bossName = battle.enemies.length > 0 ? battle.enemies[0].name : `Boss`;
       const trinketOptions = bossTrinketOptions(bosses);
       const stats: DartliteRunStats = {
@@ -214,31 +224,10 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
         if (!bp) return ps;
         return { ...ps, kills: ps.kills + (bp.kills ?? 0), damageDealt: ps.damageDealt + (bp.damageDealt ?? 0) };
       });
-      return { ...run, runPlayers, pool: newPool, stats, playerStats, phase: 'boss_victory', battle: null, pendingChoice: null, choicePlayerIdx: 0, playerChoices: run.playerIds.map(() => null), lastUnlockedTrinket: unlocked, bossVictory: { bossName, trinketOptions, chosenTrinket: null, claimedTrinket: null }, log };
+      return { ...run, pool: newPool, stats, playerStats, phase: 'boss_victory', battle: null, pendingChoice: null, choicePlayerIdx: 0, playerChoices: run.playerIds.map(() => null), lastUnlockedTrinket: unlocked, bossVictory: { bossName, trinketOptions, chosenTrinket: null, claimedTrinket: null }, log, teamHp: run.teamMaxHp };
     }
 
-    // Non-boss rounds: NO default healing. Players keep whatever HP they
-    // ended the battle with. Healing only comes from card effects or
-    // choosing the heal reward boon. The battle tracks damage on a shared
-    // partyHp pool, so deduct the lost amount proportionally from each
-    // runPlayer's hp — otherwise damage taken during the fight is silently
-    // discarded and players are effectively full-healed every round.
-    const partyHpLost = Math.max(0, (battle.partyMaxHp ?? 0) - (battle.partyHp ?? 0));
-    const totalMax = run.runPlayers.reduce((sum, rp) => sum + Math.max(1, rp.maxHp), 0);
-    let runPlayers: typeof run.runPlayers;
-    if (partyHpLost <= 0 || totalMax <= 0) {
-      runPlayers = run.runPlayers.map(rp => ({ ...rp }));
-    } else {
-      let remaining = partyHpLost;
-      runPlayers = run.runPlayers.map((rp, i) => {
-        const share = i === run.runPlayers.length - 1
-          ? remaining
-          : Math.min(remaining, Math.round((Math.max(1, rp.maxHp) / totalMax) * partyHpLost));
-        remaining -= share;
-        return { ...rp, hp: Math.max(0, rp.hp - share) };
-      });
-    }
-
+    // Non-boss rounds: NO default healing. Team HP persists between rounds.
     const stats: DartliteRunStats = {
       ...run.stats,
       roundsCleared: run.stats.roundsCleared + 1,
@@ -254,7 +243,7 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
       if (!bp) return ps;
       return { ...ps, kills: ps.kills + (bp.kills ?? 0), damageDealt: ps.damageDealt + (bp.damageDealt ?? 0) };
     });
-    return { ...run, runPlayers, pool: newPool, stats, playerStats, phase: 'choice', battle: null, pendingChoice: generateChoices({ ...run, runPlayers, pool: newPool, stats, playerStats }), choicePlayerIdx: 0, playerChoices: run.playerIds.map(() => null), lastUnlockedTrinket: unlocked, bossVictory: null, log };
+    return { ...run, pool: newPool, stats, playerStats, phase: 'choice', battle: null, pendingChoice: generateChoices({ ...run, pool: newPool, stats, playerStats, teamHp: teamHpAfter }), choicePlayerIdx: 0, playerChoices: run.playerIds.map(() => null), lastUnlockedTrinket: unlocked, bossVictory: null, log, teamHp: teamHpAfter };
   }
   if (shouldPhoenixRevive(run)) {
     const revived = applyPhoenixRevive(run);
