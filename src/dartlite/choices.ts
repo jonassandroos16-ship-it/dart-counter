@@ -3,20 +3,15 @@ import { STARTER_POOL } from './trinkets';
 import type { TrinketId } from './trinkets';
 import { generateCardRewardOptions } from './cardRewards';
 import { pick, rewardScale } from './roundLogic';
-import { effectiveRunPlayerMaxHp } from './trinketEffects';
 
 export function generateChoices(run: DartliteRun): ChoiceOption[] {
   if (run.cardMode) {
     return generateCardChoices(run);
   }
   const pool = run.pool.length ? run.pool : STARTER_POOL;
-  const idx = run.choicePlayerIdx;
-  const rp = run.runPlayers[idx];
-  const effMaxHp = rp ? effectiveRunPlayerMaxHp(rp, run) : 0;
-  const healAmt = rp ? Math.round(effMaxHp * 0.2) : 0;
-  const healDesc = rp
-    ? `Heal ${healAmt} HP (${rp.hp}/${effMaxHp} → ${Math.min(effMaxHp, rp.hp + healAmt)})`
-    : `Restore 20% of max HP.`;
+  const effMaxHp = run.teamMaxHp;
+  const healAmt = Math.round(effMaxHp * 0.2);
+  const healDesc = `Heal ${healAmt} HP (${run.teamHp}/${effMaxHp} → ${Math.min(effMaxHp, run.teamHp + healAmt)})`;
   const scale = rewardScale(run.round);
   const hpAmt = Math.round(20 * scale);
   const armorAmt = Math.round(3 * scale);
@@ -37,11 +32,9 @@ function generateCardChoices(run: DartliteRun): ChoiceOption[] {
   const idx = run.choicePlayerIdx;
   const rp = run.runPlayers[idx];
   const ownedCards = rp?.cards ?? [];
-  const effMaxHp = rp ? effectiveRunPlayerMaxHp(rp, run) : 0;
-  const healAmt = rp ? Math.round(effMaxHp * 0.2) : 0;
-  const healDesc = rp
-    ? `Heal ${healAmt} HP (${rp.hp}/${effMaxHp} → ${Math.min(effMaxHp, rp.hp + healAmt)})`
-    : `Restore 20% of max HP.`;
+  const effMaxHp = run.teamMaxHp;
+  const healAmt = Math.round(effMaxHp * 0.2);
+  const healDesc = `Heal ${healAmt} HP (${run.teamHp}/${effMaxHp} → ${Math.min(effMaxHp, run.teamHp + healAmt)})`;
   const cardOpts = generateCardRewardOptions(ownedCards, 'coop', healAmt, healDesc, run.round);
   const options: ChoiceOption[] = cardOpts.map(o => ({
     kind: o.kind === 'deck_upgrade' ? 'deck_upgrade' : o.kind === 'heal' ? 'heal' : o.kind === 'stat' ? 'stat' : 'card_new',
@@ -64,14 +57,15 @@ export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): Dartl
   let runPlayers = run.runPlayers;
   let trinkets = run.trinkets;
   let stats = run.stats;
+  let teamHp = run.teamHp;
+  let teamMaxHp = run.teamMaxHp;
+  let teamMaxHpBonus = 0;
   let resolved: ChoiceOption = option;
 
   if (option.kind === 'heal') {
-    const rp = runPlayers[idx];
-    const effMaxHp = effectiveRunPlayerMaxHp(rp, run);
-    const healAmt = Math.round(effMaxHp * 0.2);
-    runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, hp: Math.min(effMaxHp, p.hp + healAmt) } : p);
-    resolved = { ...option, amount: healAmt, label: `Heal ${healAmt} HP`, desc: `Restored ${healAmt} HP (${rp.name}).` };
+    const healAmt = Math.round(teamMaxHp * 0.2);
+    teamHp = Math.min(teamMaxHp, teamHp + healAmt);
+    resolved = { ...option, amount: healAmt, label: `Heal ${healAmt} HP`, desc: `Restored ${healAmt} team HP.` };
   } else if (option.kind === 'deck_upgrade') {
     resolved = { ...option };
   } else if (option.kind === 'stat') {
@@ -84,7 +78,8 @@ export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): Dartl
     let amount: number;
     if (statRoll < 0.4) {
       statName = 'health'; amount = hpAmt;
-      runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, maxHp: p.maxHp + hpAmt, hp: p.hp + hpAmt, bonusHealth: p.bonusHealth + hpAmt } : p);
+      runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, bonusHealth: p.bonusHealth + hpAmt } : p);
+      teamMaxHpBonus = hpAmt;
     } else if (statRoll < 0.7) {
       statName = 'armor'; amount = armorAmt;
       runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, armor: p.armor + armorAmt, bonusArmor: p.bonusArmor + armorAmt } : p);
@@ -103,6 +98,11 @@ export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): Dartl
     resolved = { ...option, trinketId: id };
   }
 
+  if (teamMaxHpBonus > 0) {
+    teamMaxHp += teamMaxHpBonus;
+    teamHp += teamMaxHpBonus;
+  }
+
   const playerStats = run.playerStats.map(ps =>
     ps.playerId === run.playerIds[idx]
       ? { ...ps, rewards: [...ps.rewards, resolved], trinkets: resolved.trinketId ? [...ps.trinkets, resolved.trinketId] : ps.trinkets }
@@ -110,7 +110,6 @@ export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): Dartl
   );
 
   const playerChoices = run.playerChoices.map((c, i) => i === idx ? resolved : c);
-
   const nextIdx = idx + 1;
   const allChosen = nextIdx >= run.playerIds.length;
 
@@ -123,9 +122,11 @@ export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): Dartl
       playerStats,
       playerChoices,
       choicePlayerIdx: nextIdx,
-      pendingChoice: generateChoices({ ...run, runPlayers, trinkets, stats, playerStats, playerChoices, choicePlayerIdx: nextIdx }),
+      teamHp,
+      teamMaxHp,
+      pendingChoice: generateChoices({ ...run, runPlayers, trinkets, stats, playerStats, playerChoices, choicePlayerIdx: nextIdx, teamHp, teamMaxHp }),
       lastUnlockedTrinket: run.lastUnlockedTrinket,
-      phase: 'choice',
+      phase: 'choice' as const,
     };
   }
 
@@ -139,7 +140,9 @@ export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): Dartl
     choicePlayerIdx: idx,
     pendingChoice: null,
     lastUnlockedTrinket: run.lastUnlockedTrinket,
-    phase: 'reward',
+    phase: 'reward' as const,
+    teamHp,
+    teamMaxHp,
   };
 }
 
@@ -149,17 +152,12 @@ export function applyChoice(run: DartliteRun, option: ChoiceOption): DartliteRun
   let trinkets = run.trinkets;
   let stats = run.stats;
   let lastUnlocked = run.lastUnlockedTrinket;
+  let teamHp = run.teamHp;
+  let teamMaxHp = run.teamMaxHp;
 
   if (option.kind === 'heal') {
-    const totalMax = runPlayers.reduce((a, p) => a + p.maxHp, 0);
-    const healTotal = Math.round(totalMax * 0.2);
-    let remaining = healTotal;
-    runPlayers = runPlayers.map(p => {
-      const share = Math.round((p.maxHp / totalMax) * healTotal);
-      const healed = Math.min(p.maxHp, p.hp + share);
-      remaining -= healed - p.hp;
-      return { ...p, hp: healed };
-    });
+    const healTotal = Math.round(teamMaxHp * 0.2);
+    teamHp = Math.min(teamMaxHp, teamHp + healTotal);
   } else if (option.kind === 'stat') {
     const scale = rewardScale(run.round);
     const hpAmt = Math.round(20 * scale);
@@ -167,7 +165,9 @@ export function applyChoice(run: DartliteRun, option: ChoiceOption): DartliteRun
     const powerAmt = Math.round(4 * scale);
     const statRoll = Math.random();
     if (statRoll < 0.4) {
-      runPlayers = runPlayers.map(p => ({ ...p, maxHp: p.maxHp + hpAmt, hp: p.hp + hpAmt, bonusHealth: p.bonusHealth + hpAmt }));
+      runPlayers = runPlayers.map(p => ({ ...p, bonusHealth: p.bonusHealth + hpAmt }));
+      teamMaxHp += hpAmt;
+      teamHp += hpAmt;
     } else if (statRoll < 0.7) {
       runPlayers = runPlayers.map(p => ({ ...p, armor: p.armor + armorAmt, bonusArmor: p.bonusArmor + armorAmt }));
     } else {
@@ -182,5 +182,5 @@ export function applyChoice(run: DartliteRun, option: ChoiceOption): DartliteRun
     stats = { ...stats, trinketsCollected: [...stats.trinketsCollected, id] };
   }
 
-  return { ...run, runPlayers, trinkets, stats, pendingChoice: null, lastUnlockedTrinket: lastUnlocked, phase: 'setup' };
+  return { ...run, runPlayers, trinkets, stats, pendingChoice: null, lastUnlockedTrinket: lastUnlocked, phase: 'setup', teamHp, teamMaxHp };
 }
