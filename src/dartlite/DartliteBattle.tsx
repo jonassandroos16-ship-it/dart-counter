@@ -460,6 +460,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
               onUndo={onUndo}
               onEndVisit={handleEnter}
               visitNumber={state.visitNumber}
+              extraPower={thrower.power}
             />
           )}
 
