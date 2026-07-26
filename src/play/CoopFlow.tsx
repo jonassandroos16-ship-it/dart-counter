@@ -28,7 +28,7 @@ export type CoopStage = 'none' | 'setup' | 'chapters' | 'map' | 'battle' | 'post
 
 interface Props {
   players: Player[];
-  settings: MusicEngine;
+  settings: Settings;
   music: MusicEngine;
   setPlayers: (updater: any) => void;
   toast: (m: string) => void;
