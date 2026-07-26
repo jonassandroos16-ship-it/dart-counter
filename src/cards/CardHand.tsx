@@ -42,7 +42,6 @@ export function CardHand({
     .map((pc, idx) => ({ def: resolveCardDef(pc), handIdx: idx }))
     .filter((e): e is { def: CardDef; handIdx: number } => e.def !== undefined);
   const handDefs = handEntries.map(e => e.def);
-  const usedDefs = cs.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
 
   const [selectedCardIdx, setSelectedCardIdx] = useState<number | null>(null);
   const [popupClosing, setPopupClosing] = useState(false);
@@ -68,11 +67,6 @@ export function CardHand({
     prevHandLen.current = handDefs.length;
   }, [handDefs.length, visitNumber]);
 
-  const handleSelect = (idx: number) => {
-    if (animatingOut !== null) return;
-    setSelectedCardIdx(idx);
-  };
-
   const selectedCard = selectedCardIdx !== null ? handDefs[selectedCardIdx] : null;
 
   const closePopup = () => {
@@ -90,8 +84,8 @@ export function CardHand({
   };
 
   const powerLabel = (card: CardDef) => {
-    const dmg = cardDamage(card, extraPower);
-    return `${dmg}`;
+    const base = cardDamage(card);
+    return extraPower > 0 ? `${base + extraPower} (${base}+${extraPower})` : `${base}`;
   };
 
   return (
@@ -128,7 +122,7 @@ export function CardHand({
                   <EffectPill card={card} />
                 </div>
                 <div className="card-tile-name">{card.name}</div>
-                <div className="card-tile-type">{card.type}</div>
+                <div className="card-tile-type">{card.type === 'damage' ? `${powerLabel(card)} dmg` : card.type}</div>
               </div>
             </div>
           );
