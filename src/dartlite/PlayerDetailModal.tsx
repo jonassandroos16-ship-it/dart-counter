@@ -1,8 +1,9 @@
 import type { DartliteRun } from './engine';
-import { getTrinket, TRINKETS } from './trinkets';
+import { getTrinket } from './trinkets';
 import { playerPowerInfo } from './trinketEffects';
 import type { Player } from '../types';
-import { initials, Modal } from '../components/ui';
+import { initials } from '../store';
+import { Modal } from '../Popups';
 
 function DetailStat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
