@@ -38,7 +38,10 @@ export function CardHand({
   visitNumber,
   extraPower = 0,
 }: CardHandProps) {
-  const handDefs = cs.hand.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
+  const handEntries = cs.hand
+    .map((pc, idx) => ({ def: resolveCardDef(pc), handIdx: idx }))
+    .filter((e): e is { def: CardDef; handIdx: number } => e.def !== undefined);
+  const handDefs = handEntries.map(e => e.def);
   const usedDefs = cs.used.map(pc => resolveCardDef(pc)).filter(Boolean) as CardDef[];
 
   const [selectedCardIdx, setSelectedCardIdx] = useState<number | null>(null);
@@ -77,7 +80,7 @@ export function CardHand({
 
   const handlePlay = () => {
     if (selectedCardIdx === null) return;
-    onPlayCard(selectedCardIdx);
+    onPlayCard(handEntries[selectedCardIdx].handIdx);
     setSelectedCardIdx(null);
   };
 

@@ -10,9 +10,9 @@ import { Modal } from '../../Popups';
 
 function powerBreakdown(p: CoopPlayer): { base: number; passive: number; buff: number; total: number } {
   const buff = p.buffs.filter(b => b.kind === 'power').reduce((s, b) => s + b.amount, 0);
-  const baseOnly = p.power - (p as any).bonusPower;
-  const base = (p as any).basePower ?? baseOnly;
-  return { base, passive: (p as any).bonusPower ?? 0, buff, total: effectivePower(p) };
+  const passive = (p as any).bonusPower ?? 0;
+  const base = (p as any).basePower ?? (p.power - passive);
+  return { base, passive, buff, total: effectivePower(p) };
 }
 
 export interface PlayerChipExtra {
