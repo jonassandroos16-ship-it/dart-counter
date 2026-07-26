@@ -28,7 +28,6 @@ export function BossVictoryScreen({ run, players, onPick, canChoose = true }: Pr
   if (!run.bossVictory) return null;
   const { bossName, trinketOptions } = run.bossVictory;
 
-  // Boss story / drop reveal popup shown first
   if (showStory) {
     return (
       <div className="view-scroll" style={{
@@ -47,8 +46,6 @@ export function BossVictoryScreen({ run, players, onPick, canChoose = true }: Pr
           <div style={{ marginTop: 16, fontSize: 15, lineHeight: 1.7, color: 'var(--text)', fontStyle: 'italic', padding: '0 8px' }}>
             {storyText}
           </div>
-
-          {/* Trinket teaser */}
           <div style={{ marginTop: 20, padding: '12px 16px', borderRadius: 12, background: 'color-mix(in srgb,#f59e0b 10%,var(--bg-3))', border: '1px solid color-mix(in srgb,#f59e0b 30%,var(--border))' }}>
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.12em', color: '#fbbf24', textTransform: 'uppercase', marginBottom: 6 }}>
               Boss Trinket Dropped!
@@ -66,7 +63,6 @@ export function BossVictoryScreen({ run, players, onPick, canChoose = true }: Pr
             </div>
             <div className="muted small" style={{ marginTop: 6 }}>Choose one to empower your run</div>
           </div>
-
           <button
             className="btn primary block"
             style={{ marginTop: 22, background: '#f59e0b', borderColor: '#f59e0b', color: '#0b0e13', fontWeight: 900 }}
@@ -79,7 +75,6 @@ export function BossVictoryScreen({ run, players, onPick, canChoose = true }: Pr
     );
   }
 
-  // Trinket selection screen
   return (
     <div className="view-scroll" style={{
       background: 'radial-gradient(ellipse at top, color-mix(in srgb,#f59e0b 18%,var(--bg)) 0%, var(--bg) 70%)',
@@ -145,7 +140,7 @@ export function BossVictoryScreen({ run, players, onPick, canChoose = true }: Pr
                 <span className="avatar" style={{ background: p?.color || rp.color, width: 22, height: 22, fontSize: 10 }}>
                   {initials(p?.name || rp.name)}
                 </span>
-                <span className="muted small">❤️ {rp.hp}/{rp.maxHp}</span>
+                <span className="muted small">❤️ {run.teamHp}/{run.teamMaxHp}</span>
               </div>
             );
           })}

@@ -25,7 +25,7 @@ export function DartliteGameOver({ run, players = [], settings, setPlayers, onCo
     if (levelUps.length && levelUps.some(lu => lu.xpGained > 0)) {
       setCpPopup(levelUps);
     }
-  }, []); // run once on mount
+  }, []);
 
   const seenTrinkets = run.stats.trinketsCollected.filter(
     (v, i, a) => a.indexOf(v) === i && (v as string) !== 'trk_phoenix_heart_used',
@@ -39,8 +39,6 @@ export function DartliteGameOver({ run, players = [], settings, setPlayers, onCo
       minHeight: '100%',
     }}>
       <div className="card" style={{ maxWidth: 540, margin: '0 auto' }}>
-
-        {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
           <div style={{ fontSize: 48, marginBottom: 6 }}>☠</div>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#fca5a5', textTransform: 'uppercase' }}>
@@ -54,7 +52,6 @@ export function DartliteGameOver({ run, players = [], settings, setPlayers, onCo
           </div>
         </div>
 
-        {/* Tab switcher */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
           {(['overview', 'players'] as const).map(t => (
             <button key={t} className="btn block" style={{
@@ -71,7 +68,6 @@ export function DartliteGameOver({ run, players = [], settings, setPlayers, onCo
 
         {tab === 'overview' && (
           <>
-            {/* Global stats grid */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
               <StatTile label="Rounds" value={run.stats.roundsCleared} color="#c4b5fd" />
               <StatTile label="Kills" value={run.stats.enemiesDefeated} color="#86efac" />
@@ -81,7 +77,6 @@ export function DartliteGameOver({ run, players = [], settings, setPlayers, onCo
               <StatTile label="XP Gained" value={run.stats.xpGained} color="#38bdf8" />
             </div>
 
-            {/* Trinkets */}
             {seenTrinkets.length > 0 && (
               <div style={{ marginBottom: 4 }}>
                 <div className="muted small" style={{ fontWeight: 700, marginBottom: 8 }}>
@@ -124,7 +119,6 @@ export function DartliteGameOver({ run, players = [], settings, setPlayers, onCo
                   background: 'var(--bg-3)',
                   border: `1px solid color-mix(in srgb, ${color} 35%, var(--border))`,
                 }}>
-                  {/* Player header */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                     <span className="avatar" style={{ background: color, width: 34, height: 34, fontSize: 14 }}>
                       {initials(name)}
@@ -132,7 +126,7 @@ export function DartliteGameOver({ run, players = [], settings, setPlayers, onCo
                     <div>
                       <div style={{ fontWeight: 900, fontSize: 16 }}>{name}</div>
                       <div className="muted small">
-                        {ps?.kills ?? 0} kills · {ps?.damageDealt ?? 0} dmg · {rp?.hp ?? 0}/{rp?.maxHp ?? 0} HP
+                        {ps?.kills ?? 0} kills · {ps?.damageDealt ?? 0} dmg · {rp?.bonusHealth ?? 0} bonus HP
                       </div>
                     </div>
                     <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
@@ -145,17 +139,15 @@ export function DartliteGameOver({ run, players = [], settings, setPlayers, onCo
                     </div>
                   </div>
 
-                  {/* Stats row */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
                     <MiniStat label="Kills" value={ps?.kills ?? 0} />
                     <MiniStat label="Damage" value={ps?.damageDealt ?? 0} />
-                    <MiniStat label="HP Left" value={rp?.hp ?? 0} />
-                    <MiniStat label="Max HP" value={rp?.maxHp ?? 0} />
+                    <MiniStat label="Team HP" value={run.teamHp} />
+                    <MiniStat label="Team Max" value={run.teamMaxHp} />
                     <MiniStat label="Armor" value={`${rp?.armor ?? 0}%`} />
                     <MiniStat label="Power" value={rp?.power ?? 0} />
                   </div>
 
-                  {/* Trinkets */}
                   {playerTrinkets.length > 0 && (
                     <div style={{ marginBottom: 10 }}>
                       <div className="muted small" style={{ fontWeight: 700, marginBottom: 6 }}>Trinkets</div>
@@ -176,7 +168,6 @@ export function DartliteGameOver({ run, players = [], settings, setPlayers, onCo
                     </div>
                   )}
 
-                  {/* Rewards */}
                   {rewards.length > 0 && (
                     <div>
                       <div className="muted small" style={{ fontWeight: 700, marginBottom: 6 }}>
