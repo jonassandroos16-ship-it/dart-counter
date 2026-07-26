@@ -1,5 +1,18 @@
 import type { CardDef } from './types';
 
+// Effects whose `magnitude` is a percentage (0..100). These must never reach
+// 100%+ through upgrades — that would make the party invulnerable
+// (party_shield) or strip all enemy damage/accuracy (enemy_debuff/curse/miss).
+// Cap upgrades at 80% so the card stays powerful but never broken.
+const PERCENTAGE_EFFECTS = new Set([
+  'party_shield',
+  'enemy_debuff',
+  'enemy_curse',
+  'enemy_miss',
+]);
+
+const PERCENTAGE_CAP = 80;
+
 function updateMagnitudeInDesc(desc: string, oldMag: number | undefined, newMag: number | undefined): string {
   if (oldMag === undefined || newMag === undefined || oldMag === newMag) return desc;
   return desc.split(String(oldMag)).join(String(newMag));
@@ -22,7 +35,11 @@ export function upgradedCardDef(card: CardDef): CardDef {
     };
   }
   if (card.type === 'spell' || card.type === 'utility') {
-    const newMag = card.magnitude ? Math.round(card.magnitude * 1.3) : card.magnitude;
+    const isPercentage = !!card.effect && PERCENTAGE_EFFECTS.has(card.effect);
+    let newMag = card.magnitude ? Math.round(card.magnitude * 1.3) : card.magnitude;
+    if (isPercentage && typeof newMag === 'number') {
+      newMag = Math.min(newMag, PERCENTAGE_CAP);
+    }
     return {
       ...card,
       upgraded: true,

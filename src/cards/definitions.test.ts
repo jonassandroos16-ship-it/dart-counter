@@ -62,6 +62,35 @@ describe('Card Definitions', () => {
     expect(upgraded.magnitude).toBe(104);
   });
 
+  it('upgradedCardDef caps party_shield magnitude at 80% (never invulnerable)', () => {
+    const base = getCard('util_shield')!; // Party Shield, 50%
+    let upgraded = base;
+    for (let i = 0; i < 5; i++) upgraded = upgradedCardDef(upgraded);
+    expect(upgraded.magnitude).toBeLessThanOrEqual(80);
+    expect(upgraded.magnitude).toBe(80);
+  });
+
+  it('upgradedCardDef caps enemy_curse magnitude at 80% (never harmless enemies)', () => {
+    const base = getCard('spell_priest_doom')!; // Doom, 50%
+    let upgraded = base;
+    for (let i = 0; i < 5; i++) upgraded = upgradedCardDef(upgraded);
+    expect(upgraded.magnitude).toBeLessThanOrEqual(80);
+  });
+
+  it('upgradedCardDef caps enemy_miss magnitude at 80%', () => {
+    const base = getCard('spell_rogue_total_disruption')!; // 90% miss
+    let upgraded = upgradedCardDef(base);
+    for (let i = 0; i < 4; i++) upgraded = upgradedCardDef(upgraded);
+    expect(upgraded.magnitude).toBeLessThanOrEqual(80);
+  });
+
+  it('upgradedCardDef caps enemy_debuff magnitude at 80%', () => {
+    const base = getCard('spell_enemy_debuff')!; // Weaken, 30%
+    let upgraded = base;
+    for (let i = 0; i < 5; i++) upgraded = upgradedCardDef(upgraded);
+    expect(upgraded.magnitude).toBeLessThanOrEqual(80);
+  });
+
   it('cardsForMode filters by mode (both includes all)', () => {
     const comp = cardsForMode('competitive');
     const coop = cardsForMode('coop');
