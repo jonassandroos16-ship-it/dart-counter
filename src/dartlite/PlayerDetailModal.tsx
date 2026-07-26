@@ -42,8 +42,7 @@ export function PlayerDetailModal({ run, playerId, players, onClose }: {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
             <DetailStat label="Kills" value={ps?.kills ?? 0} />
             <DetailStat label="Damage" value={ps?.damageDealt ?? 0} />
-            <DetailStat label="HP" value={rp?.hp ?? 0} />
-            <DetailStat label="Max HP" value={rp?.maxHp ?? 0} />
+            <DetailStat label="Bonus HP" value={rp?.bonusHealth ?? 0} />
             <DetailStat label="Armor" value={`${rp?.armor ?? 0}%`} />
             <DetailStat label="Power" value={powerInfo.total} />
           </div>

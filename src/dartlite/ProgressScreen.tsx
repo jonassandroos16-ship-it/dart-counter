@@ -24,7 +24,6 @@ export function ProgressScreen({ run, players, onContinue }: { run: DartliteRun;
             const p = players.find(x => x.id === pid);
             if (!p) return null;
             const ps = run.playerStats.find(s => s.playerId === pid);
-            const rp = run.runPlayers.find(r => r.id === pid);
             return (
               <button key={pid} className="btn block" style={{ padding: 12, textAlign: 'left', background: 'var(--bg-3)', borderColor: 'var(--border)' }}
                 onClick={() => setDetailId(pid)}>
@@ -38,7 +37,7 @@ export function ProgressScreen({ run, players, onContinue }: { run: DartliteRun;
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: 11, color: '#c4b5fd', fontWeight: 700 }}>{ps?.rewards.length ?? 0} rewards</div>
-                    <div className="muted small">HP {rp?.hp ?? 0}</div>
+                    <div className="muted small">Team HP {run.teamHp}</div>
                   </div>
                 </div>
               </button>
