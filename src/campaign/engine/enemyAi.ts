@@ -97,6 +97,7 @@ export function prepareEnemyTurn(state: CampaignBattleState, rng: () => number =
   const damageReductionMult = partyDamageReductionMultiplier(state);
   const frozenEnemiesThisRound: { id: string; name: string; frozenTurns: number }[] = [];
   const trinkets = state.trinkets ?? [];
+  const dmgMult = state.enemyDamageMult ?? 1;
   const enemies = state.enemies.map(e => ({ ...e }));
   let adamantUsed = !trinkets.includes('trk_adamant');
   for (const enemy of enemies) {
@@ -112,7 +113,7 @@ export function prepareEnemyTurn(state: CampaignBattleState, rng: () => number =
     for (let i = 0; i < 3; i++) {
       const dart = simulateEnemyDart(enemy, rng, trinkets);
       const baseDmg = Math.max(0, dart.value);
-      let rawDmg = baseDmg > 0 ? Math.max(0, Math.round(baseDmg * weakenMult)) : 0;
+      let rawDmg = baseDmg > 0 ? Math.max(0, Math.round(baseDmg * weakenMult * dmgMult)) : 0;
       // Trinket: Bulwark — reduce every incoming hit by 5.
       if (trinkets.includes('trk_bulwark') && rawDmg > 0) rawDmg = Math.max(0, rawDmg - 5);
       // Trinket: Phantom Step — 12% chance to dodge an enemy dart.

@@ -20,7 +20,7 @@ export function generateChoices(run: DartliteRun): ChoiceOption[] {
   const options: ChoiceOption[] = [
     { kind: 'heal', label: `Heal ${healAmt} HP`, desc: healDesc, icon: '❤️‍🩹', amount: healAmt },
     { kind: 'stat', label: 'Gain a Stat', desc: statDesc, icon: '📊' },
-    { kind: 'trinket', label: 'Random Trinket', desc: 'Draw a random trinket from the available pool.', icon: '🔮' },
+    { kind: 'trinket', label: 'Choose a Trinket', desc: 'Pick one of three trinkets from the available pool.', icon: '🔮' },
   ];
   if (!pool.length) {
     options[2] = { kind: 'heal', label: `Heal ${healAmt} HP`, desc: healDesc, icon: '❤️‍🩹', amount: healAmt };
@@ -45,7 +45,7 @@ function generateCardChoices(run: DartliteRun): ChoiceOption[] {
   }));
   const pool = run.pool.length ? run.pool : STARTER_POOL;
   if (pool.length) {
-    options.push({ kind: 'trinket', label: 'Random Trinket', desc: 'Draw a random trinket from the available pool.', icon: '🔮' });
+    options.push({ kind: 'trinket', label: 'Choose a Trinket', desc: 'Pick one of three trinkets from the available pool.', icon: '🔮' });
   } else {
     options.push({ kind: 'heal', label: `Heal ${healAmt} HP`, desc: healDesc, icon: '❤️‍🩹', amount: healAmt });
   }
@@ -91,7 +91,13 @@ export function applyPlayerChoice(run: DartliteRun, option: ChoiceOption): Dartl
     resolved = { ...option, stat: statName, amount, label: statLabel, desc: `Gained ${statLabel}.` };
   } else if (option.kind === 'trinket') {
     const pool = run.pool.length ? run.pool : STARTER_POOL;
-    const id = option.trinketId && pool.includes(option.trinketId) ? option.trinketId : pick(pool) as TrinketId;
+    const owned = new Set<TrinketId>();
+    for (const p of run.runPlayers) for (const t of p.trinkets) owned.add(t);
+    for (const t of run.trinkets) owned.add(t);
+    const available = pool.filter(id => !owned.has(id));
+    const id = option.trinketId && available.includes(option.trinketId) ? option.trinketId
+      : available.length ? pick(available) as TrinketId
+      : pick(pool) as TrinketId;
     runPlayers = runPlayers.map((p, i) => i === idx ? { ...p, trinkets: [...p.trinkets, id] } : p);
     trinkets = [...trinkets, id];
     stats = { ...stats, trinketsCollected: [...stats.trinketsCollected, id] };

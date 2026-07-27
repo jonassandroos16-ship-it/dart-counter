@@ -188,6 +188,7 @@ export interface CampaignBattleState {
   phantomDarts?: number;
   powerUpCharge?: number;
   trinkets?: string[];
+  enemyDamageMult?: number;
 }
 
 export interface CampaignProgress {

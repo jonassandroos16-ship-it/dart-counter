@@ -30,7 +30,7 @@ import { defaultPlayerCards } from '../cards/deck';
 import type { DartliteRun, DartliteRunPlayer, DartliteRunStats } from './engineTypes';
 export type { DartliteRun, DartliteRunPlayer, DartliteRunStats, DartlitePlayerRunStats, ChoiceOption, ChoiceKind } from './engineTypes';
 export { isMiniBossRound, isBossRound, xpForKill, xpForBattleWin } from './engineTypes';
-export { enemyHpScale, enemyAccScale, enemyPrecScale, scaledEnemyDb, levelForRound, rewardScale } from './roundLogic';
+export { enemyHpScale, enemyAccScale, enemyPrecScale, enemyDamageScale, scaledEnemyDb, levelForRound, rewardScale } from './roundLogic';
 export { generateChoices, applyPlayerChoice, applyChoice } from './choices';
 export {
   hasTrinket, partyPowerBonus, partyArmorBonus, partyMaxHpBonus,
@@ -40,7 +40,7 @@ export {
 } from './trinketEffects';
 
 import { isMiniBossRound, isBossRound, xpForBattleWin, xpForKill } from './engineTypes';
-import { scaledEnemyDb, levelForRound, rewardScale } from './roundLogic';
+import { scaledEnemyDb, levelForRound, rewardScale, enemyDamageScale } from './roundLogic';
 import { ENEMY_DATABASE } from '../campaign/enemyDatabase';
 import { generateChoices } from './choices';
 import { xpMultiplier, shouldPhoenixRevive, applyPhoenixRevive } from './trinketEffects';
@@ -160,6 +160,7 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
   const allTrinkets = run.runPlayers.flatMap(rp => rp.trinkets);
   const battle = startBattle(level, pseudoPlayers, settings, scaledEnemyDb(round, playerCount), 'dartlite', run.cardMode);
   battle.trinkets = allTrinkets;
+  battle.enemyDamageMult = enemyDamageScale(round, playerCount);
   // Override the battle's party HP with the run's team HP pool. The battle
   // engine reads and writes partyHp; after the battle, resolveBattle copies
   // it back to run.teamHp. teamMaxHp grows with trinket/stat upgrades via

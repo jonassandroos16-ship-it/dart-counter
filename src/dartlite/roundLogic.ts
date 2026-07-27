@@ -48,26 +48,57 @@ function partyPrecFactor(playerCount: number): number {
 }
 
 // Round scaling: enemies get harder as rounds progress.
+// Enemy HP grows steadily through the early game and keeps climbing past
+// round 10 so it does not fall behind player stat stacking. The curve is
+// piecewise: a gentle ramp through round 10, then a steeper ramp after so
+// enemy HP outpaces the (slower) reward scaling and stays a threat.
 export function enemyHpScale(round: number, playerCount: number = 2): number {
-  const base = Math.min(5.0, 1 + Math.max(0, round - 1) * 0.10);
+  const r = Math.max(0, round - 1);
+  const early = Math.min(2.0, 1 + r * 0.10);
+  const late = r <= 10 ? 0 : Math.min(4.0, (r - 10) * 0.08);
+  const base = Math.min(6.0, early + late);
   return base * partySizeFactor(playerCount);
 }
 
 // Reward scaling: keeps stat rewards and trinket flat bonuses proportional
-// to enemy strength as rounds progress. Matches the base enemy HP curve
-// (before the party-size factor) so rewards stay balanced regardless of
-// party size — each player picks their own reward, so scaling by party
-// size would double-penalize solo players.
+// to enemy strength as rounds progress. Grows more slowly than enemy HP
+// after round 10 so the party cannot simply out-scale the enemies — they
+// have to rely on trinkets and smart play instead of raw stats.
 export function rewardScale(round: number): number {
-  return Math.min(5.0, 1 + Math.max(0, round - 1) * 0.10);
+  const r = Math.max(0, round - 1);
+  const early = Math.min(2.0, 1 + r * 0.10);
+  const late = r <= 10 ? 0 : Math.min(2.0, (r - 10) * 0.04);
+  return Math.min(4.0, early + late);
 }
+
+// Enemy damage scaling: accuracy and precision climb steadily through the
+// early game, then ramp faster after round 10 so enemy hits stay relevant
+// against the party's growing HP and armor. Capped so enemies never become
+// unkillable, but they keep up with player defenses.
 export function enemyAccScale(round: number, playerCount: number = 2): number {
-  const base = Math.min(1.4, 1 + Math.max(0, round - 1) * 0.015);
+  const r = Math.max(0, round - 1);
+  const early = Math.min(1.2, 1 + r * 0.015);
+  const late = r <= 10 ? 0 : Math.min(0.6, (r - 10) * 0.03);
+  const base = Math.min(1.8, early + late);
   return base * partyAccFactor(playerCount);
 }
 export function enemyPrecScale(round: number, playerCount: number = 2): number {
-  const base = Math.min(1.4, 1 + Math.max(0, round - 1) * 0.015);
+  const r = Math.max(0, round - 1);
+  const early = Math.min(1.2, 1 + r * 0.015);
+  const late = r <= 10 ? 0 : Math.min(0.6, (r - 10) * 0.03);
+  const base = Math.min(1.8, early + late);
   return base * partyPrecFactor(playerCount);
+}
+
+// Enemy damage scaling: multiplies the raw damage of every enemy dart so
+// enemy hits keep pace with the party's growing HP and armor. Grows slowly
+// through the early game, then faster after round 10 so enemy damage never
+// falls behind player survivability. Capped so fights stay winnable.
+export function enemyDamageScale(round: number, playerCount: number = 2): number {
+  const r = Math.max(0, round - 1);
+  const early = Math.min(1.5, 1 + r * 0.05);
+  const late = r <= 10 ? 0 : Math.min(2.5, (r - 10) * 0.06);
+  return Math.min(4.0, early + late);
 }
 
 export function scaledEnemyDb(round: number, playerCount: number = 2): typeof ENEMY_DATABASE {
