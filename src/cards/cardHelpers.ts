@@ -40,6 +40,13 @@ export function cardTypeColor(type: CardDef['type']): string {
   }
 }
 
+// Charge granted by playing a card, as a fraction of chargeMax. Defaults to
+// 10% when the card omits `charge`. Used only in card mode — board mode keeps
+// the legacy dart-value-based charge system.
+export function cardChargeAmount(card: CardDef): number {
+  return typeof card.charge === 'number' && Number.isFinite(card.charge) ? card.charge : 0.1;
+}
+
 // Group cards by levelRequired for UI display.
 export function cardsByLevel(cards: CardDef[]): Map<number, CardDef[]> {
   const map = new Map<number, CardDef[]>();

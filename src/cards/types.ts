@@ -33,6 +33,10 @@ export interface CardDef {
   /** True for cards unlocked as Coop campaign mission rewards (themed per
    * chapter). These are gated by mission progress, not class level. */
   campaignReward?: boolean;
+  /** Power-up charge granted when this card is played, as a fraction of the
+   * max charge (0-1). Defaults to 0.1 (10%) when omitted. Only used in card
+   * mode; the board mode uses the legacy dart-value-based charge system. */
+  charge?: number;
 }
 
 export interface PlayerCard {

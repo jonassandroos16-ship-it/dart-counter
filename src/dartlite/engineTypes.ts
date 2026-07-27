@@ -73,6 +73,9 @@ export interface DartliteRunPlayer {
   bonusArmor: number;
   bonusPower: number;
   cards: PlayerCard[];
+  // Persisted power-up charge between rounds in card mode. Board mode keeps
+  // the legacy per-battle charge system and ignores this field.
+  powerUpCharge?: number;
 }
 
 // ── Choices ───────────────────────────────────────────────────────────

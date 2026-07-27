@@ -8,6 +8,6 @@ export { CARD_DEFS } from './cardData';
 export {
   getCard, cardsForMode, cardsForClass, cardMatchesMode,
   cardDamage, cardRarityColor, cardTypeColor,
-  cardsByLevel, splitStarterAndLeveled,
+  cardsByLevel, splitStarterAndLeveled, cardChargeAmount,
 } from './cardHelpers';
 export { upgradedCardDef } from './cardUpgrades';
