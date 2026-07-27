@@ -48,6 +48,11 @@ export function MultiplayerFlow({
   const [coopPlayers, setCoopPlayers] = useState<Player[]>([]);
   const [remoteRun, setRemoteRun] = useState<any>(null);
   const unsubRef = useRef<(() => void) | null>(null);
+  // Keep the latest lobby players in a ref so the realtime subscription
+  // callback (which is created once when entering a lobby) always reads
+  // current data instead of a stale closure value.
+  const lobbyPlayersRef = useRef<LobbyPlayer[]>([]);
+  useEffect(() => { lobbyPlayersRef.current = lobbyPlayers; }, [lobbyPlayers]);
   useEffect(() => {
     return () => { if (unsubRef.current) unsubRef.current(); };
   }, []);
@@ -75,18 +80,21 @@ export function MultiplayerFlow({
           // game_state. Remote devices read the config and transition to the
           // coop/dartlite stage using the player IDs from the lobby.
           const cfg = updated.game_config as any;
+          const currentPlayers = lobbyPlayersRef.current;
           if (cfg._coopMode === 'dartlite') {
-            const coopPlayers = lobbyPlayers
+            const coopPlayers = currentPlayers
               .filter(lp => cfg.playerIds?.includes(lp.player_id))
               .map(lp => ({ id: lp.player_id, name: lp.player_name, color: lp.player_color } as Player));
-            setCoopPlayers(coopPlayers);
+            // Only overwrite if we resolved players; otherwise keep any value
+            // the host already set locally so we don't drop into the fallback.
+            if (coopPlayers.length > 0) setCoopPlayers(coopPlayers);
             setStage('dartlite');
             music.stop();
           } else if (cfg._coopMode === 'coop') {
-            const coopPlayers = lobbyPlayers
+            const coopPlayers = currentPlayers
               .filter(lp => cfg.playerIds?.includes(lp.player_id))
               .map(lp => ({ id: lp.player_id, name: lp.player_name, color: lp.player_color } as Player));
-            setCoopPlayers(coopPlayers);
+            if (coopPlayers.length > 0) setCoopPlayers(coopPlayers);
             setStage('coop');
             music.stop();
           }
@@ -101,7 +109,7 @@ export function MultiplayerFlow({
       },
       (lp) => setLobbyPlayers(lp),
     );
-  }, [lobbyPlayers, music]);
+  }, [music]);
 
   const handleCreate = useCallback(async (name: string, hostPlayer: Player) => {
     const newLobby = await createLobby(name, hostPlayer, settings.gameMode, settings.gameMode);
