@@ -94,7 +94,10 @@ export function enemyPrecScale(round: number, playerCount: number = 2): number {
 // enemy hits keep pace with the party's growing HP and armor. Grows slowly
 // through the early game, then faster after round 10 so enemy damage never
 // falls behind player survivability. Capped so fights stay winnable.
-export function enemyDamageScale(round: number, playerCount: number = 2): number {
+// playerCount is accepted for API consistency with the other scale
+// functions but intentionally not applied — raw damage is balanced
+// independently of party size.
+export function enemyDamageScale(round: number, _playerCount: number = 2): number {
   const r = Math.max(0, round - 1);
   const early = Math.min(1.5, 1 + r * 0.05);
   const late = r <= 10 ? 0 : Math.min(2.5, (r - 10) * 0.06);
