@@ -728,4 +728,36 @@ describe('campaign engine', () => {
     state = addDart(state, 0, 1, 'Miss', false, settings);
     expect(state.enemies[shieldedIdx].shields[0].flatHp).toBe(shieldHp);
   });
+
+  // ── Card-mode charge system ──────────────────────────────────────────
+  // In card mode, darts do NOT grant charge via the legacy dart-value system.
+  // Charge is granted per-card by the card battle hook (10% of chargeMax per
+  // card by default). These tests verify the dart path is skipped in card mode.
+
+  it('addDart in card mode does not grant dart-value-based charge', () => {
+    const lvl = getLevel(1)!;
+    let state = startBattle(lvl, makePlayers(1), settings, undefined, undefined, true);
+    state = setTarget(state, 0);
+    const before = state.players[0].powerUpCharge;
+    state = addDart(state, 20, 3, undefined, false, settings);
+    expect(state.players[0].powerUpCharge).toBe(before);
+    expect(state.powerUpCharge).toBe(0);
+  });
+
+  it('undoDart in card mode preserves the current charge (does not reset to 0)', () => {
+    const lvl = getLevel(1)!;
+    let state = startBattle(lvl, makePlayers(1), settings, undefined, undefined, true);
+    state = setTarget(state, 0);
+    // Simulate charge granted by a card play (10% of chargeMax = 10).
+    const chargeMax = settings.powerUpScaling.chargeMax;
+    state = {
+      ...state,
+      players: state.players.map(p => ({ ...p, powerUpCharge: 10 })),
+      powerUpCharge: 10,
+    };
+    state = addDart(state, 20, 3, undefined, false, settings);
+    state = undoDart(state, settings);
+    expect(state.players[0].powerUpCharge).toBe(10);
+    expect(state.powerUpCharge).toBe(10);
+  });
 });
