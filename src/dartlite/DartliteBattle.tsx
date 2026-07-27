@@ -38,11 +38,13 @@ interface Props {
   music: MusicEngine;
   onBattleEnd: (won: boolean, finalBattle?: CampaignBattleState) => void;
   onChoice: (nextRun: DartliteRun) => void;
+  onBeginNextRound: (rewardRun: DartliteRun) => void;
   onQuit: () => void;
   lobbyPlayers?: LobbyPlayer[];
+  isHost?: boolean;
 }
 
-export function DartliteBattle({ run, players, settings, music, onBattleEnd, onChoice, onQuit, lobbyPlayers }: Props) {
+export function DartliteBattle({ run, players, settings, music, onBattleEnd, onChoice, onBeginNextRound, onQuit, lobbyPlayers, isHost }: Props) {
   const battle = run.battle!;
   const [state, setState] = useState<CampaignBattleState | null>(battle);
   const [pendingVictory, setPendingVictory] = useState(false);
@@ -63,6 +65,17 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   const [showRewardReveal, setShowRewardReveal] = useState(false);
   const [showDeckUpgrade, setShowDeckUpgrade] = useState(false);
   const [deckUpgradeOption, setDeckUpgradeOption] = useState<ChoiceOption | null>(null);
+
+  // When a run arrives in the 'reward' phase via multiplayer sync (i.e. a
+  // remote player made the final choice, or the host applied a boss trinket),
+  // show the reward reveal overlay on every device. Local picks set
+  // chosenRun/showRewardReveal directly; this handles the synced case.
+  useEffect(() => {
+    if (run.phase === 'reward' && !showRewardReveal && !showProgress && !chosenRun) {
+      setChosenRun(run);
+      setShowRewardReveal(true);
+    }
+  }, [run, showRewardReveal, showProgress, chosenRun]);
 
   const isMultiplayer = !!lobbyPlayers?.length;
   const chooserIdx = run.phase === 'choice' ? run.choicePlayerIdx : (run.phase === 'boss_victory' ? 0 : -1);
@@ -163,11 +176,10 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
               const next = applyPlayerChoice(updatedRun, resolvedOption);
               setDeckUpgradeOption(null);
               setShowDeckUpgrade(false);
+              onChoice(next);
               if (next.phase === 'reward') {
                 setChosenRun(next);
                 setShowRewardReveal(true);
-              } else {
-                onChoice(next);
               }
             }}
             onCancel={() => { setShowDeckUpgrade(false); setDeckUpgradeOption(null); }}
@@ -178,6 +190,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
           <RewardRevealOverlay
             run={chosenRun}
             players={players}
+            canContinue={isHost !== false}
             onContinue={() => {
               setShowRewardReveal(false);
               setShowProgress(true);
@@ -189,9 +202,10 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
           <ProgressScreen
             run={chosenRun}
             players={players}
+            canContinue={isHost !== false}
             onContinue={() => {
               setShowProgress(false);
-              onChoice(chosenRun);
+              onBeginNextRound(chosenRun);
             }}
           />
         )}
@@ -204,6 +218,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             onPick={(trinketId) => {
               if (!canChoose) return;
               const next = applyBossTrinketChoice(run, trinketId);
+              onChoice(next);
               setChosenRun(next);
               setShowRewardReveal(true);
             }}
@@ -225,11 +240,10 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
                 return;
               }
               const next = applyPlayerChoice(run, opt);
+              onChoice(next);
               if (next.phase === 'reward') {
                 setChosenRun(next);
                 setShowRewardReveal(true);
-              } else {
-                onChoice(next);
               }
             }}
           />
@@ -339,6 +353,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
           onPick={(trinketId) => {
             if (!canChoose) return;
             const next = applyBossTrinketChoice(run, trinketId);
+            onChoice(next);
             setChosenRun(next);
             setShowRewardReveal(true);
           }}
@@ -358,11 +373,10 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
               return;
             }
             const next = applyPlayerChoice(run, opt);
+            onChoice(next);
             if (next.phase === 'reward') {
               setChosenRun(next);
               setShowRewardReveal(true);
-            } else {
-              onChoice(next);
             }
           }}
         />
@@ -411,7 +425,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
                   </span>
                 )}
                 {state.passiveBonus.armor > 0 && (
-                  <span className="pill" style={{ fontSize: 10, background: 'color-mix(in srgb,#60a5fa 18%,var(--bg-3))', color: '#93c5fd', borderColor: 'transparent' }}>
+                  <span className="pill" style={{ fontSize: 10, background: 'color-mix(in srgb,#60a0fa 18%,var(--bg-3))', color: '#93c5fd', borderColor: 'transparent' }}>
                     🛡️ +{state.passiveBonus.armor}% party armor
                   </span>
                 )}
@@ -425,7 +439,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
               cardMode={cardMode}
               cardPlayState={cardMode && thrower ? (cardBattle.cardStates[thrower.id] ?? null) : null}
               maxPlays={cardMode ? maxDartsPerVisit : undefined}
-            />
+              />
             )}
           </div>
 
@@ -559,11 +573,10 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
             const next = applyPlayerChoice(updatedRun, resolvedOption);
             setDeckUpgradeOption(null);
             setShowDeckUpgrade(false);
+            onChoice(next);
             if (next.phase === 'reward') {
               setChosenRun(next);
               setShowRewardReveal(true);
-            } else {
-              onChoice(next);
             }
           }}
           onCancel={() => { setShowDeckUpgrade(false); setDeckUpgradeOption(null); }}
@@ -574,6 +587,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
         <RewardRevealOverlay
           run={chosenRun}
           players={players}
+          canContinue={isHost !== false}
           onContinue={() => {
             setShowRewardReveal(false);
             setShowProgress(true);
@@ -585,9 +599,10 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
         <ProgressScreen
           run={chosenRun}
           players={players}
+          canContinue={isHost !== false}
           onContinue={() => {
             setShowProgress(false);
-            onChoice(chosenRun);
+            onBeginNextRound(chosenRun);
           }}
         />
       )}

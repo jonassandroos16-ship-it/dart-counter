@@ -4,7 +4,7 @@ import { initials } from '../store';
 import type { DartliteRun } from './engine';
 import { PlayerDetailModal } from './PlayerDetailModal';
 
-export function ProgressScreen({ run, players, onContinue }: { run: DartliteRun; players: Player[]; onContinue: () => void }) {
+export function ProgressScreen({ run, players, onContinue, canContinue = true }: { run: DartliteRun; players: Player[]; onContinue: () => void; canContinue?: boolean }) {
   const [detailId, setDetailId] = useState<string | null>(null);
 
   return (
@@ -45,8 +45,8 @@ export function ProgressScreen({ run, players, onContinue }: { run: DartliteRun;
           })}
         </div>
 
-        <button className="btn primary block" style={{ marginTop: 18 }} onClick={onContinue}>
-          Continue to Round {run.round + 1}
+        <button className="btn primary block" style={{ marginTop: 18 }} disabled={!canContinue} onClick={canContinue ? onContinue : undefined}>
+          {canContinue ? `Continue to Round ${run.round + 1}` : 'Waiting for host\u2026'}
         </button>
       </div>
 

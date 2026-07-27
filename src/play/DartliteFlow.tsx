@@ -81,6 +81,7 @@ export function DartliteFlow({ players, settings, music, setPlayers, onExitToMen
       settings={settings}
       music={music}
       lobbyPlayers={lobbyPlayers}
+      isHost={isHost}
       onBattleEnd={(won, finalBattle) => {
         if (!isHost && skipSetup) return;
         const runWithBattle = finalBattle ? { ...run, battle: finalBattle } : run;
@@ -97,13 +98,21 @@ export function DartliteFlow({ players, settings, music, setPlayers, onExitToMen
         }
       }}
       onChoice={(nextRun) => {
-        if (!isHost && skipSetup) return;
-        if (nextRun.phase === 'reward') {
-          const begun = beginRound(nextRun, players.filter(p => nextRun.playerIds.includes(p.id)), settings);
-          syncRun(begun);
-        } else {
-          syncRun(nextRun);
+        if (!isHost && skipSetup) {
+          // Non-host devices push their locally-applied choice to the DB so
+          // the host receives it via realtime and can advance the run.
+          if (lobbyId) void updateCoopState(lobbyId, { ...nextRun, _coopRun: true });
+          return;
         }
+        // Host: sync the run (whether 'choice' or 'reward') to all devices.
+        // The reward→battle transition is handled by onBeginNextRound, which
+        // fires when the host clicks "Continue" on the progress screen.
+        syncRun(nextRun);
+      }}
+      onBeginNextRound={(rewardRun) => {
+        if (!isHost) return;
+        const begun = beginRound(rewardRun, players.filter(p => rewardRun.playerIds.includes(p.id)), settings);
+        syncRun(begun);
       }}
       onQuit={() => { setStage('none'); setRun(null); onExitToMenu(); music.startContext('setup', settings); }}
     />;

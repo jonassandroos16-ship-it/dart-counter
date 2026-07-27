@@ -4,11 +4,12 @@ import { getTrinket } from './trinkets';
 import { initials } from '../store';
 
 export function RewardRevealOverlay({
-  run, players, onContinue,
+  run, players, onContinue, canContinue = true,
 }: {
   run: DartliteRun;
   players: Player[];
   onContinue: () => void;
+  canContinue?: boolean;
 }) {
   const choosers = run.playerIds.map((pid, i) => {
     const p = players.find(pl => pl.id === pid);
@@ -21,8 +22,8 @@ export function RewardRevealOverlay({
     const t = getTrinket(run.bossVictory.claimedTrinket);
     if (t) {
       return (
-        <div onClick={onContinue}
-          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.82)', cursor: 'pointer' }}>
+        <div onClick={canContinue ? onContinue : undefined}
+          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.82)', cursor: canContinue ? 'pointer' : 'default' }}>
           <div style={{ textAlign: 'center', maxWidth: 440, padding: 24 }}>
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#fbbf24', textTransform: 'uppercase' }}>Boss Trinket Claimed</div>
             <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, background: 'color-mix(in srgb,#f59e0b 18%, var(--bg-3))', border: '1px solid #f59e0b' }}>
@@ -32,7 +33,7 @@ export function RewardRevealOverlay({
                 <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>{t.desc}</div>
               </div>
             </div>
-            <div className="muted small" style={{ marginTop: 28, fontStyle: 'italic' }}>Tap anywhere to continue</div>
+            <div className="muted small" style={{ marginTop: 28, fontStyle: 'italic' }}>{canContinue ? 'Tap anywhere to continue' : 'Waiting for host\u2026'}</div>
           </div>
         </div>
       );
@@ -42,8 +43,8 @@ export function RewardRevealOverlay({
   if (!choosers.length) return null;
 
   return (
-    <div onClick={onContinue}
-      style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.82)', cursor: 'pointer' }}>
+    <div onClick={canContinue ? onContinue : undefined}
+      style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.82)', cursor: canContinue ? 'pointer' : 'default' }}>
       <div style={{ textAlign: 'center', maxWidth: 440, padding: 24 }}>
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#c4b5fd', textTransform: 'uppercase' }}>Rewards Chosen</div>
         <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
@@ -64,7 +65,7 @@ export function RewardRevealOverlay({
             );
           })}
         </div>
-        <div className="muted small" style={{ marginTop: 28, fontStyle: 'italic' }}>Tap anywhere to continue</div>
+        <div className="muted small" style={{ marginTop: 28, fontStyle: 'italic' }}>{canContinue ? 'Tap anywhere to continue' : 'Waiting for host\u2026'}</div>
       </div>
     </div>
   );
