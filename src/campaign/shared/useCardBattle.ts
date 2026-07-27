@@ -7,6 +7,7 @@ import {
 } from '../../cards/deck';
 import { startTurnWithExtraDraws } from '../../cards/turnLogic';
 import { applyCardEffect } from '../../cards/cardEffects';
+import { cardChargeAmount } from '../../cards/definitions';
 import { addDart, undoDart, resolvePlayerVisit } from '../engine/playerTurn';
 import type { Player, Settings } from '../../types';
 import { Sound } from '../../sound';
@@ -111,6 +112,24 @@ export function useCardBattle(params: UseCardBattleParams): CardBattleApi {
 
   const totalCardsPlayed = throwerId ? (cardStates[throwerId]?.used.length ?? 0) : 0;
 
+  const applyCardCharge = useCallback((cardId: string, sign: 1 | -1) => {
+    const def = resolveCardDef({ cardId, upgradeLevel: 0, upgraded: false });
+    if (!def) return;
+    const chargeMax = settings?.powerUpScaling?.chargeMax ?? 100;
+    const amount = cardChargeAmount(def) * chargeMax * sign;
+    onStateChange(prev => {
+      if (!prev) return prev;
+      const idx = prev.playerTurnIdx;
+      const players = prev.players.map((p, i) =>
+        i === idx ? { ...p, powerUpCharge: Math.max(0, Math.min(chargeMax, (p.powerUpCharge || 0) + amount)) } : p,
+      );
+      const shared = typeof prev.powerUpCharge === 'number'
+        ? Math.max(0, Math.min(chargeMax, prev.powerUpCharge + amount))
+        : prev.powerUpCharge;
+      return { ...prev, players, powerUpCharge: shared };
+    });
+  }, [onStateChange, settings]);
+
   const playCard = useCallback((handIdx: number) => {
     if (!throwerId || !battle) return;
     const cs = cardStates[throwerId];
@@ -130,6 +149,7 @@ export function useCardBattle(params: UseCardBattleParams): CardBattleApi {
       onStateChange(prev => prev
         ? addDart(prev, base, isBull ? Math.max(2, cardMult) : cardMult, def.name, isBull, settings, maxDartsPerVisit)
         : prev);
+      applyCardCharge(def.id, 1);
       Sound.play('card', {}, settings);
       return;
     }
@@ -147,8 +167,9 @@ export function useCardBattle(params: UseCardBattleParams): CardBattleApi {
       setBattleState: onStateChange,
     });
     setCardStates(prev => ({ ...prev, [throwerId]: updated }));
+    applyCardCharge(def.id, 1);
     Sound.play('card', {}, settings);
-  }, [throwerId, battle, cardStates, bonusSlots, onStateChange, settings, maxDartsPerVisit]);
+  }, [throwerId, battle, cardStates, bonusSlots, onStateChange, settings, maxDartsPerVisit, applyCardCharge]);
 
   const onAdd = useCallback((base: number, m: number, labelOverride?: string, isBull?: boolean) => {
     onStateChange(prev => prev ? addDart(prev, base, m, labelOverride, isBull, settings, maxDartsPerVisit) : prev);
@@ -159,14 +180,16 @@ export function useCardBattle(params: UseCardBattleParams): CardBattleApi {
     if (cardMode && battle && throwerId) {
       const cs = cardStates[throwerId];
       if (cs && cs.used.length > 0 && battle.darts.length === 0) {
-        const newCs = { ...cs, used: cs.used.slice(0, -1), hand: [...cs.hand, cs.used[cs.used.length - 1]] };
+        const undone = cs.used[cs.used.length - 1];
+        const newCs = { ...cs, used: cs.used.slice(0, -1), hand: [...cs.hand, undone] };
         setCardStates(prev => ({ ...prev, [throwerId]: newCs }));
         setBonusSlots(b => Math.max(0, b - 1));
+        applyCardCharge(undone.cardId, -1);
         return;
       }
     }
     onStateChange(prev => prev ? undoDart(prev, settings) : prev);
-  }, [battle, cardMode, cardStates, throwerId, onStateChange, settings]);
+  }, [battle, cardMode, cardStates, throwerId, onStateChange, settings, applyCardCharge]);
 
   const onEnter = useCallback(() => {
     if (cardMode && battle && throwerId) {

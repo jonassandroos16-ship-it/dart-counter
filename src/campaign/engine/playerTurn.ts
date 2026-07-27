@@ -123,8 +123,11 @@ export function addDart(
   const darts = [...state.darts, dart];
   const resolvedDarts = [...state.resolvedDarts, resolvedDart];
   const chargeMax = settings?.powerUpScaling?.chargeMax ?? Number.MAX_SAFE_INTEGER;
+  // In card mode, charge is granted per-card by the card battle hook, not
+  // by dart value. Skip the legacy dart-value-based charge here.
+  const effectiveCharge = state.cardMode ? 0 : chargeGained;
   const players = newPlayers.map((p, i) =>
-    i === state.playerTurnIdx ? { ...p, powerUpCharge: Math.min(chargeMax, p.powerUpCharge + chargeGained) } : p,
+    i === state.playerTurnIdx ? { ...p, powerUpCharge: Math.min(chargeMax, p.powerUpCharge + effectiveCharge) } : p,
   );
   const throwerCharge = players[state.playerTurnIdx]?.powerUpCharge ?? 0;
   const defeatedBefore = state.enemies.filter(e => e.defeated).length;
@@ -191,13 +194,13 @@ export function undoDart(state: CampaignBattleState, settings?: Settings): Campa
       i === state.playerTurnIdx
         ? {
             ...p,
-            powerUpCharge: 0,
+            powerUpCharge: state.cardMode ? p.powerUpCharge : 0,
             kills: Math.max(0, p.kills - killsThisVisit),
             damageDealt: Math.max(0, p.damageDealt - dmgThisVisit),
           }
         : p,
     ),
-    powerUpCharge: 0,
+    powerUpCharge: state.cardMode ? state.powerUpCharge : 0,
   };
   for (const dart of darts) {
     working = addDart(working, dart.base, dart.mult, dart.label, dart.isBull, settings);
