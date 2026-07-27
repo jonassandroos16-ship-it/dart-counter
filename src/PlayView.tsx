@@ -7,12 +7,7 @@ import type { PopupControls } from './Popups';
 import { SetupView } from './play/SetupView';
 import { ModeSelectView } from './play/ModeSelectView';
 import { Showdown } from './play/Showdown';
-import { X01Board } from './play/boards/X01Board';
-import { AtcBoard } from './play/boards/AtcBoard';
-import { KillerBoard } from './play/boards/KillerBoard';
-import { HighScoreBoard } from './play/boards/HighScoreBoard';
-import { BattleBoard } from './play/boards/BattleBoard';
-import { CardBoard } from './play/boards/CardBoard';
+import { renderBoard } from './play/renderBoard';
 import { CoopFlow, isCoopActive } from './play/CoopFlow';
 import { DartliteFlow, isDartliteActive } from './play/DartliteFlow';
 import { MultiplayerFlow } from './multiplayer/MultiplayerFlow';
@@ -76,15 +71,12 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
       setGames={setGames}
       toast={toast}
       onExitToMenu={() => { setMode('menu'); music.startContext('setup', settings); }}
-      renderBoard={({ game: g, setGame: sg, popups: mpPopups, isMyTurn: myTurn, gameMode: mpGameMode }) => {
-        const quit = () => { sg(null); onQuit(); };
-        if (mpGameMode === 'cards') return <CardBoard game={g} setGame={sg} settings={settings} players={players} games={games} setGames={setGames} setPlayers={setPlayers} toast={toast} music={music} onQuit={quit} onGameOver={onGameOver} popups={mpPopups} isMyTurn={myTurn} />;
-        if (g.atc) return <AtcBoard game={g} setGame={sg} settings={settings} players={players} games={games} toast={toast} music={music} onQuit={quit} setGames={setGames} setPlayers={setPlayers} popups={mpPopups} onGameOver={onGameOver} isMyTurn={myTurn} />;
-        if (g.mode === 'killer') return <KillerBoard game={g} setGame={sg} settings={settings} players={players} games={games} toast={toast} music={music} onQuit={quit} setGames={setGames} setPlayers={setPlayers} popups={mpPopups} onGameOver={onGameOver} isMyTurn={myTurn} />;
-        if (g.mode === 'highscore') return <HighScoreBoard game={g} setGame={sg} settings={settings} players={players} games={games} toast={toast} music={music} onQuit={quit} setGames={setGames} setPlayers={setPlayers} popups={mpPopups} onGameOver={onGameOver} isMyTurn={myTurn} />;
-        if (g.mode === 'battle') return <BattleBoard game={g} setGame={sg} settings={settings} players={players} games={games} toast={toast} music={music} onQuit={quit} setGames={setGames} setPlayers={setPlayers} popups={mpPopups} onGameOver={onGameOver} isMyTurn={myTurn} />;
-        return <X01Board game={g} setGame={sg} settings={settings} players={players} games={games} setGames={setGames} setPlayers={setPlayers} toast={toast} music={music} onQuit={quit} onGameOver={onGameOver} popups={mpPopups} isMyTurn={myTurn} />;
-      }}
+      renderBoard={({ game: g, setGame: sg, popups: mpPopups, isMyTurn: myTurn, gameMode: mpGameMode }) =>
+        renderBoard({
+          game: g, setGame: sg, settings, players, games, setGames, setPlayers, toast, music,
+          onQuit: () => { sg(null); onQuit(); }, onGameOver, popups: mpPopups, isMyTurn: myTurn, gameMode: mpGameMode === 'cards' ? 'cards' : 'dartboard',
+        })
+      }
     />;
   }
 
@@ -98,12 +90,10 @@ export function PlayView({ players, games, settings, activeGame, setActiveGame, 
   }
 
   if (game) {
-    if (settings.gameMode === 'cards') return <CardBoard game={game} setGame={setGame} settings={settings} players={players} games={games} setGames={setGames} setPlayers={setPlayers} toast={toast} music={music} onQuit={() => { setGame(null); onQuit(); }} onGameOver={onGameOver} popups={popups} />;
-    if (game.atc) return <AtcBoard game={game} setGame={setGame} settings={settings} players={players} games={games} toast={toast} music={music} onQuit={() => { setGame(null); onQuit(); }} setGames={setGames} setPlayers={setPlayers} popups={popups} onGameOver={onGameOver} />;
-    if (game.mode === 'killer') return <KillerBoard game={game} setGame={setGame} settings={settings} players={players} games={games} toast={toast} music={music} onQuit={() => { setGame(null); onQuit(); }} setGames={setGames} setPlayers={setPlayers} popups={popups} onGameOver={onGameOver} />;
-    if (game.mode === 'highscore') return <HighScoreBoard game={game} setGame={setGame} settings={settings} players={players} games={games} toast={toast} music={music} onQuit={() => { setGame(null); onQuit(); }} setGames={setGames} setPlayers={setPlayers} popups={popups} onGameOver={onGameOver} />;
-    if (game.mode === 'battle') return <BattleBoard game={game} setGame={setGame} settings={settings} players={players} games={games} toast={toast} music={music} onQuit={() => { setGame(null); onQuit(); }} setGames={setGames} setPlayers={setPlayers} popups={popups} onGameOver={onGameOver} />;
-    return <X01Board game={game} setGame={setGame} settings={settings} players={players} games={games} setGames={setGames} setPlayers={setPlayers} toast={toast} music={music} onQuit={() => { setGame(null); onQuit(); }} onGameOver={onGameOver} popups={popups} />;
+    return renderBoard({
+      game, setGame, settings, players, games, setGames, setPlayers, toast, music,
+      onQuit: () => { setGame(null); onQuit(); }, onGameOver, popups, gameMode: settings.gameMode,
+    });
   }
 
   if (mode === 'competitive') {

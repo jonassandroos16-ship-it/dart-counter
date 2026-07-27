@@ -72,8 +72,11 @@ export function MultiplayerGameView({
 
   const setGame = useCallback((next: Game | null) => {
     if (!next) return;
-    // Only the player whose turn it is can mutate the game state.
-    if (!isMyTurn(lobbyPlayers, next)) return;
+    // Only the player whose turn it is can mutate the game state. We check
+    // against the PREVIOUS game state (gameRef.current), not `next`, because
+    // `next` may have already advanced the turn to the next player (on another
+    // device). Checking `next` would reject the update that advances the turn.
+    if (!isMyTurn(lobbyPlayers, gameRef.current)) return;
     onGameUpdate(next);
     if (isHost) {
       void updateGameState(lobby.id, next);
