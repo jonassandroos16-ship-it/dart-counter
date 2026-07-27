@@ -31,7 +31,7 @@ const EFFECT_META: Record<string, EffectMeta> = {
   extra_slot:     { icon: '➕', label: 'Extra Slots',    shortDesc: 'Grants extra card slots next turn',   color: '#10b981' },
   redraw:         { icon: '🔄', label: 'Redraw',         shortDesc: 'Discard hand and draw fresh cards',   color: '#06b6d4' },
   recycle:        { icon: '♻️', label: 'Recycle',        shortDesc: 'Shuffle graveyard back into deck',     color: '#10b981' },
-  shadowstep:     { icon: '🌑', label: 'Shadowstep',     shortDesc: 'Swap last played card and draw extra',color: '#6366f1' },
+  shadowstep:     { icon: '👤', label: 'Shadowstep',     shortDesc: 'Return last played card to hand and draw extra next turn', color: '#0ea5e9' },
   revive:         { icon: '❤️', label: 'Revive',         shortDesc: 'Revive defeated party members',       color: '#ef4444' },
 };
 

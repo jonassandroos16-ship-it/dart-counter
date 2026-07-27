@@ -26,7 +26,7 @@ export const CARD_DEFS: CardDef[] = [
   { id: 'dmg_rogue_poison', name: 'Poison Strike', icon: '🐍', type: 'damage', mode: 'both', class: 'rogue', rarity: 'common', desc: 'Deal 30 damage plus 10 poison next turn.', base: 30, mult: 1, levelRequired: 1 },
   { id: 'spell_enemy_debuff', name: 'Weaken', icon: '💀', type: 'spell', mode: 'both', class: 'rogue', rarity: 'common', desc: 'Enemies deal -30% damage for 2 turns.', effect: 'enemy_debuff', magnitude: 30, levelRequired: 1 },
   { id: 'spell_freeze', name: 'Frost Nova', icon: '❄️', type: 'spell', mode: 'both', class: 'rogue', rarity: 'common', desc: 'Freeze all enemies for 1 turn.', effect: 'freeze', levelRequired: 1 },
-  { id: 'util_rogue_shadowstep', name: 'Shadowstep', icon: '🌑', type: 'utility', mode: 'both', class: 'rogue', rarity: 'common', desc: 'Draw 1 extra card and swap a used card back.', effect: 'shadowstep', magnitude: 1, levelRequired: 1 },
+  { id: 'util_rogue_shadowstep', name: 'Shadowstep', icon: '👤', type: 'utility', mode: 'both', class: 'rogue', rarity: 'common', desc: 'Slip through the shadows: draw 1 extra card next turn and return your last played card to hand.', effect: 'shadowstep', magnitude: 1, levelRequired: 1 },
   // ── Starter shared crit cards (Level 1, class 'any') ─────────────
   { id: 'spell_focused_aim', name: 'Focused Aim', icon: '🎯', type: 'spell', mode: 'both', class: 'any', rarity: 'common', desc: 'Guarantees the next 2 cards that deal damage to critically hit.', effect: 'crit_guarantee', magnitude: 2, levelRequired: 1 },
   { id: 'spell_focus_time', name: 'Focus Time', icon: '⏳', type: 'spell', mode: 'both', class: 'any', rarity: 'common', desc: 'Add 25% more crit for the next 3 rounds.', effect: 'crit_buff', magnitude: 25, levelRequired: 1 },

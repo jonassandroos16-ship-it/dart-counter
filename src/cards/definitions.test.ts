@@ -62,6 +62,17 @@ describe('Card Definitions', () => {
     expect(upgraded.magnitude).toBe(104);
   });
 
+  it('upgradedCardDef guarantees a +1 minimum step for low-magnitude cards', () => {
+    // Shadowstep, Focus, Quick Draw all start at magnitude 1.
+    // Math.round(1 * 1.3) === 1 would yield no benefit — ensure at least +1.
+    const shadowstep = getCard('util_rogue_shadowstep')!;
+    expect(upgradedCardDef(shadowstep).magnitude).toBe(2);
+    const focus = getCard('util_focus')!;
+    expect(upgradedCardDef(focus).magnitude).toBe(2);
+    const quickDraw = getCard('util_draw')!;
+    expect(upgradedCardDef(quickDraw).magnitude).toBe(2);
+  });
+
   it('upgradedCardDef caps party_shield magnitude at 80% (never invulnerable)', () => {
     const base = getCard('util_shield')!; // Party Shield, 50%
     let upgraded = base;

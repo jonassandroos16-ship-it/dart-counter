@@ -36,7 +36,13 @@ export function upgradedCardDef(card: CardDef): CardDef {
   }
   if (card.type === 'spell' || card.type === 'utility') {
     const isPercentage = !!card.effect && PERCENTAGE_EFFECTS.has(card.effect);
-    let newMag = card.magnitude ? Math.round(card.magnitude * 1.3) : card.magnitude;
+    let newMag = card.magnitude;
+    if (typeof card.magnitude === 'number') {
+      const scaled = card.magnitude * 1.3;
+      // Guarantee a minimum +1 step so low-magnitude cards (e.g. magnitude 1)
+      // still get a meaningful upgrade instead of Math.round(1.3) === 1.
+      newMag = Math.max(Math.round(scaled), card.magnitude + 1);
+    }
     if (isPercentage && typeof newMag === 'number') {
       newMag = Math.min(newMag, PERCENTAGE_CAP);
     }
