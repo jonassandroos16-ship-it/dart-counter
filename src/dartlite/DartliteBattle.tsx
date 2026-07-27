@@ -12,7 +12,8 @@ import { FrozenOverlay } from '../campaign/FrozenOverlay';
 import { Modal } from '../Popups';
 import type { DartliteRun, ChoiceOption } from './engine';
 import { isMiniBossRound, isBossRound, applyPlayerChoice, applyBossTrinketChoice } from './engine';
-import { getTrinket } from './trinkets';
+import { getTrinket, availablePool } from './trinkets';
+import type { TrinketId } from './trinkets';
 import { ChoiceScreen } from './ChoiceScreen';
 import { ownsPlayer, type LobbyPlayer } from '../multiplayer/client';
 import { DeckUpgradeScreen } from './DeckUpgradeScreen';
@@ -65,6 +66,7 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
   const [showRewardReveal, setShowRewardReveal] = useState(false);
   const [showDeckUpgrade, setShowDeckUpgrade] = useState(false);
   const [deckUpgradeOption, setDeckUpgradeOption] = useState<ChoiceOption | null>(null);
+  const [pendingTrinketChoice, setPendingTrinketChoice] = useState<TrinketId[] | null>(null);
 
   // When a run arrives in the 'reward' phase via multiplayer sync (i.e. a
   // remote player made the final choice, or the host applied a boss trinket),
@@ -239,6 +241,17 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
                 setShowDeckUpgrade(true);
                 return;
               }
+              if (opt.kind === 'trinket' && !opt.trinketId) {
+                const pool = run.pool.length ? run.pool : (availablePool(run.stats.miniBossesDefeated, run.stats.bossesDefeated).length ? availablePool(run.stats.miniBossesDefeated, run.stats.bossesDefeated) : []);
+                const owned = new Set<TrinketId>();
+                for (const p of run.runPlayers) for (const t of p.trinkets) owned.add(t);
+                for (const t of run.trinkets) owned.add(t);
+                const available = pool.filter(id => !owned.has(id));
+                if (available.length > 0) {
+                  setPendingTrinketChoice(available);
+                  return;
+                }
+              }
               const next = applyPlayerChoice(run, opt);
               onChoice(next);
               if (next.phase === 'reward') {
@@ -371,6 +384,17 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
               setDeckUpgradeOption(opt);
               setShowDeckUpgrade(true);
               return;
+            }
+            if (opt.kind === 'trinket' && !opt.trinketId) {
+              const pool = run.pool.length ? run.pool : availablePool(run.stats.miniBossesDefeated, run.stats.bossesDefeated);
+              const owned = new Set<TrinketId>();
+              for (const p of run.runPlayers) for (const t of p.trinkets) owned.add(t);
+              for (const t of run.trinkets) owned.add(t);
+              const available = pool.filter(id => !owned.has(id));
+              if (available.length > 0) {
+                setPendingTrinketChoice(available);
+                return;
+              }
             }
             const next = applyPlayerChoice(run, opt);
             onChoice(next);
@@ -582,6 +606,53 @@ export function DartliteBattle({ run, players, settings, music, onBattleEnd, onC
           onCancel={() => { setShowDeckUpgrade(false); setDeckUpgradeOption(null); }}
         />
       )}
+
+      {pendingTrinketChoice && (() => {
+        const choices = pendingTrinketChoice.slice(0, 3);
+        const chooserIdx = run.choicePlayerIdx;
+        const chooserId = run.playerIds[chooserIdx];
+        const chooser = players.find(p => p.id === chooserId);
+        const chooserColor = chooser?.color || '#7c3aed';
+        const chooserName = chooser?.name || `Player ${chooserIdx + 1}`;
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.85)' }}>
+            <div className="card" style={{ maxWidth: 460, margin: '0 auto', width: '100%' }}>
+              <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: '#c4b5fd', textTransform: 'uppercase' }}>Choose a Trinket</div>
+                <div style={{ fontSize: 20, fontWeight: 900, marginTop: 4 }}>Pick one to keep</div>
+                <div className="muted small" style={{ marginTop: 6 }}>{canChoose ? `Select one trinket for ${chooserName}.` : `Waiting for ${chooserName}…`}</div>
+              </div>
+              <div style={{ display: 'grid', gap: 10 }}>
+                {choices.map(tid => {
+                  const def = getTrinket(tid);
+                  if (!def) return null;
+                  return (
+                    <button key={tid} className="btn block" style={{ padding: 14, textAlign: 'left', background: `linear-gradient(135deg, color-mix(in srgb, ${chooserColor} 18%, var(--bg-3)) 0%, var(--bg-3) 80%)`, borderColor: `color-mix(in srgb, ${chooserColor} 40%, var(--border))`, opacity: canChoose ? 1 : 0.5, cursor: canChoose ? 'pointer' : 'default', pointerEvents: canChoose ? 'auto' : 'none' }}
+                      onClick={() => {
+                        const opt: ChoiceOption = { kind: 'trinket', label: def.name, desc: def.desc, icon: def.icon, trinketId: tid };
+                        const next = applyPlayerChoice(run, opt);
+                        setPendingTrinketChoice(null);
+                        onChoice(next);
+                        if (next.phase === 'reward') {
+                          setChosenRun(next);
+                          setShowRewardReveal(true);
+                        }
+                      }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <span style={{ fontSize: 26 }}>{def.icon}</span>
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: 16 }}>{def.name}</div>
+                          <div className="muted small" style={{ marginTop: 2 }}>{def.desc}</div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {showRewardReveal && chosenRun && (
         <RewardRevealOverlay
