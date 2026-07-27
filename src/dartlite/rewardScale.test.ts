@@ -24,15 +24,19 @@ describe('rewardScale', () => {
     expect(rewardScale(1)).toBe(1.0);
   });
 
-  it('grows ~10% per round, matching the base enemy HP curve', () => {
-    for (const round of [2, 3, 5, 10, 15, 20, 30]) {
+  it('grows steadily and stays below enemy HP scaling after round 10', () => {
+    for (const round of [2, 3, 5, 10]) {
       expect(rewardScale(round)).toBeCloseTo(enemyHpScale(round, 2), 5);
+    }
+    // After round 10 reward scaling falls behind enemy HP so enemies stay a threat.
+    for (const round of [15, 20, 30]) {
+      expect(rewardScale(round)).toBeLessThan(enemyHpScale(round, 2));
     }
   });
 
-  it('caps at 5.0 like enemy HP scaling', () => {
-    expect(rewardScale(100)).toBe(5.0);
-    expect(rewardScale(1000)).toBe(5.0);
+  it('caps at 4.0 (lower than enemy HP cap)', () => {
+    expect(rewardScale(100)).toBe(4.0);
+    expect(rewardScale(1000)).toBe(4.0);
   });
 
   it('never decreases as rounds advance', () => {
@@ -70,9 +74,9 @@ describe('stat reward scales with round', () => {
     run = resolveBattle({ ...run, battle: { ...run.battle!, outcome: 'ongoing' } } as any, true);
     expect(run.phase).toBe('choice');
     const statOpt = run.pendingChoice!.find((o: ChoiceOption) => o.kind === 'stat')!;
-    expect(statOpt.desc).toContain('+56 HP');
-    expect(statOpt.desc).toContain('+8% armor');
-    expect(statOpt.desc).toContain('+11 power');
+    expect(statOpt.desc).toContain('+46 HP');
+    expect(statOpt.desc).toContain('+7% armor');
+    expect(statOpt.desc).toContain('+9 power');
   });
 
   it('applyPlayerChoice applies scaled stat amount at round 19', () => {
@@ -88,8 +92,8 @@ describe('stat reward scales with round', () => {
     Math.random = () => 0.1;
     try {
       const after = applyPlayerChoice(run, statOpt);
-      expect(after.teamMaxHp).toBe(before + 56);
-      expect(after.runPlayers[0].bonusHealth).toBe(56);
+      expect(after.teamMaxHp).toBe(before + 46);
+      expect(after.runPlayers[0].bonusHealth).toBe(46);
     } finally {
       Math.random = orig;
     }

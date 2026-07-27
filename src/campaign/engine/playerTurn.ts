@@ -153,6 +153,15 @@ export function addDart(
   const allDefeated = newEnemies.every(e => e.defeated);
   const outcome = allDefeated ? ('victory' as const) : state.outcome;
   const healedPartyHp = Math.min(state.partyMaxHp, state.partyHp + partyHeal);
+  // If the current target was defeated by this dart, auto-advance to the
+  // next alive enemy so subsequent darts in the same visit do not hit a
+  // dead target (which would silently miss and waste the throw).
+  let targetIdx = state.targetIdx;
+  if (newEnemies[targetIdx]?.defeated) {
+    const nextAlive = newEnemies.findIndex((e, i) => i > targetIdx && !e.defeated);
+    targetIdx = nextAlive >= 0 ? nextAlive : newEnemies.findIndex(e => !e.defeated);
+    if (targetIdx < 0) targetIdx = state.targetIdx;
+  }
   return {
     ...state,
     darts,
@@ -163,6 +172,7 @@ export function addDart(
     outcome,
     powerUpCharge: throwerCharge,
     partyHp: healedPartyHp,
+    targetIdx,
   };
 }
 
