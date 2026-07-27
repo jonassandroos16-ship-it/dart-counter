@@ -1,3 +1,51 @@
+import { useState } from 'react';
+import type { Player, Settings } from '../types';
+import type { MusicEngine } from '../music';
+import type { CampaignBattleState, CoopPowerUpId, CampaignProgress } from '../campaign/types';
+import { CampaignBattle } from '../campaign/CampaignBattle';
+import { CampaignMap } from '../campaign/CampaignMap';
+import { ChapterSelect } from '../campaign/ChapterSelect';
+import { CoopSetupView } from '../campaign/CoopSetupView';
+import { useCampaignProgress } from '../campaign/progress';
+import {
+  getCoopPowerUp,
+  coopXpForBattle,
+  defaultCoopProgress,
+  reconcileCoopPassivesForPlayer,
+  addClassXp,
+  classLevelFromXp,
+  getCoopClass,
+  recordLevelClearForPlayer,
+  levelRewardPowerUp,
+} from '../campaign/engine';
+import { getChapter, isChapterComplete } from '../campaign/campaignLevels';
+import { cardsForLevelUp, getPlayerCards } from '../cards/deck';
+import { getCard } from '../cards/definitions';
+import { PostGameOverlay, type PostGameInfo, type LevelUpInfo, type XpAwardInfo } from './PostGameOverlay';
+import type { LobbyPlayer } from '../multiplayer/client';
+
+export type CoopStage = 'none' | 'setup' | 'chapters' | 'map' | 'battle' | 'postgame';
+
+interface Props {
+  players: Player[];
+  settings: Settings;
+  music: MusicEngine;
+  setPlayers: (updater: any) => void;
+  toast: (m: string) => void;
+  onExitToMenu: () => void;
+  /** When true, skip the party-selection setup screen — players are already
+   *  chosen by the lobby. Go directly to chapter select. */
+  skipSetup?: boolean;
+  /** Multiplayer: lobby ID for state sync. */
+  lobbyId?: string;
+  /** Multiplayer: lobby players for device-ownership checks. */
+  lobbyPlayers?: LobbyPlayer[];
+  /** Multiplayer: true if this device is the host (writes state to DB). */
+  isHost?: boolean;
+  /** Multiplayer: remote state received from the host via realtime. */
+  remoteRun?: any;
+}
+
 export function CoopFlow({ players, settings, music, setPlayers, toast, onExitToMenu, skipSetup, lobbyId: _lobbyId, lobbyPlayers: _lobbyPlayers, isHost: _isHost, remoteRun: _remoteRun }: Props) {
   const [stage, setStage] = useState<CoopStage>(skipSetup ? 'chapters' : 'setup');
   const [playerIds, setPlayerIds] = useState<string[]>(skipSetup ? players.map(p => p.id) : []);
