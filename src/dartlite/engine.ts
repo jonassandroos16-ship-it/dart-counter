@@ -168,6 +168,23 @@ export function beginRound(run: DartliteRun, players: Player[], settings: Settin
   const teamMaxHp = Math.max(1, run.teamMaxHp + teamMaxHpBonus);
   battle.partyMaxHp = teamMaxHp;
   battle.partyHp = Math.min(teamMaxHp, run.teamHp + teamMaxHpBonus);
+  // In card mode, restore each player's persisted power-up charge so it
+  // carries over between rounds. Board mode keeps the legacy per-battle
+  // charge system (startBattle already set it from startingChargeFor).
+  if (run.cardMode) {
+    for (const rp of run.runPlayers) {
+      const idx = battle.players.findIndex(p => p.id === rp.id);
+      if (idx >= 0 && typeof rp.powerUpCharge === 'number') {
+        battle.players[idx] = { ...battle.players[idx], powerUpCharge: rp.powerUpCharge };
+      }
+    }
+    if (typeof battle.powerUpCharge === 'number') {
+      const lead = run.runPlayers[0];
+      if (lead && typeof lead.powerUpCharge === 'number') {
+        battle.powerUpCharge = lead.powerUpCharge;
+      }
+    }
+  }
   for (const rp of run.runPlayers) {
     if (rp.trinkets.includes('trk_overcharge')) {
       const idx = battle.players.findIndex(p => p.id === rp.id);
@@ -186,6 +203,15 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
   const battle = run.battle;
   // The battle's partyHp IS the team HP. Copy it back to the run.
   const teamHpAfter = Math.max(0, battle.partyHp);
+  // In card mode, persist each player's power-up charge back to the run so
+  // it carries over to the next round. Board mode uses the legacy per-battle
+  // charge system and leaves runPlayers untouched.
+  const runPlayersWithCharge = run.cardMode
+    ? run.runPlayers.map(rp => {
+        const bp = battle.players.find(p => p.id === rp.id);
+        return { ...rp, powerUpCharge: bp ? bp.powerUpCharge : rp.powerUpCharge };
+      })
+    : run.runPlayers;
   if (won) {
     const soulMult = xpMultiplier(run);
     const killXp = Math.round(battle.enemies
@@ -224,7 +250,7 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
         if (!bp) return ps;
         return { ...ps, kills: ps.kills + (bp.kills ?? 0), damageDealt: ps.damageDealt + (bp.damageDealt ?? 0) };
       });
-      return { ...run, pool: newPool, stats, playerStats, phase: 'boss_victory', battle: null, pendingChoice: null, choicePlayerIdx: 0, playerChoices: run.playerIds.map(() => null), lastUnlockedTrinket: unlocked, bossVictory: { bossName, trinketOptions, chosenTrinket: null, claimedTrinket: null }, log, teamHp: run.teamMaxHp };
+      return { ...run, pool: newPool, stats, playerStats, runPlayers: runPlayersWithCharge, phase: 'boss_victory', battle: null, pendingChoice: null, choicePlayerIdx: 0, playerChoices: run.playerIds.map(() => null), lastUnlockedTrinket: unlocked, bossVictory: { bossName, trinketOptions, chosenTrinket: null, claimedTrinket: null }, log, teamHp: run.teamMaxHp };
     }
 
     // Non-boss rounds: NO default healing. Team HP persists between rounds.
@@ -243,12 +269,12 @@ export function resolveBattle(run: DartliteRun, won: boolean): DartliteRun {
       if (!bp) return ps;
       return { ...ps, kills: ps.kills + (bp.kills ?? 0), damageDealt: ps.damageDealt + (bp.damageDealt ?? 0) };
     });
-    return { ...run, pool: newPool, stats, playerStats, phase: 'choice', battle: null, pendingChoice: generateChoices({ ...run, pool: newPool, stats, playerStats, teamHp: teamHpAfter }), choicePlayerIdx: 0, playerChoices: run.playerIds.map(() => null), lastUnlockedTrinket: unlocked, bossVictory: null, log, teamHp: teamHpAfter };
+    return { ...run, pool: newPool, stats, playerStats, runPlayers: runPlayersWithCharge, phase: 'choice', battle: null, pendingChoice: generateChoices({ ...run, pool: newPool, stats, playerStats, teamHp: teamHpAfter }), choicePlayerIdx: 0, playerChoices: run.playerIds.map(() => null), lastUnlockedTrinket: unlocked, bossVictory: null, log, teamHp: teamHpAfter };
   }
   if (shouldPhoenixRevive(run)) {
     const revived = applyPhoenixRevive(run);
     const log = [...run.log, `Phoenix Heart revived the party!`];
-    return { ...revived, phase: 'choice', battle: null, pendingChoice: null, bossVictory: null, log };
+    return { ...revived, runPlayers: runPlayersWithCharge, phase: 'choice', battle: null, pendingChoice: null, bossVictory: null, log };
   }
-  return { ...run, phase: 'gameover', battle: null, pendingChoice: null, bossVictory: null };
+  return { ...run, runPlayers: runPlayersWithCharge, phase: 'gameover', battle: null, pendingChoice: null, bossVictory: null };
 }
