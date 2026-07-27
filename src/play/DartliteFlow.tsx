@@ -110,7 +110,7 @@ export function DartliteFlow({ players, settings, music, setPlayers, onExitToMen
         syncRun(nextRun);
       }}
       onBeginNextRound={(rewardRun) => {
-        if (!isHost) return;
+        if (isHost === false) return;
         const begun = beginRound(rewardRun, players.filter(p => rewardRun.playerIds.includes(p.id)), settings);
         syncRun(begun);
       }}
